@@ -18,6 +18,7 @@ pub enum Kind {
     Key,
     Exact,
     Ternary,
+    Lpm,
     Actions,
     DefaultAction,
     Entries,
@@ -139,6 +140,7 @@ impl fmt::Display for Kind {
             Kind::Key => write!(f, "keyword key"),
             Kind::Exact => write!(f, "keyword exact"),
             Kind::Ternary => write!(f, "keyword ternary"),
+            Kind::Lpm => write!(f, "keyword lpm"),
             Kind::Actions => write!(f, "keyword actions"),
             Kind::DefaultAction => write!(f, "keyword default_action"),
             Kind::Entries => write!(f, "keyword entries"),
@@ -563,6 +565,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("ternary", Kind::Ternary) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("lpm", Kind::Lpm) {
             Some(t) => return Ok(t),
             None => {}
         }

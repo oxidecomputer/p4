@@ -2,7 +2,10 @@
 
 use crate::lexer::{self, Lexer, Token, Kind};
 use crate::error::{Error, ParserError};
-use crate::ast::{AST, Type, Constant, Header, HeaderMember, Typedef};
+use crate::ast::{
+    AST, Type, Constant, Header, HeaderMember, Typedef, Control, Direction,
+    ControlParameter, Action, Table, ActionParameter, MatchKind,
+};
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -89,6 +92,23 @@ impl<'a> Parser<'a> {
             }
         })
 
+    }
+
+    fn parse_ref(&mut self) -> Result<String, Error> {
+        let mut result = String::new();
+        loop {
+            let ident = self.parse_identifier()?;
+            result = result + &ident;
+            let token = self.next_token()?;
+            match token.kind {
+                lexer::Kind::Dot => result = result + ".",
+                _ => {
+                    self.backlog.push(token);
+                    break;
+                }
+            } 
+        }
+        Ok(result)
     }
 
     fn parse_type(&mut self) -> Result<Type, Error> {
@@ -194,6 +214,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             lexer::Kind::Const => self.handle_const_decl(ast)?,
             lexer::Kind::Header => self.handle_header_decl(ast)?,
             lexer::Kind::Typedef => self.handle_typedef(ast)?,
+            lexer::Kind::Control => self.handle_control(ast)?,
             _ => {}
         }
         Ok(())
@@ -233,7 +254,11 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
                 break;
             }
 
+            // if the token was not a closing curly bracket push it into the
+            // backlog and carry on.
             self.parser.backlog.push(token);
+
+            // parse a header member
             let ty = self.parser.parse_type()?;
             let name = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
@@ -263,5 +288,385 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
     }
 
+    pub fn handle_control(&mut self, ast: &mut AST)
+    -> Result<(), Error> {
+
+        let mut cp = ControlParser::new(self.parser);
+        let control = cp.run()?;
+        ast.controls.push(control);
+        Ok(())
+    }
+
 }
 
+/// Parser for parsing control definitions
+pub struct ControlParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl<'a, 'b> ControlParser<'a, 'b> {
+
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self{ parser }
+    }
+
+    pub fn run(&mut self) -> Result<Control, Error> {
+
+        let name = self.parser.parse_identifier()?;
+        let mut control = Control::new(name);
+        self.parse_parameters(&mut control)?;
+        self.parse_body(&mut control)?;
+
+        Ok(control)
+
+    }
+
+    pub fn parse_parameters(&mut self, control: &mut Control) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+
+        loop {
+
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the parameters
+            if token.kind == lexer::Kind::ParenClose {
+                break;
+            }
+            
+            // if the token was not a closing paren push it into the backlog and
+            // carry on.
+            self.parser.backlog.push(token);
+
+            // parse a parameter
+            let direction = self.parse_direction()?;
+            let ty = self.parser.parse_type()?;
+            let name = self.parser.parse_identifier()?;
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::ParenClose {
+                control.parameters.push(ControlParameter{direction, ty, name});
+                break;
+            }
+            self.parser.backlog.push(token);
+            self.parser.expect_token(lexer::Kind::Comma)?;
+
+            control.parameters.push(ControlParameter{direction, ty, name});
+
+        }
+
+        Ok(())
+    }
+
+    pub fn parse_body(&mut self, control: &mut Control) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        // iterate over body statements
+        loop {
+            let token = self.parser.next_token()?;
+
+            match token.kind {
+                lexer::Kind::CurlyClose => break,
+                lexer::Kind::Action => self.parse_action(control)?,
+                lexer::Kind::Table => self.parse_table(control)?,
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected: action, table or end of control",
+                            token.kind,
+                        ),
+                        source: self.parser.lexer.lines[token.line].into()
+                    }.into())
+                }
+            }
+
+        }
+
+        Ok(())
+
+    }
+
+    pub fn parse_action(&mut self, control: &mut Control) -> Result<(), Error> {
+
+        let mut ap = ActionParser::new(self.parser);
+        let action = ap.run()?;
+        control.actions.push(action);
+
+        Ok(())
+
+    }
+
+    pub fn parse_table(&mut self, control: &mut Control) -> Result<(), Error> {
+
+        let mut tp = TableParser::new(self.parser);
+        let table = tp.run()?;
+        control.tables.push(table);
+
+        Ok(())
+    }
+
+    pub fn parse_direction(&mut self) -> Result<Direction, Error> {
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::In => Ok(Direction::In),
+            lexer::Kind::Out => Ok(Direction::Out),
+            lexer::Kind::InOut => Ok(Direction::InOut),
+            _ => {
+                Err(ParserError{
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected a direction: in, out or inout.",
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into(),
+                }.into())
+            }
+        }
+
+    }
+}
+
+pub struct ActionParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl <'a, 'b> ActionParser<'a, 'b> {
+
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self { parser }
+    }
+
+    pub fn run(&mut self) -> Result<Action, Error> {
+
+        let name = self.parser.parse_identifier()?;
+        let mut action = Action::new(name);
+
+        self.parse_parameters(&mut action)?;
+        self.parse_body(&mut action)?;
+
+        Ok(action)
+
+    }
+
+    pub fn parse_parameters(&mut self, action: &mut Action) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+
+        loop {
+
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the parameters
+            if token.kind == lexer::Kind::ParenClose {
+                break;
+            }
+            
+            // if the token was not a closing paren push it into the backlog and
+            // carry on.
+            self.parser.backlog.push(token);
+
+            // parse a parameter
+            let ty = self.parser.parse_type()?;
+            let name = self.parser.parse_identifier()?;
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::ParenClose {
+                action.parameters.push(ActionParameter{ty, name});
+                break;
+            }
+            self.parser.backlog.push(token);
+            self.parser.expect_token(lexer::Kind::Comma)?;
+
+            action.parameters.push(ActionParameter{ty, name});
+
+        }
+
+        Ok(())
+    }
+
+    pub fn parse_body(&mut self, _action: &mut Action) -> Result<(), Error> {
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        loop {
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the parameters
+            if token.kind == lexer::Kind::CurlyClose {
+                break;
+            }
+
+            //TODO add body statements
+        }
+
+        Ok(())
+    }
+
+}
+
+pub struct TableParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl <'a, 'b> TableParser<'a, 'b> {
+
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self { parser }
+    }
+
+    pub fn run(&mut self) -> Result<Table, Error> {
+
+        let name = self.parser.parse_identifier()?;
+        let mut table = Table::new(name);
+
+        self.parse_body(&mut table)?;
+        
+        Ok(table)
+
+    }
+
+    pub fn parse_body(&mut self, table: &mut Table) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        loop {
+            let token = self.parser.next_token()?;
+            match token.kind {
+                lexer::Kind::CurlyClose => break,
+                lexer::Kind::Key => self.parse_key(table)?,
+                lexer::Kind::Actions => self.parse_actions(table)?,
+                lexer::Kind::DefaultAction => self.parse_default_action(table)?,
+                lexer::Kind::Const => {
+                    let token = self.parser.next_token()?;
+                    match token.kind {
+                        lexer::Kind::Entries => self.parse_entries(table)?,
+                        //TODO need handle regular constants?
+                        _ => {
+                            return Err(ParserError{
+                                at: token.clone(),
+                                message: format!(
+                                    "Found {} expected: entries",
+                                    token.kind,
+                                ),
+                                source: self.parser.lexer.lines[token.line].into()
+                            }.into())
+                        }
+                    }
+                }
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected: key, actions, entries or end of \
+                            table",
+                            token.kind,
+                        ),
+                        source: self.parser.lexer.lines[token.line].into()
+                    }.into())
+                }
+            }
+        }
+
+        Ok(())
+
+    }
+
+    pub fn parse_key(&mut self, table: &mut Table) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        loop {
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the key block
+            if token.kind == lexer::Kind::CurlyClose {
+                break;
+            }
+            self.parser.backlog.push(token);
+
+            let key = self.parser.parse_ref()?;
+            self.parser.expect_token(lexer::Kind::Colon)?;
+            let match_kind = self.parse_match_kind()?;
+            self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+            table.key.insert(key, match_kind);
+
+        }
+
+        Ok(())
+
+    }
+
+    pub fn parse_match_kind(&mut self) -> Result<MatchKind, Error> {
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::Exact => Ok(MatchKind::Exact),
+            lexer::Kind::Ternary => Ok(MatchKind::Ternary),
+            lexer::Kind::Lpm => Ok(MatchKind::LongestPrefixMatch),
+            _ => {
+                Err(ParserError{
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected match kind: exact, ternary or lpm",
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into(),
+                }.into())
+            }
+        }
+    }
+
+    pub fn parse_actions(&mut self, table: &mut Table) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        loop {
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the actions block
+            if token.kind == lexer::Kind::CurlyClose {
+                break;
+            }
+            self.parser.backlog.push(token);
+
+            let action_name = self.parser.parse_identifier()?;
+            self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+            table.actions.push(action_name);
+
+        }
+
+        Ok(())
+
+    }
+
+    pub fn parse_default_action(&mut self, table: &mut Table) -> Result<(), Error> {
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        table.default_action = self.parser.parse_identifier()?;
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+        Ok(())
+    }
+
+    pub fn parse_entries(&mut self, _table: &mut Table) -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        loop {
+            let token = self.parser.next_token()?;
+            match token.kind {
+                lexer::Kind::CurlyClose => break,
+                _ => {
+                    //TODO
+                }
+            }
+        }
+
+        Ok(())
+
+    }
+
+}

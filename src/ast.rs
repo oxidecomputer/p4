@@ -1,8 +1,11 @@
+use std::collections::BTreeMap;
+
 #[derive(Debug)]
 pub struct AST {
     pub constants: Vec<Constant>,
     pub headers: Vec<Header>,
     pub typedefs: Vec<Typedef>,
+    pub controls: Vec<Control>,
 }
 
 impl Default for AST {
@@ -11,17 +14,10 @@ impl Default for AST {
             constants: Vec::new(),
             headers: Vec::new(),
             typedefs: Vec::new(),
+            controls: Vec::new(),
         }
     }
 }
-
-/*
-#[derive(Debug)]
-pub enum Constant {
-    Int(String, i128),
-    Bit(String, u16, i128),
-}
-*/
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -68,4 +64,85 @@ impl Header {
 pub struct HeaderMember {
     pub ty: Type,
     pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Control {
+    pub name: String,
+    pub parameters: Vec::<ControlParameter>,
+    pub actions: Vec::<Action>,
+    pub tables: Vec::<Table>,
+}
+
+impl Control {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            parameters: Vec::new(),
+            actions: Vec::new(),
+            tables: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ControlParameter {
+    pub direction: Direction,
+    pub ty: Type,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum Direction {
+    In,
+    Out,
+    InOut,
+}
+
+#[derive(Debug, Clone)]
+pub struct Action {
+    pub name: String,
+    pub parameters: Vec::<ActionParameter>,
+}
+
+impl Action {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            parameters: Vec::new(),
+        }
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct ActionParameter {
+    pub ty: Type,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Table {
+    pub name: String,
+    pub actions: Vec::<String>,
+    pub default_action: String,
+    pub key: BTreeMap<String, MatchKind>,
+}
+
+impl Table {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            actions: Vec::new(),
+            default_action: String::new(),
+            key: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum MatchKind {
+    Exact,
+    Ternary,
+    LongestPrefixMatch,
 }
