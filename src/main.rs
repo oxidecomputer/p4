@@ -25,7 +25,7 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow!("read input: {}", e))?;
     
     let ppr = preprocessor::run(&contents)?;
-    //println!("{:#?}", ppr.elements);
+    println!("{:#?}", ppr.elements);
 
     let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
     //println!("lines\n{:#?}", lines);
@@ -34,8 +34,9 @@ fn main() -> Result<()> {
     lxr.show_tokens = opts.show_tokens;
 
     let mut psr = parser::Parser::new(lxr);
-    let _ast = psr.run()?;
-    //println!("{:#?}", ast);
+    let ast = psr.run()?;
+
+    println!("{:#?}", ast);
 
     Ok(())
 

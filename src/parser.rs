@@ -2,7 +2,7 @@
 
 use crate::lexer::{self, Lexer, Token, Kind};
 use crate::error::{Error, ParserError};
-use crate::ast::{AST, Type, Constant};
+use crate::ast::{AST, Type, Constant, Header, HeaderMember, Typedef};
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -104,6 +104,8 @@ impl<'a> Parser<'a> {
             lexer::Kind::Int =>
                 Type::Int(self.parse_optional_width_parameter()?),
 
+            lexer::Kind::Identifier(name) => Type::UserDefined(name.clone()),
+
             _ => {
                 return Err(ParserError{
                     at: token.clone(),
@@ -186,10 +188,12 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
     }
 
-    pub fn handle_token(&mut self, token: Token, prog: &mut AST)
+    pub fn handle_token(&mut self, token: Token, ast: &mut AST)
     -> Result<(), Error> {
         match token.kind {
-            lexer::Kind::Const => self.handle_const_decl(prog)?,
+            lexer::Kind::Const => self.handle_const_decl(ast)?,
+            lexer::Kind::Header => self.handle_header_decl(ast)?,
+            lexer::Kind::Typedef => self.handle_typedef(ast)?,
             _ => {}
         }
         Ok(())
@@ -207,6 +211,56 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         ast.constants.push(Constant{ty, name});
 
         Ok(())
+    }
+
+    pub fn handle_header_decl(&mut self, ast: &mut AST)
+    -> Result<(), Error> {
+
+        // the first token of a header must be an identifier
+        let name = self.parser.parse_identifier()?;
+
+        // next the header body starts with an open curly brace
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        let mut header = Header::new(name);
+
+        // iterate over header members
+        loop {
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the header body
+            if token.kind == lexer::Kind::CurlyClose {
+                break;
+            }
+
+            self.parser.backlog.push(token);
+            let ty = self.parser.parse_type()?;
+            let name = self.parser.parse_identifier()?;
+            self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+            header.members.push(HeaderMember{ty, name});
+        }
+
+        ast.headers.push(header);
+
+        Ok(())
+    }
+
+    pub fn handle_typedef(&mut self, ast: &mut AST)
+    -> Result<(), Error> {
+
+        // first token must be a type
+        let ty = self.parser.parse_type()?;
+
+        // next must be a name
+        let name = self.parser.parse_identifier()?;
+
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+        ast.typedefs.push(Typedef{ty, name});
+
+        Ok(())
+
     }
 
 }

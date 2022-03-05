@@ -254,13 +254,19 @@ impl<'a> Lexer<'a> {
 
     pub fn new(lines: Vec<&'a str>) -> Self {
 
-        assert!(!lines.is_empty());
+        if lines.is_empty() {
+            return Self{
+                cursor: "",
+                line: 0,
+                col: 0,
+                lines: lines,
+                show_tokens: false,
+            }
+        }
 
-        //let lines: Vec<&'a str> = input.lines().collect();
         let start = lines[0];
 
         Self{
-            //input,
             cursor: start,
             line: 0,
             col: 0,
