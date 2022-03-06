@@ -56,6 +56,7 @@ pub enum Kind {
     Semicolon,
     Comma,
     Colon,
+    Underscore,
 
     //
     // preprocessor
@@ -178,6 +179,7 @@ impl fmt::Display for Kind {
             Kind::Semicolon => write!(f, ";"),
             Kind::Comma => write!(f, ","),
             Kind::Colon => write!(f, ":"),
+            Kind::Underscore => write!(f, "_"),
 
             //
             // preprocessor
@@ -445,6 +447,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token(":", Kind::Colon) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("_", Kind::Underscore) {
             Some(t) => return Ok(t),
             None => {}
         }

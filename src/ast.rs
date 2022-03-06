@@ -143,6 +143,7 @@ pub struct Table {
     pub actions: Vec::<String>,
     pub default_action: String,
     pub key: BTreeMap<Lvalue, MatchKind>,
+    pub const_entries: Vec::<ConstTableEntry>,
 }
 
 impl Table {
@@ -152,7 +153,36 @@ impl Table {
             actions: Vec::new(),
             default_action: String::new(),
             key: BTreeMap::new(),
+            const_entries: Vec::new(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConstTableEntry {
+    pub keyset: Vec::<KeySetElement>,
+    pub action: ActionRef,
+}
+
+#[derive(Debug, Clone)]
+pub enum KeySetElement {
+    Expression(Expression),
+    Default,
+    DontCare,
+    Masked(Expression, Expression),
+    Ranged(Expression, Expression),
+}
+
+
+#[derive(Debug, Clone)]
+pub struct ActionRef {
+    pub name: String,
+    pub parameters: Vec::<Expression>,
+}
+
+impl ActionRef {
+    pub fn new(name: String) -> Self {
+        Self { name, parameters: Vec::new() }
     }
 }
 

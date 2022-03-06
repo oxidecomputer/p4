@@ -5,7 +5,7 @@ use crate::error::{Error, ParserError};
 use crate::ast::{
     AST, Type, Constant, Header, HeaderMember, Typedef, Control, Direction,
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
-    Statement, Expression, Lvalue,
+    Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
 };
 
 pub struct Parser<'a> {
@@ -724,7 +724,7 @@ impl <'a, 'b> TableParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn parse_entries(&mut self, _table: &mut Table) -> Result<(), Error> {
+    pub fn parse_entries(&mut self, table: &mut Table) -> Result<(), Error> {
 
         self.parser.expect_token(lexer::Kind::Equals)?;
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
@@ -734,13 +734,155 @@ impl <'a, 'b> TableParser<'a, 'b> {
             match token.kind {
                 lexer::Kind::CurlyClose => break,
                 _ => {
-                    //TODO
+                    self.parser.backlog.push(token);
+                    let entry = self.parse_entry()?;
+                    table.const_entries.push(entry);
                 }
             }
         }
 
         Ok(())
 
+    }
+
+    pub fn parse_entry(&mut self) -> Result<ConstTableEntry, Error> {
+        let keyset = self.parse_keyset()?;
+        self.parser.expect_token(lexer::Kind::Colon)?;
+        let action = self.parse_actionref()?;
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+        Ok(ConstTableEntry{ keyset, action })
+    }
+
+    pub fn parse_keyset(&mut self) -> Result<Vec::<KeySetElement>, Error> {
+
+        let mut elements = Vec::new();
+
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+        loop {
+            let token = self.parser.next_token()?;
+            // handle dont-care special case
+            match token.kind {
+                lexer::Kind::Underscore => {
+                    elements.push(KeySetElement::DontCare);
+                    let token = self.parser.next_token()?;
+                    match token.kind {
+                        lexer::Kind::Comma => continue,
+                        lexer::Kind::ParenClose => return Ok(elements),
+                        _ => {
+                            return Err(ParserError{
+                                at: token.clone(),
+                                message: format!(
+                                    "Found {} expected: comma or paren close after \
+                                dont-care match",
+                                token.kind,
+                                ),
+                                source: self.parser.lexer.lines[token.line].into()
+                            }.into())
+                        }
+                    }
+                }
+                _ => {
+                    self.parser.backlog.push(token);
+                }
+            }
+            let mut ep = ExpressionParser::new(self.parser);
+            let expr = ep.run()?;
+            let token = self.parser.next_token()?;
+            match token.kind {
+                lexer::Kind::Comma => {
+                    elements.push(KeySetElement::Expression(expr));
+                    continue;
+                }
+                lexer::Kind::ParenClose => {
+                    elements.push(KeySetElement::Expression(expr));
+                    return Ok(elements);
+                }
+                lexer::Kind::Mask => {
+                    let mut ep = ExpressionParser::new(self.parser);
+                    let mask_expr = ep.run()?;
+                    elements.push(KeySetElement::Masked(expr, mask_expr));
+                    let token = self.parser.next_token()?;
+                    match token.kind {
+                        lexer::Kind::Comma => continue,
+                        lexer::Kind::ParenClose => return Ok(elements),
+                        _ => {
+                            return Err(ParserError{
+                                at: token.clone(),
+                                message: format!(
+                                    "Found {} expected: comma or close paren after mask",
+                                    token.kind,
+                                ),
+                                source: self.parser.lexer.lines[token.line].into()
+                            }.into())
+                        }
+                    }
+
+                }
+                //TODO Default case
+                //TODO DontCare case
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected: keyset expression",
+                            token.kind,
+                        ),
+                        source: self.parser.lexer.lines[token.line].into()
+                    }.into())
+                }
+
+            }
+        }
+    }
+
+    pub fn parse_actionref(&mut self) -> Result<ActionRef, Error> {
+        let name = self.parser.parse_identifier()?;
+        let token = self.parser.next_token()?;
+        let mut actionref = ActionRef::new(name);
+        match token.kind {
+            lexer::Kind::Semicolon => Ok(actionref),
+            lexer::Kind::ParenOpen => {
+                let mut args = Vec::new();
+                loop {
+                    let mut ep = ExpressionParser::new(self.parser);
+                    let expr = ep.run()?;
+                    let token = self.parser.next_token()?;
+                    match token.kind {
+                        lexer::Kind::Comma => {
+                            args.push(expr);
+                            continue;
+                        }
+                        lexer::Kind::ParenClose => {
+                            args.push(expr);
+                            actionref.parameters = args;
+                            return Ok(actionref);
+                        }
+                        _ => {
+                            return Err(ParserError{
+                                at: token.clone(),
+                                message: format!(
+                                    "Found {} expected: action parameter",
+                                    token.kind,
+                                ),
+                                source: self.parser.lexer.lines[token.line].into()
+                            }.into())
+                        }
+                    }
+                }
+            }
+            _ => {
+                Err(ParserError{
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected: reference to action, or \
+                        parameterized reference to action",
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into()
+                }.into())
+            }
+
+        }
     }
 
 }
