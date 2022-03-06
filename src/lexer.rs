@@ -94,7 +94,7 @@ pub enum Kind {
     ///     - `8s10` : int<8>
     ///     - `2s3`  : int<2>
     ///     - `1s1`  : int<1>
-    IntLiteral(u128),
+    IntLiteral(i128),
 
     Identifier(String),
 
@@ -112,7 +112,7 @@ pub enum Kind {
     ///     - `1s1`  : bit<1>
     /// First element is number of bits (prefix before w) second element is
     /// value (suffix after w).
-    SignedLiteral(u16, u128),
+    SignedLiteral(u16, i128),
     
     TrueLiteral,
     FalseLiteral,
@@ -654,6 +654,37 @@ impl<'a> Lexer<'a> {
         return Some(token);
     }
 
+    // TODO copy pasta from parse_bitsized, but no trait to hold on to for
+    // from_str_radix to generalize
+    fn parse_intsized(
+        &self, 
+        tok: &str, 
+        n: usize,
+        ctor: fn(u16, i128) -> Kind,
+    ) -> Option<Token> {
+        let bits = match tok[..n].parse::<u16>() {
+            Ok(n) => n, 
+            Err(_) => return None,
+        };
+        let value = if tok[n+1..].starts_with("0x") {
+            match i128::from_str_radix(&tok[n+3..], 16) {
+                Ok(n) => n, 
+                Err(_) => return None,
+            }
+        } else {
+            match i128::from_str_radix(&tok[n+1..], 10) {
+                Ok(n) => n, 
+                Err(_) => return None,
+            }
+        };
+        let token = Token{
+            kind: ctor(bits, value), 
+            col: self.col,
+            line: self.line,
+        };
+        return Some(token);
+    }
+
     fn match_integer(&mut self) -> Option<Token> {
         let tok = self.peek_token();
         let len = tok.len();
@@ -699,7 +730,7 @@ impl<'a> Lexer<'a> {
 
         match leading {
             Some(n) => {
-                match self.parse_bitsized(tok, n, Kind::SignedLiteral) {
+                match self.parse_intsized(tok, n, Kind::SignedLiteral) {
                     Some(token) => {
                         self.col += len;
                         self.cursor = &self.cursor[len..];
@@ -719,7 +750,7 @@ impl<'a> Lexer<'a> {
                     return None
                 }
             }
-            u128::from_str_radix(tok, 16).expect("parse hex int")
+            i128::from_str_radix(tok, 16).expect("parse hex int")
         } else {
             let chars = tok.chars();
             for c in chars {
@@ -727,7 +758,7 @@ impl<'a> Lexer<'a> {
                     return None
                 }
             }
-            tok.parse::<u128>().expect("parse int")
+            tok.parse::<i128>().expect("parse int")
         };
         let token = Token{
             kind: Kind::IntLiteral(value),

@@ -43,9 +43,19 @@ pub struct Constant {
 }
 
 #[derive(Debug, Clone)]
+pub struct Variable {
+    pub ty: Type,
+    pub name: String,
+    //TODO initializer: Expression,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     IntegerLit(i128),
-    BitLit(i128),
+    BitLit(u16, u128),
+    SignedLit(u16, i128),
+    Identifier(String),
+    Addition(Box::<Expression>, Box::<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +113,9 @@ pub enum Direction {
 pub struct Action {
     pub name: String,
     pub parameters: Vec::<ActionParameter>,
+    pub variables: Vec::<Variable>,
+    pub constants: Vec::<Constant>,
+    pub statements: Vec::<Statement>,
 }
 
 impl Action {
@@ -110,6 +123,9 @@ impl Action {
         Self{
             name,
             parameters: Vec::new(),
+            variables: Vec::new(),
+            constants: Vec::new(),
+            statements: Vec::new(),
         }
     }
 }
@@ -126,7 +142,7 @@ pub struct Table {
     pub name: String,
     pub actions: Vec::<String>,
     pub default_action: String,
-    pub key: BTreeMap<String, MatchKind>,
+    pub key: BTreeMap<Lvalue, MatchKind>,
 }
 
 impl Table {
@@ -145,4 +161,24 @@ pub enum MatchKind {
     Exact,
     Ternary,
     LongestPrefixMatch,
+}
+
+#[derive(Debug, Clone)]
+pub enum Statement {
+    Empty,
+    Assignment(Lvalue, Expression),
+    Call(Call),
+    // TODO ...
+}
+
+/// A function or method call
+#[derive(Debug, Clone)]
+pub struct Call {
+    pub lval: Lvalue,
+    pub args: Vec::<Expression>,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Lvalue {
+    pub name: String,
 }

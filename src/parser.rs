@@ -4,7 +4,8 @@ use crate::lexer::{self, Lexer, Token, Kind};
 use crate::error::{Error, ParserError};
 use crate::ast::{
     AST, Type, Constant, Header, HeaderMember, Typedef, Control, Direction,
-    ControlParameter, Action, Table, ActionParameter, MatchKind,
+    ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
+    Statement, Expression, Lvalue,
 };
 
 pub struct Parser<'a> {
@@ -94,21 +95,21 @@ impl<'a> Parser<'a> {
 
     }
 
-    fn parse_ref(&mut self) -> Result<String, Error> {
-        let mut result = String::new();
+    fn parse_lvalue(&mut self) -> Result<Lvalue, Error> {
+        let mut name = String::new();
         loop {
             let ident = self.parse_identifier()?;
-            result = result + &ident;
+            name = name + &ident;
             let token = self.next_token()?;
             match token.kind {
-                lexer::Kind::Dot => result = result + ".",
+                lexer::Kind::Dot => name = name + ".",
                 _ => {
                     self.backlog.push(token);
                     break;
                 }
             } 
         }
-        Ok(result)
+        Ok(Lvalue{ name })
     }
 
     fn parse_type(&mut self) -> Result<Type, Error> {
@@ -485,21 +486,94 @@ impl <'a, 'b> ActionParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn parse_body(&mut self, _action: &mut Action) -> Result<(), Error> {
+    pub fn parse_body(&mut self, action: &mut Action) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         loop {
             let token = self.parser.next_token()?;
 
             // check if we've reached the end of the parameters
-            if token.kind == lexer::Kind::CurlyClose {
-                break;
+            match token.kind {
+                lexer::Kind::CurlyClose => break,
+
+                // variable declaration / initialization
+                lexer::Kind::Bool 
+                | lexer::Kind::Error
+                | lexer::Kind::Bit
+                | lexer::Kind::Int 
+                | lexer::Kind::String => {
+                    self.parser.backlog.push(token);
+                    let var = self.parse_variable()?;
+                    action.variables.push(var);
+                }
+
+                // constant declaration / initialization
+                lexer::Kind::Const => {
+                    let c = self.parse_constant()?;
+                    action.constants.push(c);
+                }
+
+                lexer::Kind::Identifier(_) => {
+
+                    // push the identifier token into the backlog and run the
+                    // statement parser
+                    self.parser.backlog.push(token);
+                    let mut sp = StatementParser::new(self.parser);
+                    let stmt = sp.run()?;
+                    action.statements.push(stmt);
+
+                }
+
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected variable, constant, statement or \
+                            instantiation.",
+                            token.kind,
+                        ),
+                        source: self.parser.lexer.lines[token.line].into(),
+                    }.into())
+                }
             }
 
-            //TODO add body statements
         }
 
         Ok(())
+    }
+
+    pub fn parse_variable(&mut self) -> Result<Variable, Error> {
+        let ty = self.parser.parse_type()?;
+        let name = self.parser.parse_identifier()?;
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        loop {
+            //TODO for now just skipping to initializer terminating semicolon,
+            //need to parse initializer.
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::Semicolon {
+                break;
+            }
+        }
+        Ok(Variable{ty, name})
+    }
+
+    pub fn parse_constant(&mut self) -> Result<Constant, Error> {
+        let ty = self.parser.parse_type()?;
+        let name = self.parser.parse_identifier()?;
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        loop {
+            //TODO for now just skipping to initializer terminating semicolon,
+            //need to parse initializer.
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::Semicolon {
+                break;
+            }
+        }
+        Ok(Constant{ty, name})
+    }
+
+    pub fn parse_sized_variable(&mut self, _ty: Type) -> Result<Variable, Error> {
+        todo!();
     }
 
 }
@@ -585,7 +659,7 @@ impl <'a, 'b> TableParser<'a, 'b> {
             }
             self.parser.backlog.push(token);
 
-            let key = self.parser.parse_ref()?;
+            let key = self.parser.parse_lvalue()?;
             self.parser.expect_token(lexer::Kind::Colon)?;
             let match_kind = self.parse_match_kind()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
@@ -669,4 +743,87 @@ impl <'a, 'b> TableParser<'a, 'b> {
 
     }
 
+}
+
+pub struct StatementParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl <'a, 'b> StatementParser<'a, 'b> {
+
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self { parser }
+    }
+
+    pub fn run(&mut self) -> Result<Statement, Error> {
+
+        // wrap the identifier as an lvalue, consuming any dot
+        // concatenated references
+        let lval = self.parser.parse_lvalue()?;
+
+        let token = self.parser.next_token()?;
+        let statement = match token.kind {
+            lexer::Kind::Equals => self.parse_assignment(lval)?,
+            lexer::Kind::ParenOpen => self.parse_call(lval)?,
+            lexer::Kind::AngleOpen => self.parse_parameterized_call(lval)?,
+            _ => return Err(ParserError{
+                at: token.clone(),
+                message: format!(
+                    "Found {} expected assignment or function/method call.",
+                    token.kind,
+                ),
+                source: self.parser.lexer.lines[token.line].into(),
+            }.into())
+        };
+
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+        Ok(statement)
+
+    }
+
+    pub fn parse_assignment(&mut self, lval: Lvalue) -> Result<Statement, Error> {
+        let mut ep = ExpressionParser::new(self.parser);
+        let expression = ep.run()?;
+        Ok(Statement::Assignment(lval, expression))
+    }
+
+    pub fn parse_call(&mut self, _lval: Lvalue) -> Result<Statement, Error> {
+        todo!();
+    }
+
+    pub fn parse_parameterized_call(&mut self, _lval: Lvalue) -> Result<Statement, Error> {
+        todo!();
+    }
+
+}
+
+pub struct ExpressionParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl <'a, 'b> ExpressionParser<'a, 'b> {
+
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self { parser }
+    }
+
+    pub fn run(&mut self) -> Result<Expression, Error> {
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::IntLiteral(value) => Ok(Expression::IntegerLit(value)),
+            lexer::Kind::BitLiteral(width, value) => Ok(Expression::BitLit(width, value)),
+            lexer::Kind::SignedLiteral(width, value) => Ok(Expression::SignedLit(width, value)),
+            lexer::Kind::Identifier(value) => Ok(Expression::Identifier(value)),
+            _ => Err(ParserError{
+                at: token.clone(),
+                message: format!(
+                    "Found {} expected expression.",
+                    token.kind,
+                ),
+                source: self.parser.lexer.lines[token.line].into(),
+            }.into())
+        }
+
+    }
 }
