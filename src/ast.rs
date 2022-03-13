@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 pub struct AST {
     pub constants: Vec<Constant>,
     pub headers: Vec<Header>,
+    pub structs: Vec<Struct>,
     pub typedefs: Vec<Typedef>,
     pub controls: Vec<Control>,
 }
@@ -13,6 +14,7 @@ impl Default for AST {
         Self{
             constants: Vec::new(),
             headers: Vec::new(),
+            structs: Vec::new(),
             typedefs: Vec::new(),
             controls: Vec::new(),
         }
@@ -72,6 +74,24 @@ impl Header {
 
 #[derive(Debug, Clone)]
 pub struct HeaderMember {
+    pub ty: Type,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Struct {
+    pub name: String,
+    pub members: Vec::<StructMember>,
+}
+
+impl Struct {
+    pub fn new(name: String) -> Self {
+        Struct{name,  members: Vec::new() }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StructMember {
     pub ty: Type,
     pub name: String,
 }

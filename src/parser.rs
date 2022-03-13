@@ -6,6 +6,7 @@ use crate::ast::{
     AST, Type, Constant, Header, HeaderMember, Typedef, Control, Direction,
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
     Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
+    Struct, StructMember,
 };
 
 pub struct Parser<'a> {
@@ -214,6 +215,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         match token.kind {
             lexer::Kind::Const => self.handle_const_decl(ast)?,
             lexer::Kind::Header => self.handle_header_decl(ast)?,
+            lexer::Kind::Struct => self.handle_struct_decl(ast)?,
             lexer::Kind::Typedef => self.handle_typedef(ast)?,
             lexer::Kind::Control => self.handle_control(ast)?,
             _ => {}
@@ -268,6 +270,43 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         }
 
         ast.headers.push(header);
+
+        Ok(())
+    }
+
+    pub fn handle_struct_decl(&mut self, ast: &mut AST)
+    -> Result<(), Error> {
+
+        // the first token of a struct must be an identifier
+        let name = self.parser.parse_identifier()?;
+
+        // next the struct body starts with an open curly brace
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        let mut p4_struct = Struct::new(name);
+
+        // iterate over struct members
+        loop {
+            let token = self.parser.next_token()?;
+
+            // check if we've reached the end of the struct body
+            if token.kind == lexer::Kind::CurlyClose {
+                break;
+            }
+
+            // if the token was not a closing curly bracket push it into the
+            // backlog and carry on.
+            self.parser.backlog.push(token);
+
+            // parse a struct member
+            let ty = self.parser.parse_type()?;
+            let name = self.parser.parse_identifier()?;
+            self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+            p4_struct.members.push(StructMember{ty, name});
+        }
+
+        ast.structs.push(p4_struct);
 
         Ok(())
     }
