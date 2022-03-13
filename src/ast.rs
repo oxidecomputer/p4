@@ -7,6 +7,7 @@ pub struct AST {
     pub structs: Vec<Struct>,
     pub typedefs: Vec<Typedef>,
     pub controls: Vec<Control>,
+    pub parsers: Vec<Parser>,
 }
 
 impl Default for AST {
@@ -17,6 +18,7 @@ impl Default for AST {
             structs: Vec::new(),
             typedefs: Vec::new(),
             controls: Vec::new(),
+            parsers: Vec::new(),
         }
     }
 }
@@ -26,6 +28,7 @@ pub enum Type {
     Bool,
     Error,
     Bit(usize),
+    Varbit(usize),
     Int(usize),
     String,
     UserDefined(String),
@@ -56,8 +59,8 @@ pub enum Expression {
     IntegerLit(i128),
     BitLit(u16, u128),
     SignedLit(u16, i128),
-    Identifier(String),
-    Addition(Box::<Expression>, Box::<Expression>),
+    Lvalue(Lvalue),
+    Binary(Box::<Expression>, Box::<Expression>),
 }
 
 #[derive(Debug, Clone)]
@@ -116,6 +119,23 @@ impl Control {
 }
 
 #[derive(Debug, Clone)]
+pub struct Parser {
+    pub name: String,
+    pub parameters: Vec::<ControlParameter>,
+    pub states: Vec::<State>,
+}
+
+impl Parser {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            parameters: Vec::new(),
+            states: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ControlParameter {
     pub direction: Direction,
     pub ty: Type,
@@ -127,6 +147,7 @@ pub enum Direction {
     In,
     Out,
     InOut,
+    Unspecified,
 }
 
 #[derive(Debug, Clone)]
@@ -230,5 +251,45 @@ pub struct Call {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Lvalue {
+    pub name: String,
+}
+
+
+#[derive(Debug, Clone)]
+pub struct State {
+    pub name: String,
+    pub variables: Vec::<Variable>,
+    pub constants: Vec::<Constant>,
+    pub statements: Vec::<Statement>,
+    pub transition: Option<Transition>,
+}
+
+impl State {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            variables: Vec::new(),
+            constants: Vec::new(),
+            statements: Vec::new(),
+            transition: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Transition {
+    Reference(String),
+    Select(Select),
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Select {
+    pub parameters: Vec::<Expression>,
+    pub elements: Vec::<SelectElement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SelectElement {
+    pub keyset: Vec::<KeySetElement>,
     pub name: String,
 }

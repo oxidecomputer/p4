@@ -14,6 +14,7 @@ pub enum Kind {
     Control,
     Struct,
     Action,
+    Parser,
     Table,
     Key,
     Exact,
@@ -25,8 +26,6 @@ pub enum Kind {
     In,
     InOut,
     Out,
-    PacketIn,
-    PacketOut,
     Transition,
     State,
     Select,
@@ -38,6 +37,7 @@ pub enum Kind {
     Bool,
     Error,
     Bit,
+    Varbit,
     Int,
     String,
 
@@ -83,6 +83,7 @@ pub enum Kind {
     Shl,
     Pipe,
     Carat,
+    GreaterThanEquals,
 
 
     //
@@ -137,6 +138,7 @@ impl fmt::Display for Kind {
             Kind::Control => write!(f, "keyword control"),
             Kind::Struct => write!(f, "keyword struct"),
             Kind::Action => write!(f, "keyword action"),
+            Kind::Parser => write!(f, "keyword parser"),
             Kind::Table => write!(f, "keyword table"),
             Kind::Key => write!(f, "keyword key"),
             Kind::Exact => write!(f, "keyword exact"),
@@ -148,8 +150,6 @@ impl fmt::Display for Kind {
             Kind::In => write!(f, "keyword in"),
             Kind::InOut => write!(f, "keyword in_out"),
             Kind::Out => write!(f, "keyword out"),
-            Kind::PacketIn => write!(f, "keyword packet_in"),
-            Kind::PacketOut => write!(f, "keyword packet_out"),
             Kind::Transition => write!(f, "keyword transition"),
             Kind::State => write!(f, "keyword state"),
             Kind::Select => write!(f, "keyword select"),
@@ -161,6 +161,7 @@ impl fmt::Display for Kind {
             Kind::Bool => write!(f, "type bool"),
             Kind::Error => write!(f, "type error"),
             Kind::Bit => write!(f, "type bit"),
+            Kind::Varbit => write!(f, "type varbit"),
             Kind::Int => write!(f, "type int"),
             Kind::String => write!(f, "type string"),
 
@@ -207,6 +208,7 @@ impl fmt::Display for Kind {
             Kind::Shl => write!(f, "operator <<"),
             Kind::Pipe => write!(f, "operator |"),
             Kind::Carat => write!(f, "operator ^"),
+            Kind::GreaterThanEquals => write!(f, "operator >="),
 
             //
             // literals
@@ -326,16 +328,6 @@ impl<'a> Lexer<'a> {
             None => {}
         }
 
-        match self.match_token("packet_in", Kind::PacketIn) {
-            Some(t) => return Ok(t),
-            None => {}
-        }
-
-        match self.match_token("packet_out", Kind::PacketOut) {
-            Some(t) => return Ok(t),
-            None => {}
-        }
-
         match self.match_token("inout", Kind::InOut) {
             Some(t) => return Ok(t),
             None => {}
@@ -392,6 +384,16 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("<", Kind::AngleOpen) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token(">", Kind::AngleClose) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token(">=", Kind::GreaterThanEquals) {
             Some(t) => return Ok(t),
             None => {}
         }
@@ -501,6 +503,11 @@ impl<'a> Lexer<'a> {
             None => {}
         }
 
+        match self.match_token("varbit", Kind::Varbit) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
         match self.match_token("bit", Kind::Bit) {
             Some(t) => return Ok(t),
             None => {}
@@ -547,6 +554,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("action", Kind::Action) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("parser", Kind::Parser) {
             Some(t) => return Ok(t),
             None => {}
         }
