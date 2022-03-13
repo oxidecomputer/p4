@@ -8,6 +8,7 @@ use crate::ast::{
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
     Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
     Struct, StructMember, State, Transition, Select, SelectElement, Call,
+    BinOp,
 };
 
 pub struct Parser<'a> {
@@ -330,7 +331,8 @@ impl<'a> Parser<'a> {
 
     // parse a tuple of expressions (<expr>, <expr> ...), used for both tuples
     // and function call sites
-    pub fn parse_expr_parameters(&mut self) -> Result<Vec::<Expression>, Error> {
+    pub fn parse_expr_parameters(&mut self)
+    -> Result<Vec::<Box::<Expression>>, Error> {
 
         let mut result = Vec::new();
 
@@ -369,6 +371,22 @@ impl<'a> Parser<'a> {
         }
 
         Ok(result)
+
+    }
+
+    fn try_parse_binop(&mut self) -> Result<Option<BinOp>, Error> {
+
+        let token = self.next_token()?;
+        match token.kind {
+            lexer::Kind::GreaterThanEquals => {
+                Ok(Some(BinOp::Geq))
+            }
+            // TODO other binops
+            _ => {
+                self.backlog.push(token);
+                Ok(None)
+            }
+        }
 
     }
 }
@@ -1071,25 +1089,26 @@ impl <'a, 'b> ExpressionParser<'a, 'b> {
         Self { parser }
     }
 
-    pub fn run(&mut self) -> Result<Expression, Error> {
+    pub fn run(&mut self) -> Result<Box::<Expression>, Error> {
+
 
         let token = self.parser.next_token()?;
-        match token.kind {
+        let lhs = match token.kind {
             lexer::Kind::IntLiteral(value) => {
-                Ok(Expression::IntegerLit(value))
+                Expression::IntegerLit(value)
             }
             lexer::Kind::BitLiteral(width, value) => {
-                Ok(Expression::BitLit(width, value))
+                Expression::BitLit(width, value)
             }
             lexer::Kind::SignedLiteral(width, value) => {
-                Ok(Expression::SignedLit(width, value))
+                Expression::SignedLit(width, value)
             }
             lexer::Kind::Identifier(_) => {
                 self.parser.backlog.push(token);
                 let lval = self.parser.parse_lvalue()?;
-                Ok(Expression::Lvalue(lval))
+                Expression::Lvalue(lval)
             }
-            _ => Err(ParserError{
+            _ => return Err(ParserError{
                 at: token.clone(),
                 message: format!(
                     "Found {} expected expression.",
@@ -1097,7 +1116,19 @@ impl <'a, 'b> ExpressionParser<'a, 'b> {
                 ),
                 source: self.parser.lexer.lines[token.line].into(),
             }.into())
+        };
+
+        // check for binary operator
+         match self.parser.try_parse_binop()? {
+            Some(op) => {
+                // recurse to rhs
+                let mut ep = ExpressionParser::new(self.parser);
+                let rhs = ep.run()?;
+                Ok(Box::new(Expression::Binary(Box::new(lhs), op, rhs)))
+            }
+            None => Ok(Box::new(lhs)),
         }
+
 
     }
 }

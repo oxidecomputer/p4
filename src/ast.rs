@@ -60,7 +60,13 @@ pub enum Expression {
     BitLit(u16, u128),
     SignedLit(u16, i128),
     Lvalue(Lvalue),
-    Binary(Box::<Expression>, Box::<Expression>),
+    Binary(Box::<Expression>, BinOp, Box::<Expression>),
+}
+
+#[derive(Debug, Clone)]
+pub enum BinOp {
+    Add,
+    Geq,
 }
 
 #[derive(Debug, Clone)]
@@ -207,18 +213,18 @@ pub struct ConstTableEntry {
 
 #[derive(Debug, Clone)]
 pub enum KeySetElement {
-    Expression(Expression),
+    Expression(Box::<Expression>),
     Default,
     DontCare,
-    Masked(Expression, Expression),
-    Ranged(Expression, Expression),
+    Masked(Box::<Expression>, Box::<Expression>),
+    Ranged(Box::<Expression>, Box::<Expression>),
 }
 
 
 #[derive(Debug, Clone)]
 pub struct ActionRef {
     pub name: String,
-    pub parameters: Vec::<Expression>,
+    pub parameters: Vec::<Box<Expression>>,
 }
 
 impl ActionRef {
@@ -237,7 +243,7 @@ pub enum MatchKind {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Empty,
-    Assignment(Lvalue, Expression),
+    Assignment(Lvalue, Box::<Expression>),
     Call(Call),
     // TODO ...
 }
@@ -246,7 +252,7 @@ pub enum Statement {
 #[derive(Debug, Clone)]
 pub struct Call {
     pub lval: Lvalue,
-    pub args: Vec::<Expression>,
+    pub args: Vec::<Box::<Expression>>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -284,7 +290,7 @@ pub enum Transition {
 
 #[derive(Debug, Clone, Default)]
 pub struct Select {
-    pub parameters: Vec::<Expression>,
+    pub parameters: Vec::<Box::<Expression>>,
     pub elements: Vec::<SelectElement>,
 }
 

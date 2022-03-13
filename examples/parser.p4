@@ -30,8 +30,7 @@ parser Top(packet_in b, out Parsed_headers headers) {
 
    state parse_ipv4 {
        b.extract(headers.ipv4);
-       //TODO verify(headers.ipv4.ihl >= 5, error.InvalidIPv4Header);
-       verify(headers.ipv4.ihl);
+       verify(headers.ipv4.ihl >= 5, error.InvalidIPv4Header);
        transition select (headers.ipv4.ihl) {
            5: dispatch_on_protocol;
            _: parse_ipv4_options;
