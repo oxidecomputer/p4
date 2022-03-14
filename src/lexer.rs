@@ -16,6 +16,7 @@ pub enum Kind {
     Action,
     Parser,
     Table,
+    Size,
     Key,
     Exact,
     Ternary,
@@ -29,6 +30,7 @@ pub enum Kind {
     Transition,
     State,
     Select,
+    Apply,
 
     //
     // types
@@ -140,6 +142,7 @@ impl fmt::Display for Kind {
             Kind::Action => write!(f, "keyword action"),
             Kind::Parser => write!(f, "keyword parser"),
             Kind::Table => write!(f, "keyword table"),
+            Kind::Size => write!(f, "keyword size"),
             Kind::Key => write!(f, "keyword key"),
             Kind::Exact => write!(f, "keyword exact"),
             Kind::Ternary => write!(f, "keyword ternary"),
@@ -153,6 +156,7 @@ impl fmt::Display for Kind {
             Kind::Transition => write!(f, "keyword transition"),
             Kind::State => write!(f, "keyword state"),
             Kind::Select => write!(f, "keyword select"),
+            Kind::Apply => write!(f, "keyword apply"),
 
             //
             // types
@@ -354,6 +358,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("select", Kind::Select) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("apply", Kind::Apply) {
             Some(t) => return Ok(t),
             None => {}
         }
@@ -569,6 +578,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("table", Kind::Table) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("size", Kind::Size) {
             Some(t) => return Ok(t),
             None => {}
         }

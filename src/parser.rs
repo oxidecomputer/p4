@@ -8,7 +8,7 @@ use crate::ast::{
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
     Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
     Struct, StructMember, State, Transition, Select, SelectElement, Call,
-    BinOp,
+    BinOp, StatementBlock,
 };
 
 pub struct Parser<'a> {
@@ -84,6 +84,11 @@ impl<'a> Parser<'a> {
         let token = self.next_token()?;
         Ok(match token.kind {
             Kind::Identifier(name) => name,
+            Kind::Apply => {
+                // sometimes apply is not the keyword but a method called
+                // against tables.
+                "apply".into()
+            }
             _ => {
                 return Err(ParserError{
                     at: token.clone(),
@@ -378,9 +383,10 @@ impl<'a> Parser<'a> {
 
         let token = self.next_token()?;
         match token.kind {
-            lexer::Kind::GreaterThanEquals => {
-                Ok(Some(BinOp::Geq))
-            }
+            lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
+            lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
+            lexer::Kind::Plus => Ok(Some(BinOp::Add)),
+            lexer::Kind::Minus => Ok(Some(BinOp::Subtract)),
             // TODO other binops
             _ => {
                 self.backlog.push(token);
@@ -388,6 +394,66 @@ impl<'a> Parser<'a> {
             }
         }
 
+    }
+
+    pub fn parse_statement_block(&mut self)
+    -> Result<StatementBlock, Error> {
+
+        let mut result = StatementBlock::default();
+
+        self.expect_token(lexer::Kind::CurlyOpen)?;
+
+        loop {
+            let token = self.next_token()?;
+
+            // check if we've reached the end of the parameters
+            match token.kind {
+                lexer::Kind::CurlyClose => break,
+
+                // variable declaration / initialization
+                lexer::Kind::Bool 
+                | lexer::Kind::Error
+                | lexer::Kind::Bit
+                | lexer::Kind::Int 
+                | lexer::Kind::String => {
+                    self.backlog.push(token);
+                    let var = self.parse_variable()?;
+                    result.variables.push(var);
+                }
+
+                // constant declaration / initialization
+                lexer::Kind::Const => {
+                    let c = self.parse_constant()?;
+                    result.constants.push(c);
+                }
+
+                lexer::Kind::Identifier(_) => {
+
+                    // push the identifier token into the backlog and run the
+                    // statement parser
+                    self.backlog.push(token);
+                    let mut sp = StatementParser::new(self);
+                    let stmt = sp.run()?;
+                    result.statements.push(stmt);
+
+                }
+
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected variable, constant, statement or \
+                            instantiation.",
+                            token.kind,
+                        ),
+                        source: self.lexer.lines[token.line].into(),
+                    }.into())
+                }
+            }
+
+        }
+
+        Ok(result)
     }
 }
 
@@ -631,6 +697,7 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                 lexer::Kind::CurlyClose => break,
                 lexer::Kind::Action => self.parse_action(control)?,
                 lexer::Kind::Table => self.parse_table(control)?,
+                lexer::Kind::Apply => self.parse_apply(control)?,
                 _ => {
                     return Err(ParserError{
                         at: token.clone(),
@@ -670,6 +737,14 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         Ok(())
     }
 
+    pub fn parse_apply(
+        &mut self, control: &mut Control) -> Result<(), Error> {
+
+        control.apply = self.parser.parse_statement_block()?;
+
+        Ok(())
+    }
+
 }
 
 pub struct ActionParser<'a, 'b> {
@@ -688,7 +763,8 @@ impl <'a, 'b> ActionParser<'a, 'b> {
         let mut action = Action::new(name);
 
         self.parse_parameters(&mut action)?;
-        self.parse_body(&mut action)?;
+        //self.parse_body(&mut action)?;
+        action.statement_block = self.parser.parse_statement_block()?;
 
         Ok(action)
 
@@ -729,61 +805,6 @@ impl <'a, 'b> ActionParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn parse_body(&mut self, action: &mut Action) -> Result<(), Error> {
-        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
-
-        loop {
-            let token = self.parser.next_token()?;
-
-            // check if we've reached the end of the parameters
-            match token.kind {
-                lexer::Kind::CurlyClose => break,
-
-                // variable declaration / initialization
-                lexer::Kind::Bool 
-                | lexer::Kind::Error
-                | lexer::Kind::Bit
-                | lexer::Kind::Int 
-                | lexer::Kind::String => {
-                    self.parser.backlog.push(token);
-                    let var = self.parser.parse_variable()?;
-                    action.variables.push(var);
-                }
-
-                // constant declaration / initialization
-                lexer::Kind::Const => {
-                    let c = self.parser.parse_constant()?;
-                    action.constants.push(c);
-                }
-
-                lexer::Kind::Identifier(_) => {
-
-                    // push the identifier token into the backlog and run the
-                    // statement parser
-                    self.parser.backlog.push(token);
-                    let mut sp = StatementParser::new(self.parser);
-                    let stmt = sp.run()?;
-                    action.statements.push(stmt);
-
-                }
-
-                _ => {
-                    return Err(ParserError{
-                        at: token.clone(),
-                        message: format!(
-                            "Found {} expected variable, constant, statement or \
-                            instantiation.",
-                            token.kind,
-                        ),
-                        source: self.parser.lexer.lines[token.line].into(),
-                    }.into())
-                }
-            }
-
-        }
-
-        Ok(())
-    }
 
 
     pub fn parse_sized_variable(&mut self, _ty: Type) -> Result<Variable, Error> {
@@ -824,6 +845,25 @@ impl <'a, 'b> TableParser<'a, 'b> {
                 lexer::Kind::Key => self.parse_key(table)?,
                 lexer::Kind::Actions => self.parse_actions(table)?,
                 lexer::Kind::DefaultAction => self.parse_default_action(table)?,
+                lexer::Kind::Size => {
+                    self.parser.expect_token(lexer::Kind::Equals)?;
+                    let token = self.parser.next_token()?;
+                    let size = match token.kind {
+                        lexer::Kind::IntLiteral(x) => x,
+                        _ => {
+                            return Err(ParserError{
+                                at: token.clone(),
+                                message: format!(
+                                    "Found {} expected constant integer",
+                                    token.kind,
+                                ),
+                                source: self.parser.lexer.lines[token.line].into()
+                            }.into())
+                        }
+                    };
+                    self.parser.expect_token(lexer::Kind::Semicolon)?;
+                    table.size = size as usize;
+                }
                 lexer::Kind::Const => {
                     let token = self.parser.next_token()?;
                     match token.kind {

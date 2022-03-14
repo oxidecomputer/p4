@@ -66,7 +66,9 @@ pub enum Expression {
 #[derive(Debug, Clone)]
 pub enum BinOp {
     Add,
+    Subtract,
     Geq,
+    Eq,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +113,7 @@ pub struct Control {
     pub parameters: Vec::<ControlParameter>,
     pub actions: Vec::<Action>,
     pub tables: Vec::<Table>,
+    pub apply: StatementBlock,
 }
 
 impl Control {
@@ -120,6 +123,7 @@ impl Control {
             parameters: Vec::new(),
             actions: Vec::new(),
             tables: Vec::new(),
+            apply: StatementBlock::default(),
         }
     }
 }
@@ -156,13 +160,18 @@ pub enum Direction {
     Unspecified,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct StatementBlock {
+    pub variables: Vec::<Variable>,
+    pub constants: Vec::<Constant>,
+    pub statements: Vec::<Statement>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Action {
     pub name: String,
     pub parameters: Vec::<ActionParameter>,
-    pub variables: Vec::<Variable>,
-    pub constants: Vec::<Constant>,
-    pub statements: Vec::<Statement>,
+    pub statement_block: StatementBlock,
 }
 
 impl Action {
@@ -170,9 +179,7 @@ impl Action {
         Self{
             name,
             parameters: Vec::new(),
-            variables: Vec::new(),
-            constants: Vec::new(),
-            statements: Vec::new(),
+            statement_block: StatementBlock::default(),
         }
     }
 }
@@ -191,6 +198,7 @@ pub struct Table {
     pub default_action: String,
     pub key: BTreeMap<Lvalue, MatchKind>,
     pub const_entries: Vec::<ConstTableEntry>,
+    pub size: usize,
 }
 
 impl Table {
@@ -201,6 +209,7 @@ impl Table {
             default_action: String::new(),
             key: BTreeMap::new(),
             const_entries: Vec::new(),
+            size: 0,
         }
     }
 }
