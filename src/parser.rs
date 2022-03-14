@@ -223,19 +223,17 @@ impl<'a> Parser<'a> {
         let ty = self.parse_type()?;
         let name = self.parse_identifier()?;
         self.expect_token(lexer::Kind::Equals)?;
-        loop {
-            //TODO for now just skipping to initializer terminating semicolon,
-            //need to parse initializer.
-            let token = self.next_token()?;
-            if token.kind == lexer::Kind::Semicolon {
-                break;
-            }
-        }
-        Ok(Constant{ty, name})
+        let initializer = self.parse_expression()?;
+        self.expect_token(lexer::Kind::Semicolon)?;
+        Ok(Constant{ty, name, initializer})
+    }
+
+    pub fn parse_expression(&mut self) -> Result<Box::<Expression>, Error> {
+        let mut ep = ExpressionParser::new(self);
+        Ok(ep.run()?)
     }
 
     pub fn parse_keyset(&mut self) -> Result<Vec::<KeySetElement>, Error> {
-
 
         let token = self.next_token()?;
         match token.kind {
@@ -512,7 +510,11 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         // next comes a name
         let name = self.parser.parse_identifier()?;
 
-        ast.constants.push(Constant{ty, name});
+        // then an initializer
+        self.parser.expect_token(lexer::Kind::Equals);
+        let initializer = self.parser.parse_expression()?;
+
+        ast.constants.push(Constant{ty, name, initializer});
 
         Ok(())
     }

@@ -23,7 +23,8 @@ struct Parsed_headers {
     IPv4_options_h    ipv4options;
 }
 
-error { InvalidIPv4Header }
+// TODO parse error decls
+//error { InvalidIPv4Header }
 
 parser Top(packet_in b, out Parsed_headers headers) {
    // Some states omitted

@@ -59,7 +59,7 @@ pub struct Typedef {
 pub struct Constant {
     pub ty: Type,
     pub name: String,
-    //TODO initializer: Expression,
+    pub initializer: Box::<Expression>,
 }
 
 #[derive(Debug, Clone)]
