@@ -146,6 +146,7 @@ impl Control {
 #[derive(Debug, Clone)]
 pub struct Parser {
     pub name: String,
+    pub type_parameters: Vec::<String>,
     pub parameters: Vec::<ControlParameter>,
     pub states: Vec::<State>,
 }
@@ -154,6 +155,7 @@ impl Parser {
     pub fn new(name: String) -> Self {
         Self{
             name,
+            type_parameters: Vec::new(),
             parameters: Vec::new(),
             states: Vec::new(),
         }

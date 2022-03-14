@@ -511,7 +511,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         let name = self.parser.parse_identifier()?;
 
         // then an initializer
-        self.parser.expect_token(lexer::Kind::Equals);
+        self.parser.expect_token(lexer::Kind::Equals)?;
         let initializer = self.parser.parse_expression()?;
 
         ast.constants.push(Constant{ty, name, initializer});
@@ -1223,10 +1223,61 @@ impl<'a, 'b> ParserParser<'a, 'b> {
 
         let name = self.parser.parse_identifier()?;
         let mut parser = ast::Parser::new(name);
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::AngleOpen => {
+                self.parse_type_parameters(&mut parser)?;
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
+        }
+
+
         self.parse_parameters(&mut parser)?;
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::Semicolon => {
+                return Ok(parser)
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
+        }
+
         self.parse_body(&mut parser)?;
 
         Ok(parser)
+
+    }
+
+    pub fn parse_type_parameters(
+        &mut self, parser: &mut ast::Parser) -> Result<(), Error> {
+
+        loop {
+            let ident = self.parser.parse_identifier()?;
+            parser.type_parameters.push(ident);
+            
+            let token = self.parser.next_token()?;
+            match token.kind {
+                lexer::Kind::AngleClose => break,
+                lexer::Kind::Comma => continue,
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected: type parameter",
+                            token.kind,
+                        ),
+                        source: self.parser.lexer.lines[token.line].into()
+                    }.into())
+                }
+            }
+        }
+
+        Ok(())
 
     }
 
