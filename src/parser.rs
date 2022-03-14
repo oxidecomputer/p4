@@ -8,7 +8,7 @@ use crate::ast::{
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
     Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
     Struct, StructMember, State, Transition, Select, SelectElement, Call,
-    BinOp, StatementBlock, PackageInstance,
+    BinOp, StatementBlock, PackageInstance, Package, PackageParameter,
 };
 
 pub struct Parser<'a> {
@@ -453,6 +453,38 @@ impl<'a> Parser<'a> {
 
         Ok(result)
     }
+
+    pub fn parse_type_parameters(
+        &mut self) -> Result<Vec::<String>, Error> {
+
+        let mut result = Vec::new();
+
+        self.expect_token(lexer::Kind::AngleOpen)?;
+
+        loop {
+            let ident = self.parse_identifier()?;
+            result.push(ident);
+            
+            let token = self.next_token()?;
+            match token.kind {
+                lexer::Kind::AngleClose => break,
+                lexer::Kind::Comma => continue,
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected: type parameter",
+                            token.kind,
+                        ),
+                        source: self.lexer.lines[token.line].into()
+                    }.into())
+                }
+            }
+        }
+
+        Ok(result)
+
+    }
 }
 
 /// Top level parser for parsing elements are global scope.
@@ -494,6 +526,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             lexer::Kind::Typedef => self.handle_typedef(ast)?,
             lexer::Kind::Control => self.handle_control(ast)?,
             lexer::Kind::Parser => self.handle_parser(ast)?,
+            lexer::Kind::Package => self.handle_package(ast)?,
             lexer::Kind::Identifier(typ) =>
                 self.handle_package_instance(typ, ast)?,
             _ => {}
@@ -628,6 +661,73 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         Ok(())
     }
 
+    pub fn handle_package(&mut self, ast: &mut AST)
+    -> Result<(), Error> {
+
+        let name = self.parser.parse_identifier()?;
+        let mut pkg = Package::new(name);
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::AngleOpen => {
+                self.parser.backlog.push(token);
+                pkg.type_parameters = self.parser.parse_type_parameters()?;
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
+        }
+
+        self.parse_package_parameters(&mut pkg)?;
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+        ast.packages.push(pkg);
+
+        Ok(())
+
+    }
+
+    pub fn parse_package_parameters(&mut self, pkg: &mut Package)
+    -> Result<(), Error> {
+
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+        loop {
+            let token = self.parser.next_token()?;
+            match token.kind {
+                lexer::Kind::ParenClose => break,
+                lexer::Kind::Comma => continue,
+                lexer::Kind::Identifier(type_name) => {
+                    let mut parameter = PackageParameter::new(type_name);
+                    let token = self.parser.next_token()?;
+                    self.parser.backlog.push(token.clone());
+                    match token.kind {
+                        lexer::Kind::AngleOpen => {
+                            parameter.type_parameters =
+                                self.parser.parse_type_parameters()?;
+                        }
+                        _ => {}
+                    }
+                    let name = self.parser.parse_identifier()?;
+                    parameter.name = name;
+                    pkg.parameters.push(parameter);
+                }
+                _ => {
+                    return Err(ParserError{
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected package parameter.",
+                            token.kind,
+                        ),
+                        source: self.parser.lexer.lines[token.line].into(),
+                    }.into())
+                }
+            }
+        }
+
+        Ok(())
+
+    }
+
     pub fn handle_package_instance(&mut self, typ: String, ast: &mut AST)
     -> Result<(), Error> {
 
@@ -676,7 +776,30 @@ impl<'a, 'b> ControlParser<'a, 'b> {
 
         let name = self.parser.parse_identifier()?;
         let mut control = Control::new(name);
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::AngleOpen => {
+                self.parser.backlog.push(token);
+                control.type_parameters = self.parser.parse_type_parameters()?;
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
+        }
+
         self.parse_parameters(&mut control)?;
+
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::Semicolon => {
+                return Ok(control)
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
+        }
+
         self.parse_body(&mut control)?;
 
         Ok(control)
@@ -1227,7 +1350,8 @@ impl<'a, 'b> ParserParser<'a, 'b> {
         let token = self.parser.next_token()?;
         match token.kind {
             lexer::Kind::AngleOpen => {
-                self.parse_type_parameters(&mut parser)?;
+                self.parser.backlog.push(token);
+                parser.type_parameters = self.parser.parse_type_parameters()?;
             }
             _ => {
                 self.parser.backlog.push(token);
@@ -1253,33 +1377,6 @@ impl<'a, 'b> ParserParser<'a, 'b> {
 
     }
 
-    pub fn parse_type_parameters(
-        &mut self, parser: &mut ast::Parser) -> Result<(), Error> {
-
-        loop {
-            let ident = self.parser.parse_identifier()?;
-            parser.type_parameters.push(ident);
-            
-            let token = self.parser.next_token()?;
-            match token.kind {
-                lexer::Kind::AngleClose => break,
-                lexer::Kind::Comma => continue,
-                _ => {
-                    return Err(ParserError{
-                        at: token.clone(),
-                        message: format!(
-                            "Found {} expected: type parameter",
-                            token.kind,
-                        ),
-                        source: self.parser.lexer.lines[token.line].into()
-                    }.into())
-                }
-            }
-        }
-
-        Ok(())
-
-    }
 
     pub fn parse_parameters(
         &mut self, parser: &mut ast::Parser) -> Result<(), Error> {

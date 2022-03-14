@@ -31,6 +31,7 @@ pub enum Kind {
     State,
     Select,
     Apply,
+    Package,
 
     //
     // types
@@ -157,6 +158,7 @@ impl fmt::Display for Kind {
             Kind::State => write!(f, "keyword state"),
             Kind::Select => write!(f, "keyword select"),
             Kind::Apply => write!(f, "keyword apply"),
+            Kind::Package => write!(f, "keyword package"),
 
             //
             // types
@@ -363,6 +365,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("apply", Kind::Apply) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("package", Kind::Package) {
             Some(t) => return Ok(t),
             None => {}
         }

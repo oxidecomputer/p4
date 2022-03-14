@@ -27,8 +27,6 @@ struct headers_t {
 parser bump_parser(
     packet_in packet,
     out headers_t hdr,
-    inout metadata_t meta,
-    inout standard_metadata_t standard_metadata,
 ) {
 
     //
@@ -72,13 +70,13 @@ control bump_deparser(
 
 control bump_ingress(
     inout headers_t hdr,
-    inout metadata_t meta,
-    inout standard_metadata_t standard_metadata
+    inout EgressMetadata ingress_meta,
+    inout EgressMetadata egress_meta,
 ) {
 
     action bump_action() {
         hdr.ipv6.hop_limit = hdr.ipv6.hop_limit - 1;
-        standard_meta.egress_spec = port;
+        egresss_meta.port = port;
     }
 
     table router {
@@ -99,8 +97,8 @@ control bump_ingress(
 
 control bump_egress(
     inout headers_t hdr,
-    inout metadata_t meta,
-    inout standard_metadata_t standard_meta
+    in EgressMetadata ingress_meta,
+    inout EgressMetadata egress_meta,
 ) {
 
     apply { }

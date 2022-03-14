@@ -8,6 +8,7 @@ pub struct AST {
     pub typedefs: Vec<Typedef>,
     pub controls: Vec<Control>,
     pub parsers: Vec<Parser>,
+    pub packages: Vec<Package>,
     pub package_instance: Option<PackageInstance>,
 }
 
@@ -20,6 +21,7 @@ impl Default for AST {
             typedefs: Vec::new(),
             controls: Vec::new(),
             parsers: Vec::new(),
+            packages: Vec::new(),
             package_instance: None,
         }
     }
@@ -35,6 +37,40 @@ pub struct PackageInstance {
 impl PackageInstance {
     pub fn new(instance_type: String) -> Self {
         Self{ instance_type, name: "".into(), parameters: Vec::new() }
+    }
+}
+
+#[derive(Debug)]
+pub struct Package {
+    pub name: String,
+    pub type_parameters: Vec::<String>,
+    pub parameters: Vec::<PackageParameter>,
+}
+
+impl Package {
+    pub fn new(name: String) -> Self {
+        Self{
+            name,
+            type_parameters: Vec::new(),
+            parameters: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct PackageParameter {
+    pub type_name: String,
+    pub type_parameters: Vec::<String>,
+    pub name: String,
+}
+
+impl PackageParameter {
+    pub fn new(type_name: String) -> Self {
+        Self{
+            type_name,
+            type_parameters: Vec::new(),
+            name: String::new(),
+        }
     }
 }
 
@@ -125,6 +161,7 @@ pub struct StructMember {
 #[derive(Debug, Clone)]
 pub struct Control {
     pub name: String,
+    pub type_parameters: Vec::<String>,
     pub parameters: Vec::<ControlParameter>,
     pub actions: Vec::<Action>,
     pub tables: Vec::<Table>,
@@ -135,6 +172,7 @@ impl Control {
     pub fn new(name: String) -> Self {
         Self{
             name,
+            type_parameters: Vec::new(),
             parameters: Vec::new(),
             actions: Vec::new(),
             tables: Vec::new(),
