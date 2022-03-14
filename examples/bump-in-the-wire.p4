@@ -69,7 +69,7 @@ control bump_deparser(
 
 }
 
-control bum_ingress(
+control bump_ingress(
     inout headers_t hdr,
     inout metadata_t meta,
     inout standard_metadata_t standard_metadata
@@ -95,3 +95,20 @@ control bum_ingress(
     }
 
 }
+
+control bump_egress(
+    inout headers_t hdr,
+    inout metadata_t meta,
+    inout standard_metadata_t standard_meta
+) {
+
+    apply { }
+
+}
+
+SoftNPU(
+    bump_parser(),
+    bump_ingress(),
+    bump_egress(),
+    bump_deparser()
+) main;

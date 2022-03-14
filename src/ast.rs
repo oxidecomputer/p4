@@ -8,6 +8,7 @@ pub struct AST {
     pub typedefs: Vec<Typedef>,
     pub controls: Vec<Control>,
     pub parsers: Vec<Parser>,
+    pub package_instance: Option<PackageInstance>,
 }
 
 impl Default for AST {
@@ -19,7 +20,21 @@ impl Default for AST {
             typedefs: Vec::new(),
             controls: Vec::new(),
             parsers: Vec::new(),
+            package_instance: None,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct PackageInstance {
+    pub instance_type: String,
+    pub name: String,
+    pub parameters: Vec::<String>,
+}
+
+impl PackageInstance {
+    pub fn new(instance_type: String) -> Self {
+        Self{ instance_type, name: "".into(), parameters: Vec::new() }
     }
 }
 

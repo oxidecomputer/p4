@@ -8,7 +8,7 @@ use crate::ast::{
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
     Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
     Struct, StructMember, State, Transition, Select, SelectElement, Call,
-    BinOp, StatementBlock,
+    BinOp, StatementBlock, PackageInstance,
 };
 
 pub struct Parser<'a> {
@@ -496,6 +496,8 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             lexer::Kind::Typedef => self.handle_typedef(ast)?,
             lexer::Kind::Control => self.handle_control(ast)?,
             lexer::Kind::Parser => self.handle_parser(ast)?,
+            lexer::Kind::Identifier(typ) =>
+                self.handle_package_instance(typ, ast)?,
             _ => {}
         }
         Ok(())
@@ -622,6 +624,37 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         let parser = pp.run()?;
         ast.parsers.push(parser);
         Ok(())
+    }
+
+    pub fn handle_package_instance(&mut self, typ: String, ast: &mut AST)
+    -> Result<(), Error> {
+
+        let mut inst = PackageInstance::new(typ);
+
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+        loop {
+            let arg = self.parser.parse_identifier()?;
+            self.parser.expect_token(lexer::Kind::ParenOpen)?;
+            self.parser.expect_token(lexer::Kind::ParenClose)?;
+            inst.parameters.push(arg);
+            let token = self.parser.next_token()?;
+            match token.kind {
+                lexer::Kind::ParenClose => break,
+                _ => {
+                    self.parser.backlog.push(token);
+                    self.parser.expect_token(lexer::Kind::Comma)?;
+                    continue;
+                }
+            }
+        }
+
+        let name = self.parser.parse_identifier()?;
+        inst.name = name;
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+        ast.package_instance = Some(inst);
+        Ok(())
+
     }
 
 }
