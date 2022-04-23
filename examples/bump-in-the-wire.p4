@@ -1,4 +1,3 @@
-#include <core.p4>
 #include <softnpu.p4>
 
 header ethernet_t {
