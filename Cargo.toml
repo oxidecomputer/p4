@@ -1,10 +1,7 @@
-[package]
-name = "thor"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-[dependencies]
-colored = "2"
-clap = { version = "3", features = ["color", "derive"] }
-anyhow = "1"
-regex = "1"
+members = [
+    "p4rs",
+    "x4c",
+    "targets/rust"
+]

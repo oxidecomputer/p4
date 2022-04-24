@@ -1,12 +1,7 @@
 use std::fs;
 use clap::Parser;
 use anyhow::{anyhow, Result};
-
-pub mod lexer;
-pub mod error;
-pub mod parser;
-pub mod ast;
-pub mod preprocessor;
+use p4rs::{preprocessor, lexer, parser};
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
@@ -39,5 +34,4 @@ fn main() -> Result<()> {
     println!("{:#?}", ast);
 
     Ok(())
-
 }

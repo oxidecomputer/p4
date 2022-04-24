@@ -33,7 +33,7 @@ impl Default for PreprocessorElements {
     }
 }
 
-pub(crate) fn run(source: &str)
+pub fn run(source: &str)
 -> Result<PreprocessorResult, PreprocessorError> {
 
     let mut result = PreprocessorResult::default();

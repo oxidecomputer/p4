@@ -1,0 +1,7 @@
+[package]
+name = "p4rs-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p4rs = { path = "../../p4rs" }

@@ -1,27 +1,11 @@
 #include <softnpu.p4>
 
-header ethernet_t {
-    EthernetAddress dst_addr;
-    EthernetAddress src_addr;
-    bit<16> ether_type;
-}
-
-header ipv6_t {
-    bit<4> version;
-    bit<6> ds_field;
-    bit<2> ecn;
-    bit<20> flow_label;
-    bit<16> len;
-    bit<8> next_header;
-    bit<8> hop_limit;
-    IPv6Address src_addr;
-    IPv6Address dst_addr;
-}
-
-struct headers_t {
-    ethernet_t ethernet;
-    ipv6_t ipv6;
-}
+SoftNPU(
+    bump_parser(),
+    bump_ingress(),
+    bump_egress(),
+    bump_deparser()
+) main;
 
 parser bump_parser(
     packet_in packet,
@@ -33,11 +17,11 @@ parser bump_parser(
     // ethertype
     //
 
-    state parse_ethernet {
+    state start {
         packet.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
             0x86dd: parse_ipv6;
-            default: accept;
+            default: reject;
         }
     }
 
@@ -53,18 +37,6 @@ parser bump_parser(
         }
     }
     
-}
-
-control bump_deparser(
-    packet_out packet,
-    in headers_t hdr,
-) {
-
-    apply {
-        packet.emit(hdr.ethernet);
-        packet.emit(hdr.ipv6);
-    }
-
 }
 
 control bump_ingress(
@@ -104,9 +76,37 @@ control bump_egress(
 
 }
 
-SoftNPU(
-    bump_parser(),
-    bump_ingress(),
-    bump_egress(),
-    bump_deparser()
-) main;
+control bump_deparser(
+    packet_out packet,
+    in headers_t hdr,
+) {
+
+    apply {
+        packet.emit(hdr.ethernet);
+        packet.emit(hdr.ipv6);
+    }
+
+}
+
+header ethernet_t {
+    EthernetAddress dst_addr;
+    EthernetAddress src_addr;
+    bit<16> ether_type;
+}
+
+header ipv6_t {
+    bit<4> version;
+    bit<6> ds_field;
+    bit<2> ecn;
+    bit<20> flow_label;
+    bit<16> len;
+    bit<8> next_header;
+    bit<8> hop_limit;
+    IPv6Address src_addr;
+    IPv6Address dst_addr;
+}
+
+struct headers_t {
+    ethernet_t ethernet;
+    ipv6_t ipv6;
+}

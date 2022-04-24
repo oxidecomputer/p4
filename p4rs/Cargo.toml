@@ -1,0 +1,8 @@
+[package]
+name = "p4rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+colored = "2"
+regex = "1"
