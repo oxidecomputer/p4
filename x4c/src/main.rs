@@ -1,13 +1,19 @@
 use std::fs;
 use clap::Parser;
 use anyhow::{anyhow, Result};
-use p4::{preprocessor, lexer, parser};
+use p4::{preprocessor, lexer, parser, check};
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
 struct Opts {
     #[clap(long)]
     show_tokens: bool,
+
+    #[clap(long)]
+    show_ast: bool,
+
+    #[clap(long)]
+    show_pre: bool,
 
     /// File to compile
     filename: String
@@ -20,7 +26,9 @@ fn main() -> Result<()> {
         .map_err(|e| anyhow!("read input: {}", e))?;
     
     let ppr = preprocessor::run(&contents)?;
-    println!("{:#?}", ppr.elements);
+    if opts.show_pre {
+        println!("{:#?}", ppr.elements);
+    }
 
     let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
     //println!("lines\n{:#?}", lines);
@@ -30,8 +38,19 @@ fn main() -> Result<()> {
 
     let mut psr = parser::Parser::new(lxr);
     let ast = psr.run()?;
+    if opts.show_ast {
+        println!("{:#?}", ast);
+    }
 
-    println!("{:#?}", ast);
+    let diagnostics = check::all(&ast);
+    let errors = diagnostics.errors();
+    if !errors.is_empty() {
+        for e in errors {
+            println!("{:?}", e);
+        }
+        return Err(anyhow!("static checking failed"));
+    }
+
 
     Ok(())
 }
