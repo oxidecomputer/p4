@@ -146,7 +146,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e22443d1643a904602595ba1cd8f7d896afe56d26712531c5ff73a15b2fbf64"
 
 [[package]]
-name = "p4rs"
+name = "p4"
 version = "0.1.0"
 dependencies = [
  "colored",
@@ -157,7 +157,7 @@ dependencies = [
 name = "p4rs-rust"
 version = "0.1.0"
 dependencies = [
- "p4rs",
+ "p4",
 ]
 
 [[package]]
@@ -301,6 +301,6 @@ dependencies = [
  "anyhow",
  "clap",
  "colored",
- "p4rs",
+ "p4",
  "regex",
 ]

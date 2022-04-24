@@ -8,4 +8,4 @@ colored = "2"
 clap = { version = "3", features = ["color", "derive"] }
 anyhow = "1"
 regex = "1"
-p4rs = { path = "../p4rs" }
+p4 = { path = "../p4" }

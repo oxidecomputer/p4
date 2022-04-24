@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "p4rs",
+    "p4",
     "x4c",
     "targets/rust"
 ]

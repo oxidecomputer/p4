@@ -1,7 +1,7 @@
 use std::fs;
 use clap::Parser;
 use anyhow::{anyhow, Result};
-use p4rs::{preprocessor, lexer, parser};
+use p4::{preprocessor, lexer, parser};
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
