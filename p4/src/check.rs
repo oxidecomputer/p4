@@ -1,7 +1,7 @@
 use crate::ast::{AST, Parser};
 use crate::lexer::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Diagnostic {
     /// Level of this diagnostic.
     pub level: Level,
@@ -14,7 +14,7 @@ pub struct Diagnostic {
     pub token: Token
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Level {
     Info,
     Deprecation,
@@ -23,11 +23,14 @@ pub enum Level {
 }
 
 #[derive(Debug)]
-pub struct Diagnostics(Vec<Diagnostic>);
+pub struct Diagnostics(pub Vec<Diagnostic>);
 
 impl Diagnostics {
     pub fn errors(&self) -> Vec<&Diagnostic> {
         self.0.iter().filter(|x| x.level == Level::Error).collect()
+    }
+    pub fn extend(&mut self, diags: &Diagnostics) {
+        self.0.extend(diags.0.clone())
     }
 }
 

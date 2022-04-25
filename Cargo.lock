@@ -154,7 +154,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "p4rs-rust"
+name = "p4-rust"
 version = "0.1.0"
 dependencies = [
  "p4",
@@ -302,5 +302,6 @@ dependencies = [
  "clap",
  "colored",
  "p4",
+ "p4-rust",
  "regex",
 ]

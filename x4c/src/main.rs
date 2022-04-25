@@ -2,6 +2,7 @@ use std::fs;
 use clap::Parser;
 use anyhow::{anyhow, Result};
 use p4::{preprocessor, lexer, parser, check, error, error::SemanticError};
+use p4::check::Diagnostics;
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
@@ -16,7 +17,18 @@ struct Opts {
     show_pre: bool,
 
     /// File to compile
-    filename: String
+    filename: String,
+
+    /// What target to generate code for
+    #[clap(arg_enum)]
+    target: Target,
+
+}
+
+#[derive(clap::ArgEnum, Clone)]
+enum Target {
+    Rust,
+    RedHawk,
 }
 
 fn main() -> Result<()> {
@@ -42,7 +54,23 @@ fn main() -> Result<()> {
         println!("{:#?}", ast);
     }
 
-    let diagnostics = check::all(&ast);
+    let static_diags = check::all(&ast);
+    check(&lines, &static_diags)?;
+
+    match opts.target {
+        Target::Rust => {
+            let diags = p4_rust::emit(&ast);
+            check(&lines, &diags)?;
+        }
+        Target::RedHawk => {
+            todo!("RedHawk code generator");
+        }
+    }
+
+    Ok(())
+}
+
+fn check(lines: &Vec<&str>, diagnostics: &Diagnostics) -> Result<()> {
     let errors = diagnostics.errors();
     if !errors.is_empty() {
         let mut err = Vec::new();
@@ -55,7 +83,5 @@ fn main() -> Result<()> {
         }
         Err(error::Error::Semantic(err))?;
     }
-
-
     Ok(())
 }

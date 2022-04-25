@@ -1,4 +1,6 @@
+use std::fmt;
 use std::collections::BTreeMap;
+
 use crate::lexer::Token;
 
 #[derive(Debug)]
@@ -25,6 +27,18 @@ impl Default for AST {
             packages: Vec::new(),
             package_instance: None,
         }
+    }
+}
+
+impl AST {
+
+    pub fn get_struct(&self, name: &str) -> Option<&Struct> {
+        for s in &self.structs {
+            if s.name == name {
+                return Some(s)
+            }
+        }
+        None
     }
 }
 
@@ -84,6 +98,20 @@ pub enum Type {
     Int(usize),
     String,
     UserDefined(String),
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            Type::Bool => write!(f, "bool"),
+            Type::Error => write!(f, "error"),
+            Type::Bit(size) => write!(f, "bit<{}>", size),
+            Type::Varbit(size) => write!(f, "varbit<{}>", size),
+            Type::Int(size) => write!(f, "int<{}>", size),
+            Type::String => write!(f, "string"),
+            Type::UserDefined(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -210,9 +238,14 @@ pub struct ControlParameter {
     pub direction: Direction,
     pub ty: Type,
     pub name: String,
+
+    /// The first token of this parser, used for error reporting.
+    pub dir_token: Token,
+    pub ty_token: Token,
+    pub name_token: Token,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Direction {
     In,
     Out,

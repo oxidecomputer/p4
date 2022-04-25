@@ -1,5 +1,5 @@
 [package]
-name = "p4rs-rust"
+name = "p4-rust"
 version = "0.1.0"
 edition = "2021"
 
