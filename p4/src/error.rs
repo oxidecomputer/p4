@@ -3,6 +3,46 @@ use colored::Colorize;
 use crate::lexer::Token;
 
 #[derive(Debug)]
+pub struct SemanticError {
+    /// Token where the error was encountered
+    pub at: Token,
+
+    /// Message associated with this error.
+    pub message: String,
+
+    /// The source line the token error occured on.
+    pub source: String
+}
+
+impl fmt::Display for SemanticError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let loc = format!("[{}:{}]", self.at.line+1, self.at.col+1)
+            .as_str()
+            .bright_red();
+        write!(f, "{} {}\n\n", loc, self.message.bright_white())?;
+        write!(f, "  {}\n", self.source)?;
+
+        // The presence of tabs makes presenting error indicators purely based
+        // on column position impossible, so here we iterrate over the existing
+        // string and mask out the non whitespace text inserting the error
+        // indicators and preserving any tab/space mixture.
+        let carat_line: String = self.source.chars().enumerate().map(|(i, x)| {
+            if i == self.at.col {
+                return '^'
+            }
+            if x.is_whitespace() {
+                return x
+            } else {
+                return ' '
+            }
+        }).collect();
+        write!(f, "  {}", carat_line.bright_red())
+    }
+}
+
+impl std::error::Error for SemanticError {}
+
+#[derive(Debug)]
 pub struct ParserError {
     /// Token where the error was encountered
     pub at: Token,
@@ -91,6 +131,7 @@ impl std::error::Error for TokenError {}
 pub enum Error {
     Lexer(TokenError),
     Parser(ParserError),
+    Semantic(Vec::<SemanticError>),
 }
 
 impl fmt::Display for Error {
@@ -100,6 +141,12 @@ impl fmt::Display for Error {
         match &self {
             Self::Lexer(e) => e.fmt(f),
             Self::Parser(e) => e.fmt(f),
+            Self::Semantic(errors) => {
+                for e in errors {
+                    e.fmt(f)?;
+                }
+                Ok(())
+            }
         }
 
     }
@@ -117,6 +164,12 @@ impl From<TokenError> for Error {
 impl From<ParserError> for Error {
     fn from(e: ParserError) -> Self {
         Self::Parser(e)
+    }
+}
+
+impl From<Vec<SemanticError>> for Error {
+    fn from(e: Vec<SemanticError>) -> Self {
+        Self::Semantic(e)
     }
 }
 

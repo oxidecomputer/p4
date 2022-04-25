@@ -1,7 +1,7 @@
 use std::fs;
 use clap::Parser;
 use anyhow::{anyhow, Result};
-use p4::{preprocessor, lexer, parser, check};
+use p4::{preprocessor, lexer, parser, check, error, error::SemanticError};
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
     //println!("lines\n{:#?}", lines);
 
-    let mut lxr = lexer::Lexer::new(lines);
+    let mut lxr = lexer::Lexer::new(lines.clone());
     lxr.show_tokens = opts.show_tokens;
 
     let mut psr = parser::Parser::new(lxr);
@@ -45,10 +45,15 @@ fn main() -> Result<()> {
     let diagnostics = check::all(&ast);
     let errors = diagnostics.errors();
     if !errors.is_empty() {
+        let mut err = Vec::new();
         for e in errors {
-            println!("{:?}", e);
+            err.push(SemanticError{
+                at: e.token.clone(),
+                message: e.message.clone(),
+                source: lines[e.token.line].into(),
+            });
         }
-        return Err(anyhow!("static checking failed"));
+        Err(error::Error::Semantic(err))?;
     }
 
 

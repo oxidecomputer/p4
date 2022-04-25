@@ -1,4 +1,5 @@
 use crate::ast::{AST, Parser};
+use crate::lexer::Token;
 
 #[derive(Debug)]
 pub struct Diagnostic {
@@ -7,6 +8,10 @@ pub struct Diagnostic {
 
     /// Message associated with this diagnostic.
     pub message: String,
+
+    /// The first token from the lexical element where the semantic error was
+    /// detected.
+    pub token: Token
 }
 
 #[derive(Debug, PartialEq)]
@@ -57,6 +62,7 @@ impl ParserChecker {
             level: Level::Error,
             message: format!(
                 "start state not found for parser {}", parser.name),
+            token: parser.token.clone(),
         });
 
     }

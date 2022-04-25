@@ -525,7 +525,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             lexer::Kind::Struct => self.handle_struct_decl(ast)?,
             lexer::Kind::Typedef => self.handle_typedef(ast)?,
             lexer::Kind::Control => self.handle_control(ast)?,
-            lexer::Kind::Parser => self.handle_parser(ast)?,
+            lexer::Kind::Parser => self.handle_parser(ast, token)?,
             lexer::Kind::Package => self.handle_package(ast)?,
             lexer::Kind::Identifier(typ) =>
                 self.handle_package_instance(typ, ast)?,
@@ -652,10 +652,10 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn handle_parser(&mut self, ast: &mut AST)
+    pub fn handle_parser(&mut self, ast: &mut AST, start: Token)
     -> Result<(), Error> {
 
-        let mut pp = ParserParser::new(self.parser);
+        let mut pp = ParserParser::new(self.parser, start);
         let parser = pp.run()?;
         ast.parsers.push(parser);
         Ok(())
@@ -1334,18 +1334,19 @@ impl <'a, 'b> ExpressionParser<'a, 'b> {
 /// Parser for parsing parser definitions
 pub struct ParserParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
+    start: Token,
 }
 
 impl<'a, 'b> ParserParser<'a, 'b> {
 
-    pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        Self{ parser }
+    pub fn new(parser: &'b mut Parser<'a>, start: Token) -> Self {
+        Self{ parser, start }
     }
 
     pub fn run(&mut self) -> Result<ast::Parser, Error> {
 
         let name = self.parser.parse_identifier()?;
-        let mut parser = ast::Parser::new(name);
+        let mut parser = ast::Parser::new(name, self.start.clone());
 
         let token = self.parser.next_token()?;
         match token.kind {

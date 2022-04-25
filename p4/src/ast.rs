@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use crate::lexer::Token;
 
 #[derive(Debug)]
 pub struct AST {
@@ -187,15 +188,19 @@ pub struct Parser {
     pub type_parameters: Vec::<String>,
     pub parameters: Vec::<ControlParameter>,
     pub states: Vec::<State>,
+
+    /// The first token of this parser, used for error reporting.
+    pub token: Token,
 }
 
 impl Parser {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, token: Token) -> Self {
         Self{
             name,
             type_parameters: Vec::new(),
             parameters: Vec::new(),
             states: Vec::new(),
+            token,
         }
     }
 }
