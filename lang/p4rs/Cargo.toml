@@ -1,7 +1,6 @@
 [package]
-name = "p4-rust"
+name = "p4rs"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-p4 = { path = "../../p4" }

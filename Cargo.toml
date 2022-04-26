@@ -3,5 +3,6 @@
 members = [
     "p4",
     "x4c",
-    "targets/rust"
+    "codegen/rust",
+    "lang/p4rs",
 ]

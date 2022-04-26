@@ -1,0 +1,11 @@
+[package]
+name = "p4-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p4 = { path = "../../p4" }
+quote = "1.0"
+proc-macro2 = "1.0"
+syn = "1.0"
+prettyplease = "0.1"

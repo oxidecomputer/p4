@@ -614,11 +614,11 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             self.parser.backlog.push(token);
 
             // parse a struct member
-            let (ty, _) = self.parser.parse_type()?;
+            let (ty, tyt) = self.parser.parse_type()?;
             let (name, _) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            p4_struct.members.push(StructMember{ty, name});
+            p4_struct.members.push(StructMember{ty, name, token: tyt});
         }
 
         ast.structs.push(p4_struct);

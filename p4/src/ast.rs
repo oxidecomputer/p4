@@ -40,6 +40,15 @@ impl AST {
         }
         None
     }
+
+    pub fn get_header(&self, name: &str) -> Option<&Header> {
+        for s in &self.headers {
+            if s.name == name {
+                return Some(s)
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -185,6 +194,7 @@ impl Struct {
 pub struct StructMember {
     pub ty: Type,
     pub name: String,
+    pub token: Token,
 }
 
 #[derive(Debug, Clone)]

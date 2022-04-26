@@ -59,7 +59,7 @@ fn main() -> Result<()> {
 
     match opts.target {
         Target::Rust => {
-            let diags = p4_rust::emit(&ast);
+            let diags = p4_rust::emit(&ast)?;
             check(&lines, &diags)?;
         }
         Target::RedHawk => {

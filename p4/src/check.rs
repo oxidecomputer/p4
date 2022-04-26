@@ -22,7 +22,7 @@ pub enum Level {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Diagnostics(pub Vec<Diagnostic>);
 
 impl Diagnostics {
@@ -31,6 +31,9 @@ impl Diagnostics {
     }
     pub fn extend(&mut self, diags: &Diagnostics) {
         self.0.extend(diags.0.clone())
+    }
+    pub fn push(&mut self, d: Diagnostic) {
+        self.0.push(d);
     }
 }
 
