@@ -1,0 +1,8 @@
+[package]
+name = "p4-macro-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p4-macro = { path = "../p4-macro" }
+p4rs = { path = "../p4rs" }

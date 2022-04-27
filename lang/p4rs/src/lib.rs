@@ -2,16 +2,6 @@
 use std::fmt;
 use std::error::Error;
 
-/*
-pub struct Bit<'a, const N: usize>(&'a [u8;N]);
-
-impl<'a, const N: usize> Bit<'a, N> {
-    pub fn new(data: &'a [u8;N]) -> Self {
-        Self(data)
-    }
-}
-*/
-
 #[derive(Debug)]
 pub struct TryFromSliceError(usize);
 

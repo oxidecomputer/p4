@@ -21,6 +21,22 @@ struct Context {
 
 pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
 
+
+    let (tokens, diags) = emit_tokens(ast);
+
+    //
+    // format the code and write it out to a Rust source file
+    //
+    //println!("{:#?}", tokens);
+    let f: syn::File = syn::parse2(tokens).unwrap();
+    fs::write("out.rs", prettyplease::unparse(&f))?;
+
+    Ok(diags)
+
+}
+
+pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
+
     //
     // initialize a context to track state while we generate code
     //
@@ -41,14 +57,7 @@ pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
         tokens.extend(s.clone());
     }
 
-    //
-    // format the code and write it out to a Rust source file
-    //
-    //println!("{:#?}", tokens);
-    let f: syn::File = syn::parse2(tokens).unwrap();
-    fs::write("out.rs", prettyplease::unparse(&f))?;
-
-    Ok(ctx.diags)
+    (tokens, ctx.diags)
 
 }
 

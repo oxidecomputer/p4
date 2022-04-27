@@ -154,6 +154,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "p4-macro"
+version = "0.1.0"
+dependencies = [
+ "p4",
+ "p4-rust",
+ "proc-macro2",
+ "syn",
+]
+
+[[package]]
+name = "p4-macro-test"
+version = "0.1.0"
+dependencies = [
+ "p4-macro",
+ "p4rs",
+]
+
+[[package]]
 name = "p4-rust"
 version = "0.1.0"
 dependencies = [

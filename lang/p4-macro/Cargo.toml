@@ -1,0 +1,13 @@
+[package]
+name = "p4-macro"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+proc-macro2 = "1.0"
+syn = "1.0"
+p4 = { path = "../../p4" }
+p4-rust = { path = "../../codegen/rust" }
+
+[lib]
+proc-macro = true

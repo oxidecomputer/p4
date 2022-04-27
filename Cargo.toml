@@ -5,4 +5,6 @@ members = [
     "x4c",
     "codegen/rust",
     "lang/p4rs",
+    "lang/p4-macro",
+    "lang/p4-macro-test",
 ]
