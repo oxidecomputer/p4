@@ -1,10 +1,5 @@
-parser parsadillo(
-    packet_in pkt,
-    out headers_t headers,
-){
-    state start {
-        transition accept;
-    }
+parser parsadillo(packet_in pkt, out headers_t headers){
+    state start { transition accept; }
 }
 
 struct headers_t {

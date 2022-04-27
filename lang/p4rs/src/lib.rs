@@ -29,4 +29,22 @@ impl<'a, const N: usize> Bit<'a, N> {
         }
         Ok(Self(&data[..required_bytes]))
     }
+
+}
+
+impl<'a, const N: usize> fmt::LowerHex for Bit<'a, N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for x in self.0 {
+            fmt::LowerHex::fmt(&x, f)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> Into<u16> for Bit<'a, 16> {
+
+    fn into(self) -> u16 {
+        u16::from_be_bytes([self.0[0], self.0[1]])
+    }
+
 }
