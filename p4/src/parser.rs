@@ -105,8 +105,15 @@ impl<'a> Parser<'a> {
 
     fn parse_lvalue(&mut self) -> Result<Lvalue, Error> {
         let mut name = String::new();
+        let mut first_token = None;
         loop {
-            let (ident, _) = self.parse_identifier()?;
+            let (ident, tk) = self.parse_identifier()?;
+            match first_token {
+                Some(_) => {}
+                None => {
+                    first_token = Some(tk)
+                }
+            }
             name = name + &ident;
             let token = self.next_token()?;
             match token.kind {
@@ -117,7 +124,7 @@ impl<'a> Parser<'a> {
                 }
             } 
         }
-        Ok(Lvalue{ name })
+        Ok(Lvalue{ name, token: first_token.unwrap() })
     }
 
     fn parse_type(&mut self) -> Result<(Type, Token), Error> {

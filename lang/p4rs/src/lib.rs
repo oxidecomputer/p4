@@ -48,3 +48,15 @@ impl<'a> Into<u16> for Bit<'a, 16> {
     }
 
 }
+
+pub struct packet_in<'a>(pub &'a [u8]);
+
+pub trait Header<'a> {
+    fn set(&mut self, data: &'a [u8]) -> Result<(), TryFromSliceError>;
+}
+
+impl<'a> packet_in<'a> {
+    fn extract<H: Header<'a>>(&self, mut h: H) -> Result<(), TryFromSliceError> {
+        h.set(self.0)
+    }
+}

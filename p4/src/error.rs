@@ -16,7 +16,7 @@ pub struct SemanticError {
 
 impl fmt::Display for SemanticError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let loc = format!("[{}:{}]", self.at.line+1, self.at.col+1)
+        let loc = format!("\n[{}:{}]", self.at.line+1, self.at.col+1)
             .as_str()
             .bright_red();
         write!(f, "{} {}\n\n", loc, self.message.bright_white())?;

@@ -45,7 +45,7 @@ control bump_ingress(
     inout EgressMetadata egress_meta,
 ) {
 
-    action bump_action() {
+    action bump_action(bit<8> port) {
         hdr.ipv6.hop_limit = hdr.ipv6.hop_limit - 1;
         egresss_meta.port = port;
     }

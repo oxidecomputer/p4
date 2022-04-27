@@ -5,7 +5,10 @@ use std::io;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-use p4::ast::{AST, Direction, Type, Struct, Header};
+use p4::ast::{
+    AST, Direction, Type, Struct, Header, Parser, State, Transition,
+    Statement, Lvalue, ControlParameter,
+};
 use p4::check::{Diagnostics, Diagnostic, Level};
 
 /// An object for keeping track of state as we generate code.
@@ -13,6 +16,9 @@ use p4::check::{Diagnostics, Diagnostic, Level};
 struct Context {
     /// Rust structs we've generated.
     structs: HashMap<String, TokenStream>,
+
+    /// Rust functions we've generated.
+    functions: HashMap<String, TokenStream>,
 
     /// Diagnositcs collected during code generation
     diags: Diagnostics,
@@ -27,7 +33,6 @@ pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
     //
     // format the code and write it out to a Rust source file
     //
-    //println!("{:#?}", tokens);
     let f: syn::File = syn::parse2(tokens).unwrap();
     fs::write("out.rs", prettyplease::unparse(&f))?;
 
@@ -53,7 +58,14 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
     
     // start with use statements
     let mut tokens = quote!{ use p4rs::*; };
+
+    // structs
     for s in ctx.structs.values() {
+        tokens.extend(s.clone());
+    }
+
+    // functions
+    for s in ctx.functions.values() {
         tokens.extend(s.clone());
     }
 
@@ -63,6 +75,313 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
 
 fn handle_parsers(ast: &AST, ctx: &mut Context) {
 
+    handle_parser_out_parameters(ast, ctx);
+    handle_parser_states(ast, ctx);
+
+}
+
+fn handle_parser_states(ast: &AST, ctx: &mut Context) {
+    for parser in &ast.parsers {
+        for state in &parser.states {
+            generate_parser_state_function(ast, parser, state, ctx);
+        }
+    }
+}
+
+fn generate_parser_state_function(
+    ast: &AST,
+    parser: &Parser,
+    state: &State,
+    ctx: &mut Context,
+) {
+
+
+    let function_name = format_ident!("{}_{}", parser.name, state.name);
+
+    let mut args = Vec::new();
+    for arg in &parser.parameters {
+        let name = format_ident!("{}", arg.name);
+        let typename = rust_type(&arg.ty);
+        args.push(quote! { #name: &#typename });
+    }
+
+    let body = generate_parser_state_function_body(ast, parser, state, ctx);
+
+    let function = quote! {
+        fn #function_name(#(#args),*) -> bool {
+            #body
+        }
+    };
+
+    ctx.functions.insert(function_name.to_string(), function);
+
+}
+
+fn generate_parser_state_function_body(
+    ast: &AST,
+    parser: &Parser,
+    state: &State,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    let mut tokens = generate_parser_state_statements(ast, parser, state, ctx);
+
+    tokens.extend(generate_parser_state_transition(ast, parser, state, ctx));
+
+    tokens
+
+}
+
+fn generate_parser_state_statements(
+    ast: &AST,
+    parser: &Parser,
+    state: &State,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    let tokens = TokenStream::new();
+
+    for stmt in &state.statements {
+        match stmt {
+            Statement::Empty => continue,
+            Statement::Assignment(_lvalue, _expr) => {
+                todo!("parser state assignment statement");
+            }
+            Statement::Call(call) => {
+                match check_parser_state_lvalue(
+                    ast,
+                    parser,
+                    state,
+                    &call.lval,
+                    ctx
+                ) {
+                    Ok(_) => {},
+                    Err(_) => return tokens, //error added to diagnostics
+                }
+            }
+        }
+    }
+
+    tokens
+
+}
+
+enum LvalueKind {
+    VariableRef,
+    FunctionRef,
+    MemberRef,
+    MethodRef,
+}
+
+fn check_parser_state_lvalue(
+    ast: &AST,
+    parser: &Parser,
+    state: &State,
+    lval: &Lvalue,
+    ctx: &mut Context,
+) -> Result<(),()> {
+
+    // an lvalue can be dot separated e.g. foo.bar.baz, start by getting the
+    // root of the lvalue and resolving that.
+    let parts: Vec<&str> = lval.name.split(".").collect();
+    let root = parts[0];
+
+    // first look in parser parameters
+    let ty = match get_parser_arg(parser, root) {
+        Some(param) => &param.ty,
+        None => {
+            // TODO next look in variables for this parser state
+            todo!();
+        }
+    };
+
+    check_lvalue_chain(lval, &parts[1..], ty, ast, ctx)?;
+
+
+    Ok(())
+}
+
+fn check_lvalue_chain(
+    lval: &Lvalue,
+    parts: &[&str],
+    ty: &Type,
+    ast: &AST,
+    ctx: &mut Context,
+) -> Result<(),()> {
+    match ty {
+        Type::Bool => {
+            if parts.len() > 0 { 
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type bool does not have a member {}", parts[0]),
+                    token: lval.token.clone(),
+                });
+                return Err(())
+            }
+        }
+        Type::Error => {
+            if parts.len() > 0 { 
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type error does not have a member {}", parts[1]),
+                    token: lval.token.clone(),
+                });
+                return Err(())
+            }
+        }
+        Type::Bit(size) => {
+            if parts.len() > 0 { 
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type bit<{}> does not have a member {}",
+                        size,
+                        parts[0]),
+                    token: lval.token.clone(),
+                });
+                return Err(())
+            }
+        }
+        Type::Varbit(size) => {
+            if parts.len() > 0 { 
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type varbit<{}> does not have a member {}",
+                        size,
+                        parts[0]),
+                    token: lval.token.clone(),
+                });
+                return Err(())
+            }
+        }
+        Type::Int(size) => {
+            if parts.len() > 0 { 
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type int<{}> does not have a member {}",
+                        size,
+                        parts[0]),
+                    token: lval.token.clone(),
+                });
+                return Err(())
+            }
+        }
+        Type::String => {
+            if parts.len() > 0 { 
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type string does not have a member {}", parts[0]),
+                    token: lval.token.clone(),
+                });
+                return Err(())
+            }
+        }
+        Type::UserDefined(name) => {
+            // get the parent type definition from the AST and check for the
+            // referenced member
+            if let Some(parent) = ast.get_struct(name) {
+                for member in &parent.members {
+                    if member.name == parts[0] {
+                        if parts.len() > 0 {
+                            return check_lvalue_chain(
+                                lval,
+                                &parts[1..],
+                                &member.ty,
+                                ast,
+                                ctx,
+                            );
+                        }
+                    }
+                }
+            }
+            else if let Some(parent) = ast.get_header(name) {
+                for member in &parent.members {
+                    if member.name == parts[0] {
+                        if parts.len() > 0 {
+                            return check_lvalue_chain(
+                                lval,
+                                &parts[1..],
+                                &member.ty,
+                                ast,
+                                ctx,
+                            );
+                        }
+                    }
+                }
+            }
+            else {
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "type {} is not defined", name),
+                    token: lval.token.clone(),
+                });
+            }
+            ctx.diags.push(Diagnostic{
+                level: Level::Error,
+                message: format!(
+                    "type {} does not have a member {}", name, parts[0]),
+                token: lval.token.clone(),
+            });
+            return Err(());
+             
+        }
+    };
+    Ok(())
+}
+
+fn get_parser_arg<'a>(
+    parser: &'a Parser,
+    arg_name: &str,
+) -> Option<&'a ControlParameter> {
+
+    for arg in &parser.parameters {
+        if arg.name == arg_name {
+            return Some(arg)
+        }
+    }
+
+    None
+}
+
+fn generate_parser_state_transition(
+    ast: &AST,
+    parser: &Parser,
+    state: &State,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    match &state.transition {
+        Some(Transition::Reference(next_state)) => {
+            match next_state.as_str() {
+                "accept" => quote! { return true; },
+                "reject" => quote! { return false; },
+                state_ref => {
+                    let state_name = format_ident!(
+                        "{}_{}", parser.name, state_ref);
+
+                    let mut args = Vec::new();
+                    for arg in &parser.parameters {
+                        let name = format_ident!("{}", arg.name);
+                        args.push(quote! { #name } );
+                    }
+                    quote! { return #state_name( #(#args),* ); }
+                }
+            }
+        }
+        Some(Transition::Select(_)) => {
+            todo!();
+        }
+        None => quote! { return false; } // implicit reject?
+    }
+}
+
+fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
     // - iterate through parsers and look at headers
     // - generate a Struct object for each struct
     // - generate a Header object for each header
@@ -109,10 +428,12 @@ fn handle_parsers(ast: &AST, ctx: &mut Context) {
             }
         }
     }
-
 }
 
 fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
+
+    let mut members = Vec::new();
+
     for member in &s.members {
         if let Type::UserDefined(ref typename) = member.ty {
             if let Some(decl) = ast.get_header(typename) {
@@ -121,6 +442,9 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                 if !ctx.structs.contains_key(typename) {
                     generate_header(ast, decl, ctx)
                 }
+                let name = format_ident!("{}", member.name);
+                let ty = format_ident!("{}", typename);
+                members.push(quote!{ #name: #ty::<'a> });
             }
             else {
                 // semantic error undefined header
@@ -143,6 +467,16 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
             });
         }
     }
+
+    let name = format_ident!("{}", s.name);
+
+    let structure = quote! {
+        #[derive(Debug)]
+        pub struct #name<'a> {
+            #(#members),*
+        }
+    };
+    ctx.structs.insert(s.name.clone(), structure);
 }
 
 
@@ -175,6 +509,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     
     // generate member assignments
     let mut member_values = Vec::new();
+    let mut set_statements = Vec::new();
     let mut offset = 0;
     for member in &h.members {
         let name = format_ident!("{}", member.name);
@@ -188,7 +523,10 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         let ty = rust_type(&member.ty);
         member_values.push(quote! {
             #name: #ty::new(&buf[#offset..#end])?
-        } );
+        });
+        set_statements.push(quote! {
+            self.#name = #ty::new(&buf[#offset..#end])?
+        });
         offset += required_bytes;
     }
 
@@ -198,6 +536,12 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
                 Ok(Self {
                     #(#member_values),*
                 })
+            }
+        }
+        impl<'a> Header<'a> for #name<'a> {
+            fn set(&mut self, buf: &'a [u8]) -> Result<(), TryFromSliceError> {
+                #(#set_statements);*;
+                Ok(())
             }
         }
     });
