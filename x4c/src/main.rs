@@ -29,6 +29,7 @@ struct Opts {
 enum Target {
     Rust,
     RedHawk,
+    Docs,
 }
 
 fn main() -> Result<()> {
@@ -64,6 +65,9 @@ fn main() -> Result<()> {
         }
         Target::RedHawk => {
             todo!("RedHawk code generator");
+        }
+        Target::Docs => {
+            todo!("Docs code generator");
         }
     }
 

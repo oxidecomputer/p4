@@ -4,7 +4,7 @@ This repository contains a P4 toolchain. The toolchain includes.
 
 - A Rust library crate for lexing, parsing and checking P4 code.
 - Code generation for Rust.
-  - [ ] Rust. **in progress**
+  - [ ] Rust **_in progress_**.
   - [ ] Docs a la `cargo doc`.
   - [ ] RedHawk/RISC-V
 - A command-line P4 compiler called `x4c`.
@@ -74,7 +74,7 @@ USAGE:
 
 ARGS:
     <FILENAME>    File to compile
-    <TARGET>      What target to generate code for [possible values: rust, red-hawk]
+    <TARGET>      What target to generate code for [possible values: rust, red-hawk, docs]
 
 OPTIONS:
     -h, --help           Print help information
