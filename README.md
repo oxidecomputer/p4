@@ -3,7 +3,7 @@
 This repository contains a P4 toolchain. The toolchain includes.
 
 - A Rust library crate for lexing, parsing and checking P4 code.
-- Code generation for Rust.
+- Code generation for:
   - [ ] Rust **_in progress_**.
   - [ ] Docs a la `cargo doc`.
   - [ ] RedHawk/RISC-V
