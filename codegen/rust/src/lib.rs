@@ -8,7 +8,7 @@ use quote::{format_ident, quote};
 use p4::ast::{
     AST, Direction, Type, Struct, Header, Parser, State, Transition,
     Statement, Lvalue, ControlParameter, Expression, Control, Action,
-    UserDefinedType, ActionParameter,
+    UserDefinedType, ActionParameter, Table, KeySetElement,
 };
 use p4::check::{Diagnostics, Diagnostic, Level};
 
@@ -253,7 +253,7 @@ fn check_lvalue_chain(
     ty: &Type,
     ast: &AST,
     ctx: &mut Context,
-) -> Result<(),()> {
+) -> Result<Type,()> {
     match ty {
         Type::Bool => {
             if parts.len() > 0 { 
@@ -265,6 +265,7 @@ fn check_lvalue_chain(
                 });
                 return Err(())
             }
+            return Ok(ty.clone())
         }
         Type::Error => {
             if parts.len() > 0 { 
@@ -276,6 +277,7 @@ fn check_lvalue_chain(
                 });
                 return Err(())
             }
+            return Ok(ty.clone())
         }
         Type::Bit(size) => {
             if parts.len() > 0 { 
@@ -289,6 +291,7 @@ fn check_lvalue_chain(
                 });
                 return Err(())
             }
+            return Ok(ty.clone())
         }
         Type::Varbit(size) => {
             if parts.len() > 0 { 
@@ -302,6 +305,7 @@ fn check_lvalue_chain(
                 });
                 return Err(())
             }
+            return Ok(ty.clone())
         }
         Type::Int(size) => {
             if parts.len() > 0 { 
@@ -315,6 +319,7 @@ fn check_lvalue_chain(
                 });
                 return Err(())
             }
+            return Ok(ty.clone())
         }
         Type::String => {
             if parts.len() > 0 { 
@@ -326,6 +331,7 @@ fn check_lvalue_chain(
                 });
                 return Err(())
             }
+            return Ok(ty.clone())
         }
         Type::UserDefined(name) => {
             // get the parent type definition from the AST and check for the
@@ -342,7 +348,7 @@ fn check_lvalue_chain(
                                 ctx,
                             );
                         } else {
-                            return Ok(());
+                            return Ok(member.ty.clone())
                         }
                     }
                 }
@@ -359,7 +365,7 @@ fn check_lvalue_chain(
                                 ctx,
                             );
                         } else {
-                            return Ok(());
+                            return Ok(member.ty.clone())
                         }
                     }
                 }
@@ -376,7 +382,7 @@ fn check_lvalue_chain(
                             });
                             return Err(());
                         } else {
-                            return Ok(());
+                            return Ok(ty.clone()) //TODO function/method type?
                         }
                     }
                 }
@@ -400,7 +406,6 @@ fn check_lvalue_chain(
              
         }
     };
-    Ok(())
 }
 
 fn get_parser_arg<'a>(
@@ -644,6 +649,20 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
         for action in &control.actions {
             generate_control_action(ast, control, action, ctx);
         }
+        let mut table_tokens = TokenStream::new();
+        for table in &control.tables {
+            table_tokens.extend(
+                generate_control_table(ast, control, table, ctx));
+        }
+
+        let name = format_ident!("{}_apply", control.name);
+        let params = control_parameters(ast, control, ctx);
+
+        ctx.functions.insert(name.to_string(), quote!{
+            fn #name<'a>(#(#params),*) {
+                #table_tokens
+            }
+        });
     }
 
 }
@@ -677,13 +696,11 @@ fn needs_lifetime(
 
 }
 
-fn generate_control_action(
+fn control_parameters(
     ast: &AST,
     control: &Control,
-    action: &Action,
-    ctx: &mut Context) {
-
-    let name = format_ident!("{}_{}", control.name, action.name);
+    ctx: &mut Context,
+) -> Vec<TokenStream> {
     let mut params = Vec::new();
 
     for arg in &control.parameters {
@@ -714,7 +731,7 @@ fn generate_control_action(
                             message: format!("Undefined type {}", typename),
                             token: arg.ty_token.clone(),
                         });
-                        return;
+                        return params;
                     }
                 }
             }
@@ -725,6 +742,19 @@ fn generate_control_action(
             }
         }
     }
+
+    params
+}
+
+fn generate_control_action(
+    ast: &AST,
+    control: &Control,
+    action: &Action,
+    ctx: &mut Context,
+) {
+
+    let name = format_ident!("{}_{}", control.name, action.name);
+    let mut params = control_parameters(ast, control, ctx);
 
     for arg in &action.parameters {
         // if the type is user defined, check to ensure it's defined
@@ -758,6 +788,82 @@ fn generate_control_action(
             #body
         }
     });
+
+}
+
+fn generate_control_table(
+    ast: &AST,
+    control: &Control,
+    table: &Table,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    let mut key_types: Vec<TokenStream> = Vec::new();
+    for k in table.key.keys() {
+
+        let parts: Vec<&str> = k.name.split(".").collect();
+        let root = parts[0];
+
+        match get_control_arg(control, root) {
+            Some(param) => {
+                if parts.len() > 1 {
+                    match check_lvalue_chain(
+                        &k, &parts[1..], &param.ty, ast, ctx) {
+                        Ok(ty) => {
+                            //TODO key_types.push(rust_type(&ty));
+                            //XXX hack in integer based keys for now since bit
+                            //types are referential only and we cannot construct
+                            //them without some sort of backing memory
+                            key_types.push(quote!{ i128 });
+                        }
+                        Err(_) => {
+                            return quote!{};
+                        }
+                    }
+                }
+            }
+            None => { 
+                todo!();
+            }
+        }
+    }
+
+    let key_type_name = format_ident!("{}_key", table.name);
+    let table_name = format_ident!("{}_table", table.name);
+
+    let mut tokens = quote!{
+        type #key_type_name<'a> = (#(#key_types),*);
+        let mut #table_name: std::collections::HashMap::<#key_type_name,&dyn Fn()>
+            = std::collections::HashMap::new();
+    };
+
+    if table.const_entries.is_empty() {
+        return tokens;
+    }
+
+    for entry in &table.const_entries {
+
+        let mut keyset = Vec::new();
+        for k in &entry.keyset {
+            match k {
+                KeySetElement::Expression(e) => {
+                    match e.as_ref() {
+                        Expression::IntegerLit(v) => keyset.push(quote!{ #v }),
+                        x => todo!("const entry keyset expression {:?}", x),
+                    }
+                }
+                x => todo!("key set element {:?}", x),
+            }
+        }
+
+        tokens.extend(quote!{
+            #table_name.insert((#(#keyset),*), &||{2+2;});
+        });
+        
+    }
+
+    tokens
+
 
 }
 

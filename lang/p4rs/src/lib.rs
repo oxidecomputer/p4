@@ -41,13 +41,27 @@ impl<'a, const N: usize> fmt::LowerHex for Bit<'a, N> {
     }
 }
 
+// TODO more of these for other sizes
 impl<'a> Into<u16> for Bit<'a, 16> {
-
     fn into(self) -> u16 {
         u16::from_be_bytes([self.0[0], self.0[1]])
     }
-
 }
+
+// TODO more of these for other sizes
+impl<'a> std::hash::Hash for Bit<'a, 8> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0[0].hash(state);
+    }
+}
+
+impl<'a> std::cmp::PartialEq for Bit<'a, 8> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0[0] == other.0[0]
+    }
+}
+
+impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 
 #[allow(non_camel_case_types)]
 pub struct packet_in<'a>(pub &'a [u8]);
