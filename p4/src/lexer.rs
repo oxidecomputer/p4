@@ -32,6 +32,7 @@ pub enum Kind {
     Select,
     Apply,
     Package,
+    Extern,
 
     //
     // types
@@ -159,6 +160,7 @@ impl fmt::Display for Kind {
             Kind::Select => write!(f, "keyword select"),
             Kind::Apply => write!(f, "keyword apply"),
             Kind::Package => write!(f, "keyword package"),
+            Kind::Extern => write!(f, "keyword extern"),
 
             //
             // types
@@ -370,6 +372,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("package", Kind::Package) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("extern", Kind::Extern) {
             Some(t) => return Ok(t),
             None => {}
         }

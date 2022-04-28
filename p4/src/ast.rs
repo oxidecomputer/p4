@@ -13,6 +13,7 @@ pub struct AST {
     pub parsers: Vec<Parser>,
     pub packages: Vec<Package>,
     pub package_instance: Option<PackageInstance>,
+    pub externs: Vec<Extern>,
 }
 
 impl Default for AST {
@@ -26,6 +27,7 @@ impl Default for AST {
             parsers: Vec::new(),
             packages: Vec::new(),
             package_instance: None,
+            externs: Vec::new(),
         }
     }
 }
@@ -436,4 +438,19 @@ pub struct Select {
 pub struct SelectElement {
     pub keyset: Vec::<KeySetElement>,
     pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Extern {
+    pub name: String,
+    pub methods: Vec::<ExternMethod>,
+    pub token: Token,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternMethod {
+    pub return_type: Type,
+    pub name: String,
+    pub type_parameters: Vec<String>,
+    pub parameters: Vec<ControlParameter>,
 }

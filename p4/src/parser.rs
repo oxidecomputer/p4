@@ -8,7 +8,8 @@ use crate::ast::{
     ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
     Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
     Struct, StructMember, State, Transition, Select, SelectElement, Call,
-    BinOp, StatementBlock, PackageInstance, Package, PackageParameter,
+    BinOp, StatementBlock, PackageInstance, Package, PackageParameter, Extern,
+    ExternMethod,
 };
 
 pub struct Parser<'a> {
@@ -461,6 +462,57 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
+    pub fn parse_parameters(&mut self) -> Result<Vec<ControlParameter>, Error> {
+
+        let mut result = Vec::new();
+        self.expect_token(lexer::Kind::ParenOpen)?;
+
+        loop {
+
+            let token = self.next_token()?;
+
+            // check if we've reached the end of the parameters
+            if token.kind == lexer::Kind::ParenClose {
+                break;
+            }
+            
+            // if the token was not a closing paren push it into the backlog and
+            // carry on.
+            self.backlog.push(token);
+
+            // parse a parameter
+            let (direction, dtk) = self.parse_direction()?;
+            let (ty, ttk) = self.parse_type()?;
+            let (name, ntk) = self.parse_identifier()?;
+            let token = self.next_token()?;
+            if token.kind == lexer::Kind::ParenClose {
+                result.push(ControlParameter{
+                    direction,
+                    ty,
+                    name,
+                    dir_token: dtk,
+                    ty_token: ttk,
+                    name_token: ntk,
+                });
+                break;
+            }
+            self.backlog.push(token.clone());
+            self.expect_token(lexer::Kind::Comma)?;
+
+            result.push(ControlParameter{
+                direction,
+                ty,
+                name,
+                dir_token: dtk,
+                ty_token: ttk,
+                name_token: ntk,
+            });
+
+        }
+
+        Ok(result)
+    }
+
     pub fn parse_type_parameters(
         &mut self) -> Result<Vec::<String>, Error> {
 
@@ -534,6 +586,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             lexer::Kind::Control => self.handle_control(ast)?,
             lexer::Kind::Parser => self.handle_parser(ast, token)?,
             lexer::Kind::Package => self.handle_package(ast)?,
+            lexer::Kind::Extern => self.handle_extern(ast)?,
             lexer::Kind::Identifier(typ) =>
                 self.handle_package_instance(typ, ast)?,
             _ => {}
@@ -694,6 +747,55 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
     }
 
+    pub fn handle_extern(&mut self, ast: &mut AST)
+    -> Result<(), Error> {
+
+        let (name, token) = self.parser.parse_identifier()?;
+        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
+
+        let mut ext = Extern{
+            name,
+            token,
+            methods: Vec::new(),
+        };
+
+        // parse functions
+        loop {
+            let (return_type, _) = self.parser.parse_type()?;
+            let (name, _) = self.parser.parse_identifier()?;
+
+            let token = self.parser.next_token()?; 
+            let type_parameters = if token.kind == lexer::Kind::AngleOpen {
+                self.parser.backlog.push(token);
+                self.parser.parse_type_parameters()?
+            } else {
+                self.parser.backlog.push(token);
+                Vec::new()
+            };
+            let parameters = self.parser.parse_parameters()?;
+            self.parser.expect_token(lexer::Kind::Semicolon)?;
+
+            ext.methods.push(ExternMethod{
+                return_type,
+                name, 
+                type_parameters,
+                parameters,
+            });
+
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::CurlyClose {
+                break;
+            } else {
+                self.parser.backlog.push(token);
+            }
+        }
+
+        ast.externs.push(ext);
+
+        Ok(())
+
+    }
+
     pub fn parse_package_parameters(&mut self, pkg: &mut Package)
     -> Result<(), Error> {
 
@@ -795,7 +897,7 @@ impl<'a, 'b> ControlParser<'a, 'b> {
             }
         }
 
-        self.parse_parameters(&mut control)?;
+        control.parameters = self.parser.parse_parameters()?;
 
         let token = self.parser.next_token()?;
         match token.kind {
@@ -811,57 +913,6 @@ impl<'a, 'b> ControlParser<'a, 'b> {
 
         Ok(control)
 
-    }
-
-    pub fn parse_parameters(
-        &mut self, control: &mut Control) -> Result<(), Error> {
-
-        self.parser.expect_token(lexer::Kind::ParenOpen)?;
-
-        loop {
-
-            let token = self.parser.next_token()?;
-
-            // check if we've reached the end of the parameters
-            if token.kind == lexer::Kind::ParenClose {
-                break;
-            }
-            
-            // if the token was not a closing paren push it into the backlog and
-            // carry on.
-            self.parser.backlog.push(token);
-
-            // parse a parameter
-            let (direction, dtk) = self.parser.parse_direction()?;
-            let (ty, ttk) = self.parser.parse_type()?;
-            let (name, ntk) = self.parser.parse_identifier()?;
-            let token = self.parser.next_token()?;
-            if token.kind == lexer::Kind::ParenClose {
-                control.parameters.push(ControlParameter{
-                    direction,
-                    ty,
-                    name,
-                    dir_token: dtk,
-                    ty_token: ttk,
-                    name_token: ntk,
-                });
-                break;
-            }
-            self.parser.backlog.push(token.clone());
-            self.parser.expect_token(lexer::Kind::Comma)?;
-
-            control.parameters.push(ControlParameter{
-                direction,
-                ty,
-                name,
-                dir_token: dtk,
-                ty_token: ttk,
-                name_token: ntk,
-            });
-
-        }
-
-        Ok(())
     }
 
     pub fn parse_body(&mut self, control: &mut Control) -> Result<(), Error> {
