@@ -287,7 +287,7 @@ fn check_lvalue_chain(
             if let Some(parent) = ast.get_struct(name) {
                 for member in &parent.members {
                     if member.name == parts[0] {
-                        if parts.len() > 0 {
+                        if parts.len() > 1 {
                             return check_lvalue_chain(
                                 lval,
                                 &parts[1..],
@@ -302,7 +302,7 @@ fn check_lvalue_chain(
             else if let Some(parent) = ast.get_header(name) {
                 for member in &parent.members {
                     if member.name == parts[0] {
-                        if parts.len() > 0 {
+                        if parts.len() > 1 {
                             return check_lvalue_chain(
                                 lval,
                                 &parts[1..],
@@ -311,6 +311,22 @@ fn check_lvalue_chain(
                                 ctx,
                             );
                         }
+                    }
+                }
+            }
+            else if let Some(parent) = ast.get_extern(name) {
+                for method in &parent.methods{
+                    if method.name == parts[0] {
+                        if parts.len() > 1 {
+                            ctx.diags.push(Diagnostic{
+                                level: Level::Error,
+                                message: format!(
+                                    "extern methods do not have members"),
+                                token: lval.token.clone(),
+                            });
+                            return Err(());
+                        }
+                        return Ok(())
                     }
                 }
             }

@@ -44,9 +44,18 @@ impl AST {
     }
 
     pub fn get_header(&self, name: &str) -> Option<&Header> {
-        for s in &self.headers {
-            if s.name == name {
-                return Some(s)
+        for h in &self.headers {
+            if h.name == name {
+                return Some(h)
+            }
+        }
+        None
+    }
+
+    pub fn get_extern(&self, name: &str) -> Option<&Extern> {
+        for e in &self.externs {
+            if e.name == name {
+                return Some(e)
             }
         }
         None
