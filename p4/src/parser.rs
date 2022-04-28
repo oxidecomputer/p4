@@ -1019,17 +1019,27 @@ impl <'a, 'b> ActionParser<'a, 'b> {
             self.parser.backlog.push(token);
 
             // parse a parameter
-            let (ty, _) = self.parser.parse_type()?;
-            let (name, _) = self.parser.parse_identifier()?;
+            let (ty, ty_token) = self.parser.parse_type()?;
+            let (name, name_token) = self.parser.parse_identifier()?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
-                action.parameters.push(ActionParameter{ty, name});
+                action.parameters.push(ActionParameter{
+                    ty,
+                    name,
+                    ty_token,
+                    name_token,
+                });
                 break;
             }
             self.parser.backlog.push(token);
             self.parser.expect_token(lexer::Kind::Comma)?;
 
-            action.parameters.push(ActionParameter{ty, name});
+            action.parameters.push(ActionParameter{
+                ty,
+                name,
+                ty_token,
+                name_token,
+            });
 
         }
 

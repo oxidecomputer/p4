@@ -49,6 +49,7 @@ impl<'a> Into<u16> for Bit<'a, 16> {
 
 }
 
+#[allow(non_camel_case_types)]
 pub struct packet_in<'a>(pub &'a [u8]);
 
 pub trait Header<'a> {
@@ -60,3 +61,6 @@ impl<'a> packet_in<'a> {
         h.set(self.0)
     }
 }
+
+#[allow(non_camel_case_types)]
+pub struct packet_out<'a>(pub &'a [u8]);

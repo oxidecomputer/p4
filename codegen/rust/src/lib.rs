@@ -7,7 +7,8 @@ use quote::{format_ident, quote};
 
 use p4::ast::{
     AST, Direction, Type, Struct, Header, Parser, State, Transition,
-    Statement, Lvalue, ControlParameter, Expression,
+    Statement, Lvalue, ControlParameter, Expression, Control, Action,
+    UserDefinedType, ActionParameter,
 };
 use p4::check::{Diagnostics, Diagnostic, Level};
 
@@ -26,7 +27,6 @@ struct Context {
 
 
 pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
-
 
     let (tokens, diags) = emit_tokens(ast);
 
@@ -50,7 +50,10 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
     //
     // genearate rust code for the P4 AST
     //
+    handle_structs(ast, &mut ctx);
     handle_parsers(ast, &mut ctx);
+    handle_control_blocks(ast, &mut ctx);
+
 
     //
     // collect all the tokens we generated into one stream
@@ -73,8 +76,17 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
 
 }
 
+fn handle_structs(ast: &AST, ctx: &mut Context) {
+
+    for s in &ast.structs {
+        generate_struct(ast, s, ctx);
+    }
+
+}
+
 fn handle_parsers(ast: &AST, ctx: &mut Context) {
 
+    // parsers
     handle_parser_out_parameters(ast, ctx);
     handle_parser_states(ast, ctx);
 
@@ -130,9 +142,7 @@ fn generate_parser_state_function_body(
 ) -> TokenStream {
 
     let mut tokens = generate_parser_state_statements(ast, parser, state, ctx);
-
     tokens.extend(generate_parser_state_transition(ast, parser, state, ctx));
-
     tokens
 
 }
@@ -156,7 +166,6 @@ fn generate_parser_state_statements(
                 match check_parser_state_lvalue(
                     ast,
                     parser,
-                    state,
                     &call.lval,
                     ctx
                 ) {
@@ -212,17 +221,9 @@ fn generate_parser_state_statements(
 
 }
 
-enum LvalueKind {
-    VariableRef,
-    FunctionRef,
-    MemberRef,
-    MethodRef,
-}
-
 fn check_parser_state_lvalue(
     ast: &AST,
     parser: &Parser,
-    state: &State,
     lval: &Lvalue,
     ctx: &mut Context,
 ) -> Result<(),()> {
@@ -340,6 +341,8 @@ fn check_lvalue_chain(
                                 ast,
                                 ctx,
                             );
+                        } else {
+                            return Ok(());
                         }
                     }
                 }
@@ -355,6 +358,8 @@ fn check_lvalue_chain(
                                 ast,
                                 ctx,
                             );
+                        } else {
+                            return Ok(());
                         }
                     }
                 }
@@ -370,8 +375,9 @@ fn check_lvalue_chain(
                                 token: lval.token.clone(),
                             });
                             return Err(());
+                        } else {
+                            return Ok(());
                         }
-                        return Ok(())
                     }
                 }
             }
@@ -382,6 +388,7 @@ fn check_lvalue_chain(
                         "type {} is not defined", name),
                     token: lval.token.clone(),
                 });
+                return Err(());
             }
             ctx.diags.push(Diagnostic{
                 level: Level::Error,
@@ -400,21 +407,43 @@ fn get_parser_arg<'a>(
     parser: &'a Parser,
     arg_name: &str,
 ) -> Option<&'a ControlParameter> {
-
     for arg in &parser.parameters {
         if arg.name == arg_name {
             return Some(arg)
         }
     }
+    None
+}
 
+fn get_control_arg<'a>(
+    control: &'a Control,
+    arg_name: &str,
+) -> Option<&'a ControlParameter> {
+    for arg in &control.parameters {
+        if arg.name == arg_name {
+            return Some(arg)
+        }
+    }
+    None
+}
+
+fn get_action_arg<'a>(
+    action: &'a Action,
+    arg_name: &str,
+) -> Option<&'a ActionParameter> {
+    for arg in &action.parameters {
+        if arg.name == arg_name {
+            return Some(arg)
+        }
+    }
     None
 }
 
 fn generate_parser_state_transition(
-    ast: &AST,
+    _ast: &AST,
     parser: &Parser,
     state: &State,
-    ctx: &mut Context,
+    _ctx: &mut Context,
 ) -> TokenStream {
 
     match &state.transition {
@@ -460,9 +489,7 @@ fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
                 continue;
             }
             if let Type::UserDefined(ref typename) = parameter.ty {
-                if let Some(decl) = ast.get_struct(typename) {
-                    generate_struct(ast, decl, ctx)
-                }
+                if let Some(_decl) = ast.get_struct(typename) { }
                 else {
                     // semantic error undefined type
                     ctx.diags.push(Diagnostic{
@@ -496,36 +523,36 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
     let mut members = Vec::new();
 
     for member in &s.members {
-        if let Type::UserDefined(ref typename) = member.ty {
-            if let Some(decl) = ast.get_header(typename) {
-                // only generate code for types we have not already generated
-                // code for.
-                if !ctx.structs.contains_key(typename) {
-                    generate_header(ast, decl, ctx)
+        let name = format_ident!("{}", member.name);
+        match &member.ty {
+            Type::UserDefined(ref typename) => {
+                if let Some(decl) = ast.get_header(typename) {
+                    // only generate code for types we have not already generated
+                    // code for.
+                    if !ctx.structs.contains_key(typename) {
+                        generate_header(ast, decl, ctx)
+                    }
+                    let ty = format_ident!("{}", typename);
+                    members.push(quote!{ #name: #ty::<'a> });
                 }
-                let name = format_ident!("{}", member.name);
-                let ty = format_ident!("{}", typename);
-                members.push(quote!{ #name: #ty::<'a> });
+                else {
+                    // semantic error undefined header
+                    ctx.diags.push(Diagnostic{
+                        level: Level::Error,
+                        message: format!(
+                            "Undefined header {}",
+                            member.ty,
+                        ),
+                        token: member.token.clone(),
+                    });
+                }
             }
-            else {
-                // semantic error undefined header
-                ctx.diags.push(Diagnostic{
-                    level: Level::Error,
-                    message: format!(
-                        "Undefined header {}",
-                        member.ty,
-                    ),
-                    token: member.token.clone(),
-                });
+            Type::Bit(size) => {
+                members.push(quote!{ #name: Bit::<'a, #size> });
             }
-        }
-        else {
-            //TODO support for primitive types in structs
-            ctx.diags.push(Diagnostic{
-                level: Level::Error,
-                message: "Only headers are supported as struct members".into(),
-                token: member.token.clone(),
-            });
+            x => {
+                todo!("struct member {}", x)
+            }
         }
     }
 
@@ -608,6 +635,220 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     });
 
     ctx.structs.insert(h.name.clone(), generated);
+
+}
+
+fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
+
+    for control in &ast.controls {
+        for action in &control.actions {
+            generate_control_action(ast, control, action, ctx);
+        }
+    }
+
+}
+
+fn needs_lifetime(
+    ast: &AST,
+    udt: UserDefinedType
+) -> bool {
+
+    match udt {
+        UserDefinedType::Struct(s) => {
+            for m in &s.members {
+                match m.ty {
+                    Type::UserDefined(ref typename) => {
+                        let ty = ast.get_user_defined_type(typename).unwrap();
+                        if needs_lifetime(ast, ty) {
+                            return true
+                        }
+                    }
+                    Type::Bit(_) => return true,
+                    Type::Varbit(_) => return true,
+                    Type::Int(_) => return true,
+                    _ => continue,
+                }
+            }
+            false
+        }
+        UserDefinedType::Header(_) => true,
+        UserDefinedType::Extern(_) => false,
+    }
+
+}
+
+fn generate_control_action(
+    ast: &AST,
+    control: &Control,
+    action: &Action,
+    ctx: &mut Context) {
+
+    let name = format_ident!("{}_{}", control.name, action.name);
+    let mut params = Vec::new();
+
+    for arg in &control.parameters {
+        // if the type is user defined, check to ensure it's defined
+        match arg.ty {
+            Type::UserDefined(ref typename) => {
+                match ast.get_user_defined_type(typename) {
+                    Some(udt) => {
+                        let name = format_ident!("{}", arg.name);
+                        let ty = rust_type(&arg.ty);
+                        let lifetime = if needs_lifetime(ast, udt) {
+                            quote! { <'a> }
+                        } else {
+                            quote! { }
+                        };
+                        match &arg.direction {
+                            Direction::Out | Direction::InOut => {
+                                params.push(quote!{ #name: &mut #ty #lifetime });
+                            }
+                            _ => {
+                                params.push(quote!{ #name: &#ty #lifetime });
+                            }
+                        }
+                    }
+                    None => {
+                        ctx.diags.push(Diagnostic{
+                            level: Level::Error,
+                            message: format!("Undefined type {}", typename),
+                            token: arg.ty_token.clone(),
+                        });
+                        return;
+                    }
+                }
+            }
+            _ => {
+                let name = format_ident!("{}", arg.name);
+                let ty = rust_type(&arg.ty);
+                params.push(quote!{ #name: &#ty });
+            }
+        }
+    }
+
+    for arg in &action.parameters {
+        // if the type is user defined, check to ensure it's defined
+        if let Type::UserDefined(ref typename) = arg.ty {
+            match ast.get_user_defined_type(typename) {
+                Some(_) => {
+                    let name = format_ident!("{}", arg.name);
+                    let ty = rust_type(&arg.ty);
+                    params.push(quote!{ #name: #ty });
+                }
+                None => {
+                    ctx.diags.push(Diagnostic{
+                        level: Level::Error,
+                        message: format!("Undefined type {}", typename),
+                        token: arg.ty_token.clone(),
+                    });
+                    return;
+                }
+            }
+        } else {
+            let name = format_ident!("{}", arg.name);
+            let ty = rust_type(&arg.ty);
+            params.push(quote!{ #name: #ty });
+        }
+    }
+
+    let body = generate_control_action_body(ast, control, action, ctx);
+
+    ctx.functions.insert(name.to_string(), quote!{
+        fn #name<'a>(#(#params),*) {
+            #body
+        }
+    });
+
+}
+
+fn generate_control_action_body(
+    ast: &AST,
+    control: &Control,
+    action: &Action,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    let mut ts = TokenStream::new();
+
+    for statement in &action.statement_block.statements {
+        match statement {
+            Statement::Empty => {
+                continue;
+            }
+            Statement::Assignment(lval, expr) => {
+
+                // check the lhs
+                let parts: Vec<&str> = lval.name.split(".").collect();
+                let root = parts[0];
+                match get_control_arg(control, root) {
+                    Some(param) => {
+                        if parts.len() > 1 {
+                            match check_lvalue_chain(
+                                &lval, &parts[1..], &param.ty, ast, ctx) {
+                                Ok(_) => {}
+                                Err(_) => return quote!{},
+                            }
+                        }
+                    }
+                    None => {
+                        match get_action_arg(action, root) {
+                            Some(_param) => { }
+                            None => {
+                                todo!();
+                            }
+                        }
+                    }
+                };
+                let lhs: Vec<TokenStream> = parts.iter()
+                    .map(|x| format_ident!("{}", x))
+                    .map(|x| quote!{ #x })
+                    .collect();
+
+                // check the rhs
+                let rhs = match expr.as_ref() {
+                    Expression::Lvalue(rhs_lval) => {
+                        let parts: Vec<&str> = rhs_lval.name.split(".").collect();
+                        let root = parts[0];
+                        match get_control_arg(control, root) {
+                            Some(param) => {
+                                if parts.len() > 1 {
+                                    match check_lvalue_chain(
+                                        &lval, &parts[1..], &param.ty, ast, ctx) {
+                                        Ok(_) => {}
+                                        Err(_) => return quote!{},
+                                    }
+                                }
+                                &rhs_lval.name
+                            }
+                            None => {
+                                match get_action_arg(action, root) {
+                                    Some(_) => &rhs_lval.name,
+                                    None => {
+                                        todo!();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    x => {
+                        todo!("action assignment rhs {:?}", x);
+                    }
+                };
+                let rhs: Vec<TokenStream> = rhs
+                    .split(".")
+                    .map(|x| format_ident!("{}", x))
+                    .map(|x| quote!{ #x })
+                    .collect();
+
+                ts.extend(quote!{ #(#lhs).* = #(#rhs ).* });
+            }
+            Statement::Call(_) => {
+                todo!("handle control action function/method calls");
+            }
+        }
+    }
+
+    ts
 
 }
 

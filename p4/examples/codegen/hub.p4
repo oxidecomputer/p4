@@ -1,11 +1,25 @@
 #include <softnpu.p4>
 
+// XXX import from core.p4
 extern packet_in {
     void extract<T>(out T headerLvalue);
     void extract<T>(out T variableSizeHeader, in bit<32> varFieldSizeBits);
     T lookahead<T>();
     bit<32> length();  // This method may be unavailable in some architectures
     void advance(bit<32> bits);
+}
+
+// XXX import from core.p4
+extern packet_out {
+    void emit<T>(in T hdr);
+}
+
+// XXX import from softnpu.p4
+struct IngressMetadata {
+    bit<8> port;
+}
+struct EgressMetadata {
+    bit<8> port;
 }
 
 parser parse(
@@ -66,7 +80,7 @@ control egress(
 }
 
 control deparse(
-    packet_in pkt,
+    packet_out pkt,
     out headers_t headers,
 ){
     apply {

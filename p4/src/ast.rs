@@ -32,6 +32,12 @@ impl Default for AST {
     }
 }
 
+pub enum UserDefinedType<'a> {
+    Struct(&'a Struct),
+    Header(&'a Header),
+    Extern(&'a Extern),
+}
+
 impl AST {
 
     pub fn get_struct(&self, name: &str) -> Option<&Struct> {
@@ -57,6 +63,19 @@ impl AST {
             if e.name == name {
                 return Some(e)
             }
+        }
+        None
+    }
+
+    pub fn get_user_defined_type(&self, name: &str) -> Option<UserDefinedType> {
+        if let Some(user_struct) = self.get_struct(name) {
+            return Some(UserDefinedType::Struct(user_struct));
+        }
+        if let Some(user_header) = self.get_header(name) {
+            return Some(UserDefinedType::Header(user_header));
+        }
+        if let Some(platform_extern) = self.get_extern(name) {
+            return Some(UserDefinedType::Extern(platform_extern));
         }
         None
     }
@@ -260,7 +279,6 @@ pub struct ControlParameter {
     pub ty: Type,
     pub name: String,
 
-    /// The first token of this parser, used for error reporting.
     pub dir_token: Token,
     pub ty_token: Token,
     pub name_token: Token,
@@ -303,6 +321,9 @@ impl Action {
 pub struct ActionParameter {
     pub ty: Type,
     pub name: String,
+
+    pub ty_token: Token,
+    pub name_token: Token,
 }
 
 #[derive(Debug, Clone)]
