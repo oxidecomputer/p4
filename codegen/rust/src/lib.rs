@@ -7,7 +7,7 @@ use quote::{format_ident, quote};
 
 use p4::ast::{
     AST, Direction, Type, Struct, Header, Parser, State, Transition,
-    Statement, Lvalue, ControlParameter,
+    Statement, Lvalue, ControlParameter, Expression,
 };
 use p4::check::{Diagnostics, Diagnostic, Level};
 
@@ -102,13 +102,18 @@ fn generate_parser_state_function(
     for arg in &parser.parameters {
         let name = format_ident!("{}", arg.name);
         let typename = rust_type(&arg.ty);
-        args.push(quote! { #name: &#typename });
+        match arg.direction {
+            Direction::Out | Direction::InOut => {
+                args.push(quote! { #name: &mut #typename<'a> });
+            }
+            _ => args.push(quote! { #name: &#typename<'a> }),
+        };
     }
 
     let body = generate_parser_state_function_body(ast, parser, state, ctx);
 
     let function = quote! {
-        fn #function_name(#(#args),*) -> bool {
+        fn #function_name<'a>(#(#args),*) -> bool {
             #body
         }
     };
@@ -155,7 +160,48 @@ fn generate_parser_state_statements(
                     &call.lval,
                     ctx
                 ) {
-                    Ok(_) => {},
+                    Ok(_) => {
+                        let lval: Vec<TokenStream> = call.lval.name
+                            .split(".")
+                            .map(|x| format_ident!("{}", x))
+                            .map(|x| quote!{ #x })
+                            .collect();
+
+                        let mut args = Vec::new();
+                        for a in &call.args {
+                            match a.as_ref() {
+                                Expression::Lvalue(lvarg) => {
+                                    let parts: Vec<&str> =
+                                        lvarg.name.split(".").collect();
+                                    let root = parts[0];
+                                    let mut mut_arg = false;
+                                    for parg in &parser.parameters {
+                                        if parg.name == root {
+                                            match parg.direction {
+                                                Direction::Out | Direction::InOut => {
+                                                    mut_arg = true;
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                    let lvref: Vec<TokenStream> = parts.iter()
+                                        .map(|x| format_ident!("{}", x))
+                                        .map(|x| quote!{ #x })
+                                        .collect();
+                                    if mut_arg {
+                                        args.push(quote! { &mut #(#lvref).* });
+                                    } else {
+                                        args.push(quote! { #(#lvref).* });
+                                    }
+                                }
+                                x => todo!("extern arg {:?}", x)
+                            }
+                        }
+                        return quote! {
+                            #(#lval).* ( #(#args),* );
+                        };
+                    },
                     Err(_) => return tokens, //error added to diagnostics
                 }
             }
@@ -186,7 +232,7 @@ fn check_parser_state_lvalue(
     let parts: Vec<&str> = lval.name.split(".").collect();
     let root = parts[0];
 
-    // first look in parser parameters
+    // first look in parser parameters for the root of the lvalue
     let ty = match get_parser_arg(parser, root) {
         Some(param) => &param.ty,
         None => {
@@ -196,7 +242,6 @@ fn check_parser_state_lvalue(
     };
 
     check_lvalue_chain(lval, &parts[1..], ty, ast, ctx)?;
-
 
     Ok(())
 }

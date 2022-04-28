@@ -56,7 +56,7 @@ pub trait Header<'a> {
 }
 
 impl<'a> packet_in<'a> {
-    fn extract<H: Header<'a>>(&self, mut h: H) -> Result<(), TryFromSliceError> {
+    pub fn extract<H: Header<'a>>(&self, h: &mut H) -> Result<(), TryFromSliceError> {
         h.set(self.0)
     }
 }

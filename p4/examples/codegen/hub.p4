@@ -13,7 +13,7 @@ parser parse(
     out headers_t headers,
 ){
     state start {
-        pkt.extract(headers);
+        pkt.extract(headers.ethernet);
         transition finish;
     }
 
