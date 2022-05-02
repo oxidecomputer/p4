@@ -79,14 +79,14 @@ control egress(
 
 }
 
-control deparse(
-    packet_out pkt,
-    out headers_t headers,
-){
-    apply {
-        pkt.emit(headers.ethernet);
-    }
-}
+//control deparse(
+//    packet_out pkt,
+//    out headers_t headers,
+//){
+//    apply {
+//        pkt.emit(headers.ethernet);
+//    }
+//}
 
 struct headers_t {
     ethernet_t ethernet;

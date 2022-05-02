@@ -118,7 +118,7 @@ fn generate_parser_state_function(
             Direction::Out | Direction::InOut => {
                 args.push(quote! { #name: &mut #typename<'a> });
             }
-            _ => args.push(quote! { #name: &#typename<'a> }),
+            _ => args.push(quote! { #name: &mut #typename<'a> }),
         };
     }
 
@@ -553,7 +553,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                 }
             }
             Type::Bit(size) => {
-                members.push(quote!{ #name: Bit::<'a, #size> });
+                members.push(quote!{ #name: bit_slice::<'a, #size> });
             }
             x => {
                 todo!("struct member {}", x)
@@ -615,26 +615,35 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         let end = offset + required_bytes;
         let ty = rust_type(&member.ty);
         member_values.push(quote! {
-            #name: #ty::new(&buf[#offset..#end])?
+            //#name: #ty::new(&mut buf[#offset..#end])?
+            #name: unsafe {
+                #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
+                    buf.as_mut_ptr().add(#offset), #end))? 
+            }
         });
         set_statements.push(quote! {
-            self.#name = #ty::new(&buf[#offset..#end])?
+            //self.#name = #ty::new(&mut buf[#offset..#end])?
+            self.#name = unsafe {
+                #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
+                    buf.as_mut_ptr().add(#offset), #end))? 
+            }
         });
         offset += required_bytes;
     }
 
     generated.extend(quote! {
-        impl<'a> #name<'a> {
-            pub fn new(buf: &'a [u8]) -> Result<Self, TryFromSliceError> {
+        impl<'a> Header<'a> for #name<'a> {
+            fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
                 Ok(Self {
                     #(#member_values),*
                 })
             }
-        }
-        impl<'a> Header<'a> for #name<'a> {
-            fn set(&mut self, buf: &'a [u8]) -> Result<(), TryFromSliceError> {
+            fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
                 #(#set_statements);*;
                 Ok(())
+            }
+            fn size() -> usize {
+                #offset
             }
         }
     });
@@ -962,7 +971,7 @@ fn rust_type(ty: &Type) -> TokenStream {
     match ty {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
-        Type::Bit(size) => quote! { Bit::<'a, #size> },
+        Type::Bit(size) => quote! { bit_slice::<'a, #size> },
         Type::Int(_size) => todo!("generate int type"),
         Type::Varbit(_size) => todo!("generate varbit type"),
         Type::String => quote! { String },
