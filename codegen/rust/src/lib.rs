@@ -8,7 +8,7 @@ use quote::{format_ident, quote};
 use p4::ast::{
     AST, Direction, Type, Struct, Header, Parser, State, Transition,
     Statement, Lvalue, ControlParameter, Expression, Control, Action,
-    UserDefinedType, ActionParameter, Table, KeySetElement,
+    ActionParameter, Table, KeySetElement,
 };
 use p4::check::{Diagnostics, Diagnostic, Level};
 
@@ -51,6 +51,7 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
     // genearate rust code for the P4 AST
     //
     handle_structs(ast, &mut ctx);
+    handle_headers(ast, &mut ctx);
     handle_parsers(ast, &mut ctx);
     handle_control_blocks(ast, &mut ctx);
 
@@ -74,6 +75,12 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
 
     (tokens, ctx.diags)
 
+}
+
+fn handle_headers(ast: &AST, ctx: &mut Context) {
+    for h in &ast.headers {
+        generate_header(ast, h, ctx);
+    }
 }
 
 fn handle_structs(ast: &AST, ctx: &mut Context) {
@@ -113,12 +120,13 @@ fn generate_parser_state_function(
     let mut args = Vec::new();
     for arg in &parser.parameters {
         let name = format_ident!("{}", arg.name);
-        let typename = rust_type(&arg.ty);
+        let typename = rust_type(&arg.ty, false);
+        let lifetime = type_lifetime(ast, &arg.ty);
         match arg.direction {
             Direction::Out | Direction::InOut => {
-                args.push(quote! { #name: &mut #typename<'a> });
+                args.push(quote! { #name: &mut #typename #lifetime });
             }
-            _ => args.push(quote! { #name: &mut #typename<'a> }),
+            _ => args.push(quote! { #name: &mut #typename #lifetime }),
         };
     }
 
@@ -527,6 +535,8 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
 
     let mut members = Vec::new();
 
+    let mut needs_lifetime = false;
+
     for member in &s.members {
         let name = format_ident!("{}", member.name);
         match &member.ty {
@@ -539,6 +549,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                     }
                     let ty = format_ident!("{}", typename);
                     members.push(quote!{ #name: #ty::<'a> });
+                    needs_lifetime = true;
                 }
                 else {
                     // semantic error undefined header
@@ -553,7 +564,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                 }
             }
             Type::Bit(size) => {
-                members.push(quote!{ #name: bit_slice::<'a, #size> });
+                members.push(quote!{ #name: bit::<#size> });
             }
             x => {
                 todo!("struct member {}", x)
@@ -563,9 +574,15 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
 
     let name = format_ident!("{}", s.name);
 
+    let lifetime = if needs_lifetime {
+        quote!{ <'a> }
+    } else {
+        quote!{}
+    };
+
     let structure = quote! {
         #[derive(Debug)]
-        pub struct #name<'a> {
+        pub struct #name #lifetime {
             #(#members),*
         }
     };
@@ -585,7 +602,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     let mut members = Vec::new();
     for member in &h.members {
         let name = format_ident!("{}", member.name);
-        let ty = rust_type(&member.ty);
+        let ty = rust_type(&member.ty, true);
         members.push(quote! { pub #name: #ty });
     }
 
@@ -613,7 +630,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
             size >> 3
         };
         let end = offset + required_bytes;
-        let ty = rust_type(&member.ty);
+        let ty = rust_type(&member.ty, true);
         member_values.push(quote! {
             //#name: #ty::new(&mut buf[#offset..#end])?
             #name: unsafe {
@@ -655,52 +672,32 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
 fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
 
     for control in &ast.controls {
+        let mut params = control_parameters(ast, control, ctx);
+
         for action in &control.actions {
             generate_control_action(ast, control, action, ctx);
         }
-        let mut table_tokens = TokenStream::new();
         for table in &control.tables {
-            table_tokens.extend(
-                generate_control_table(ast, control, table, ctx));
+            let (type_tokens, table_tokens) =
+                generate_control_table(ast, control, table, ctx);
+            let name = format_ident!("{}_table_{}", control.name, table.name);
+            ctx.functions.insert(name.to_string(), quote!{
+                fn #name<'a>(#(#params),*) -> #type_tokens {
+                    #table_tokens
+                }
+            });
+            let name = format_ident!("table_{}", table.name);
+            params.push(quote!{
+                #name: &#type_tokens
+            });
         }
 
         let name = format_ident!("{}_apply", control.name);
-        let params = control_parameters(ast, control, ctx);
 
         ctx.functions.insert(name.to_string(), quote!{
             fn #name<'a>(#(#params),*) {
-                #table_tokens
             }
         });
-    }
-
-}
-
-fn needs_lifetime(
-    ast: &AST,
-    udt: UserDefinedType
-) -> bool {
-
-    match udt {
-        UserDefinedType::Struct(s) => {
-            for m in &s.members {
-                match m.ty {
-                    Type::UserDefined(ref typename) => {
-                        let ty = ast.get_user_defined_type(typename).unwrap();
-                        if needs_lifetime(ast, ty) {
-                            return true
-                        }
-                    }
-                    Type::Bit(_) => return true,
-                    Type::Varbit(_) => return true,
-                    Type::Int(_) => return true,
-                    _ => continue,
-                }
-            }
-            false
-        }
-        UserDefinedType::Header(_) => true,
-        UserDefinedType::Extern(_) => false,
     }
 
 }
@@ -717,14 +714,10 @@ fn control_parameters(
         match arg.ty {
             Type::UserDefined(ref typename) => {
                 match ast.get_user_defined_type(typename) {
-                    Some(udt) => {
+                    Some(_udt) => {
                         let name = format_ident!("{}", arg.name);
-                        let ty = rust_type(&arg.ty);
-                        let lifetime = if needs_lifetime(ast, udt) {
-                            quote! { <'a> }
-                        } else {
-                            quote! { }
-                        };
+                        let ty = rust_type(&arg.ty, false);
+                        let lifetime = type_lifetime(ast, &arg.ty);
                         match &arg.direction {
                             Direction::Out | Direction::InOut => {
                                 params.push(quote!{ #name: &mut #ty #lifetime });
@@ -746,7 +739,7 @@ fn control_parameters(
             }
             _ => {
                 let name = format_ident!("{}", arg.name);
-                let ty = rust_type(&arg.ty);
+                let ty = rust_type(&arg.ty, false);
                 params.push(quote!{ #name: &#ty });
             }
         }
@@ -762,7 +755,7 @@ fn generate_control_action(
     ctx: &mut Context,
 ) {
 
-    let name = format_ident!("{}_{}", control.name, action.name);
+    let name = format_ident!("{}_action_{}", control.name, action.name);
     let mut params = control_parameters(ast, control, ctx);
 
     for arg in &action.parameters {
@@ -771,7 +764,7 @@ fn generate_control_action(
             match ast.get_user_defined_type(typename) {
                 Some(_) => {
                     let name = format_ident!("{}", arg.name);
-                    let ty = rust_type(&arg.ty);
+                    let ty = rust_type(&arg.ty, false);
                     params.push(quote!{ #name: #ty });
                 }
                 None => {
@@ -785,7 +778,7 @@ fn generate_control_action(
             }
         } else {
             let name = format_ident!("{}", arg.name);
-            let ty = rust_type(&arg.ty);
+            let ty = rust_type(&arg.ty, false);
             params.push(quote!{ #name: #ty });
         }
     }
@@ -805,9 +798,10 @@ fn generate_control_table(
     control: &Control,
     table: &Table,
     ctx: &mut Context,
-) -> TokenStream {
+) -> (TokenStream, TokenStream) {
 
-    let mut key_types: Vec<TokenStream> = Vec::new();
+    let mut key_type_tokens: Vec<TokenStream> = Vec::new();
+    let mut key_types: Vec<Type> = Vec::new();
     for k in table.key.keys() {
 
         let parts: Vec<&str> = k.name.split(".").collect();
@@ -819,14 +813,12 @@ fn generate_control_table(
                     match check_lvalue_chain(
                         &k, &parts[1..], &param.ty, ast, ctx) {
                         Ok(ty) => {
-                            //TODO key_types.push(rust_type(&ty));
-                            //XXX hack in integer based keys for now since bit
-                            //types are referential only and we cannot construct
-                            //them without some sort of backing memory
-                            key_types.push(quote!{ i128 });
+                            key_types.push(ty.clone());
+                            key_type_tokens.push(rust_type(&ty, false));
                         }
                         Err(_) => {
-                            return quote!{};
+                            //TODO diagnostics
+                            return (quote!{}, quote!{})
                         }
                     }
                 }
@@ -837,27 +829,38 @@ fn generate_control_table(
         }
     }
 
-    let key_type_name = format_ident!("{}_key", table.name);
     let table_name = format_ident!("{}_table", table.name);
+    let key_type = quote!{ (#(#key_type_tokens),*) };
+    let table_type = quote!{ std::collections::HashMap::<#key_type, &'static dyn Fn()> };
 
     let mut tokens = quote!{
-        type #key_type_name<'a> = (#(#key_types),*);
-        let mut #table_name: std::collections::HashMap::<#key_type_name,&dyn Fn()>
-            = std::collections::HashMap::new();
+        let mut #table_name: #table_type = std::collections::HashMap::new();
     };
 
     if table.const_entries.is_empty() {
-        return tokens;
+        tokens.extend(quote!{ #table_name });
+        return (table_type, tokens);
     }
 
     for entry in &table.const_entries {
 
         let mut keyset = Vec::new();
-        for k in &entry.keyset {
+        for (i, k) in entry.keyset.iter().enumerate() {
             match k {
                 KeySetElement::Expression(e) => {
                     match e.as_ref() {
-                        Expression::IntegerLit(v) => keyset.push(quote!{ #v }),
+                        Expression::IntegerLit(v) => {
+                            let tytk = &key_type_tokens[i];
+                            match &key_types[i] {
+                                Type::Bit(n) => {
+                                    if *n <= 8 {
+                                        let v = *v as u8;
+                                        keyset.push(quote!{ #tytk::from(#v) });
+                                    }
+                                }
+                                x => todo!("keyset expression type {:?}", x),
+                            }
+                        }
                         x => todo!("const entry keyset expression {:?}", x),
                     }
                 }
@@ -871,8 +874,9 @@ fn generate_control_table(
         
     }
 
-    tokens
+    tokens.extend(quote!{ #table_name });
 
+    (table_type, tokens)
 
 }
 
@@ -967,11 +971,21 @@ fn generate_control_action_body(
 
 }
 
-fn rust_type(ty: &Type) -> TokenStream {
+/// Return the rust type for a given P4 type. To support zero copy pipelines,
+/// a P4 type such as `bit<N>` may be one of two types. If it's in a header,
+/// then it's a reference type like `bit_slice`. If it's not in a header than
+/// it's a value type like `bit`.
+fn rust_type(ty: &Type, header_member: bool) -> TokenStream {
     match ty {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
-        Type::Bit(size) => quote! { bit_slice::<'a, #size> },
+        Type::Bit(size) => {
+            if header_member {
+                quote! { bit_slice::<'a, #size> }
+            } else {
+                quote! { bit::<#size> }
+            }
+        }
         Type::Int(_size) => todo!("generate int type"),
         Type::Varbit(_size) => todo!("generate varbit type"),
         Type::String => quote! { String },
@@ -991,5 +1005,49 @@ fn type_size(ty: &Type) -> usize {
         Type::Varbit(size) => *size,
         Type::String => todo!("generate string size"),
         Type::UserDefined(_name) => todo!("generate user defined type size"),
+    }
+}
+
+fn type_lifetime(ast: &AST, ty: &Type) -> TokenStream {
+    if requires_lifetime(ast, ty) {
+        quote!{<'a>}
+    } else {
+        quote!{}
+    }
+}
+
+fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
+    match ty {
+        Type::Bool | Type::Error | Type::Bit(_) | Type::Int(_) |
+        Type::Varbit(_) | Type::String => {
+            return false;
+        },
+        Type::UserDefined(typename) => {
+            if let Some(_) = ast.get_header(typename) {
+                return true;
+            }
+            if let Some(s) = ast.get_struct(typename) {
+                for m in &s.members {
+                    if requires_lifetime(ast, &m.ty) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            if let Some(_x) = ast.get_extern(typename) {
+                //TODO this should be determined from the packet_in definition?
+                //Externs are strange like this in the sense that they are
+                //platform specific. Since we are in the Rust platform specific
+                //code generation code here, perhaps this hard coding is ok.
+                if typename == "packet_in" {
+                    return true;
+                }
+                if typename == "packet_out" {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        }
     }
 }

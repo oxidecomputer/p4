@@ -42,10 +42,30 @@ where [u8;bytes!(N)]: Sized
 {
     const BYTES: usize = bytes!(N);
     
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self([0u8; bytes!(N)])
     }
 }
+
+impl From<u8> for bit<8> {
+    fn from(x: u8) -> bit<8> {
+        bit::<8>([x])
+    }
+}
+
+impl std::hash::Hash for bit<8> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0[0].hash(state)
+    }
+}
+
+impl<'a> std::cmp::PartialEq for bit<8> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0[0] == other.0[0]
+    }
+}
+
+impl std::cmp::Eq for bit<8> {}
 
 #[cfg(test)]
 mod tests {
