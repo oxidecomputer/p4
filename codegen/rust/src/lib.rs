@@ -672,14 +672,14 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
 fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
 
     for control in &ast.controls {
-        let mut params = control_parameters(ast, control, ctx);
+        let (mut params, param_types) = control_parameters(ast, control, ctx);
 
         for action in &control.actions {
             generate_control_action(ast, control, action, ctx);
         }
         for table in &control.tables {
             let (type_tokens, table_tokens) =
-                generate_control_table(ast, control, table, ctx);
+                generate_control_table(ast, control, table, &param_types, ctx);
             let name = format_ident!("{}_table_{}", control.name, table.name);
             ctx.functions.insert(name.to_string(), quote!{
                 fn #name<'a>(#(#params),*) -> #type_tokens {
@@ -706,8 +706,9 @@ fn control_parameters(
     ast: &AST,
     control: &Control,
     ctx: &mut Context,
-) -> Vec<TokenStream> {
+) -> (Vec<TokenStream>, Vec<TokenStream>) {
     let mut params = Vec::new();
+    let mut types = Vec::new();
 
     for arg in &control.parameters {
         // if the type is user defined, check to ensure it's defined
@@ -721,9 +722,11 @@ fn control_parameters(
                         match &arg.direction {
                             Direction::Out | Direction::InOut => {
                                 params.push(quote!{ #name: &mut #ty #lifetime });
+                                types.push(quote!{ &mut #ty #lifetime });
                             }
                             _ => {
                                 params.push(quote!{ #name: &#ty #lifetime });
+                                types.push(quote!{ &#ty #lifetime });
                             }
                         }
                     }
@@ -733,7 +736,7 @@ fn control_parameters(
                             message: format!("Undefined type {}", typename),
                             token: arg.ty_token.clone(),
                         });
-                        return params;
+                        return (params, types);
                     }
                 }
             }
@@ -745,7 +748,7 @@ fn control_parameters(
         }
     }
 
-    params
+    (params, types)
 }
 
 fn generate_control_action(
@@ -756,7 +759,7 @@ fn generate_control_action(
 ) {
 
     let name = format_ident!("{}_action_{}", control.name, action.name);
-    let mut params = control_parameters(ast, control, ctx);
+    let (mut params, _) = control_parameters(ast, control, ctx);
 
     for arg in &action.parameters {
         // if the type is user defined, check to ensure it's defined
@@ -797,6 +800,7 @@ fn generate_control_table(
     ast: &AST,
     control: &Control,
     table: &Table,
+    control_param_types: &Vec::<TokenStream>,
     ctx: &mut Context,
 ) -> (TokenStream, TokenStream) {
 
@@ -831,7 +835,9 @@ fn generate_control_table(
 
     let table_name = format_ident!("{}_table", table.name);
     let key_type = quote!{ (#(#key_type_tokens),*) };
-    let table_type = quote!{ std::collections::HashMap::<#key_type, &'static dyn Fn()> };
+    let table_type = quote!{
+        std::collections::HashMap::<#key_type, &'static dyn Fn(#(#control_param_types),*)>
+    };
 
     let mut tokens = quote!{
         let mut #table_name: #table_type = std::collections::HashMap::new();
@@ -868,8 +874,56 @@ fn generate_control_table(
             }
         }
 
+        let action = match control.get_action(&entry.action.name) {
+            Some(action) => action,
+            None => {
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "action {} not found", entry.action.name),
+                    token: entry.action.token.clone(),
+                });
+                return (quote!{}, quote!{})
+            }
+        };
+
+        let mut action_fn_args = Vec::new();
+        for arg in &control.parameters {
+            let a = format_ident!("{}", arg.name);
+            action_fn_args.push(quote!{ #a });
+        }
+
+        let action_fn_name = format_ident!("{}_action_{}", control.name, entry.action.name);
+        for (i, expr) in entry.action.parameters.iter().enumerate() {
+            match expr.as_ref() {
+                Expression::IntegerLit(v) => {
+                    let tytk = rust_type(&action.parameters[i].ty, false);
+                    match &action.parameters[i].ty {
+                        Type::Bit(n) => {
+                            if *n <= 8 {
+                                let v = *v as u8;
+                                action_fn_args.push(quote!{ #tytk::from(#v) });
+                            }
+                        }
+                        x => todo!("action praam expression type {:?}", x),
+                    }
+                    //TODO determine type based on action argument type
+                }
+                x => todo!("action parameter type {:?}", x),
+            }
+        }
+
+        let mut closure_params = Vec::new();
+        for x in &control.parameters {
+            let name = format_ident!("{}", x.name);
+            closure_params.push(quote!{ #name });
+        }
+
+
         tokens.extend(quote!{
-            #table_name.insert((#(#keyset),*), &||{2+2;});
+            #table_name.insert((#(#keyset),*), &|#(#closure_params),*|{
+                #action_fn_name(#(#action_fn_args),*);
+            });
         });
         
     }

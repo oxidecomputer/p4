@@ -248,6 +248,15 @@ impl Control {
             apply: StatementBlock::default(),
         }
     }
+
+    pub fn get_action(&self, name: &str) -> Option<&Action> {
+        for a in &self.actions {
+            if a.name == name {
+                return Some(a)
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -369,11 +378,13 @@ pub enum KeySetElement {
 pub struct ActionRef {
     pub name: String,
     pub parameters: Vec::<Box<Expression>>,
+
+    pub token: Token,
 }
 
 impl ActionRef {
-    pub fn new(name: String) -> Self {
-        Self { name, parameters: Vec::new() }
+    pub fn new(name: String, token: Token) -> Self {
+        Self { name, token, parameters: Vec::new() }
     }
 }
 
