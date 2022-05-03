@@ -257,6 +257,15 @@ impl Control {
         }
         None
     }
+
+    pub fn get_table(&self, name: &str) -> Option<&Table> {
+        for t in &self.tables {
+            if t.name == name {
+                return Some(t)
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -324,7 +333,6 @@ impl Action {
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ActionParameter {

@@ -632,14 +632,12 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         let end = offset + required_bytes;
         let ty = rust_type(&member.ty, true);
         member_values.push(quote! {
-            //#name: #ty::new(&mut buf[#offset..#end])?
             #name: unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
                     buf.as_mut_ptr().add(#offset), #end))? 
             }
         });
         set_statements.push(quote! {
-            //self.#name = #ty::new(&mut buf[#offset..#end])?
             self.#name = unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
                     buf.as_mut_ptr().add(#offset), #end))? 
@@ -686,20 +684,103 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
                     #table_tokens
                 }
             });
-            let name = format_ident!("table_{}", table.name);
+            let name = format_ident!("{}", table.name);
             params.push(quote!{
                 #name: &#type_tokens
             });
         }
 
         let name = format_ident!("{}_apply", control.name);
-
+        let apply_body = generate_control_apply_body(ast, control, ctx);
         ctx.functions.insert(name.to_string(), quote!{
             fn #name<'a>(#(#params),*) {
+                #apply_body
             }
         });
     }
 
+}
+fn generate_control_apply_body(
+    ast: &AST,
+    control: &Control,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    let mut tokens = TokenStream::new();
+
+    for stmt in &control.apply.statements {
+        match stmt {
+            Statement::Call(c) => {
+
+                // TODO only supporting tably apply calls for now
+
+                //
+                // get the referenced table
+                //
+                let parts: Vec<&str> = c.lval.name.split(".").collect();
+                if parts.len() != 2 || parts[1] != "apply" {
+                    ctx.diags.push(Diagnostic{
+                        level: Level::Error,
+                        message: format!("Only <tablename>.apply() calls are
+                            supported in apply blocks right now"),
+                        token: c.lval.token.clone(),
+                    });
+                    return tokens;
+                }
+                let table = match control.get_table(parts[0]) {
+                    Some(table) => table,
+                    None => {
+                        ctx.diags.push(Diagnostic{
+                            level: Level::Error,
+                            message: format!("Table {} not found in control {}",
+                                parts[0],
+                                control.name,
+                            ),
+                            token: c.lval.token.clone(),
+                        });
+                        return tokens;
+                    }
+                };
+
+                //
+                // match an action based on the key material
+                //
+                
+                // TODO only supporting direct matches right now and implicitly
+                // assuming all match kinds are direct
+                let table_name: Vec<TokenStream> = table.name.split(".")
+                    .map(|x| format_ident!("{}", x))
+                    .map(|x| quote!{ #x })
+                    .collect();
+
+                let mut action_args = Vec::new();
+                for p in &control.parameters {
+                    let name = format_ident!("{}", p.name);
+                    action_args.push(quote!{ #name });
+                }
+
+                for (lval, _match_kind) in &table.key {
+                    //TODO check lvalue ref here, should already be checked at
+                    //this point?
+                    let lvref: Vec<TokenStream> = lval.name.split(".")
+                        .map(|x| format_ident!("{}", x))
+                        .map(|x| quote!{ #x })
+                        .collect();
+                    tokens.extend(quote!{
+                        match #(#table_name).*.get(&#(#lvref).*) {
+                            Some(action) => action(#(#action_args),*),
+                            None => {},
+                        }
+                    })
+                }
+
+
+            }
+            x => todo!("control apply statement {:?}", x),
+        }
+    }
+
+    tokens
 }
 
 fn control_parameters(
