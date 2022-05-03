@@ -1252,9 +1252,9 @@ impl <'a, 'b> TableParser<'a, 'b> {
 
 
     pub fn parse_actionref(&mut self) -> Result<ActionRef, Error> {
-        let (name, token) = self.parser.parse_identifier()?;
+        let (name, aref_tk) = self.parser.parse_identifier()?;
         let token = self.parser.next_token()?;
-        let mut actionref = ActionRef::new(name, token.clone());
+        let mut actionref = ActionRef::new(name, aref_tk.clone());
         match token.kind {
             lexer::Kind::Semicolon => Ok(actionref),
             lexer::Kind::ParenOpen => {

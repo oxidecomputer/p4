@@ -682,7 +682,7 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
                 generate_control_table(ast, control, table, &param_types, ctx);
             let name = format_ident!("{}_table_{}", control.name, table.name);
             ctx.functions.insert(name.to_string(), quote!{
-                fn #name<'a>(#(#params),*) -> #type_tokens {
+                fn #name<'a>() -> #type_tokens {
                     #table_tokens
                 }
             });
@@ -907,7 +907,6 @@ fn generate_control_table(
                         }
                         x => todo!("action praam expression type {:?}", x),
                     }
-                    //TODO determine type based on action argument type
                 }
                 x => todo!("action parameter type {:?}", x),
             }
