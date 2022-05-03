@@ -133,7 +133,7 @@ fn generate_parser_state_function(
     let body = generate_parser_state_function_body(ast, parser, state, ctx);
 
     let function = quote! {
-        fn #function_name<'a>(#(#args),*) -> bool {
+        pub fn #function_name<'a>(#(#args),*) -> bool {
             #body
         }
     };
@@ -548,7 +548,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                         generate_header(ast, decl, ctx)
                     }
                     let ty = format_ident!("{}", typename);
-                    members.push(quote!{ #name: #ty::<'a> });
+                    members.push(quote!{ pub #name: #ty::<'a> });
                     needs_lifetime = true;
                 }
                 else {
@@ -564,7 +564,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                 }
             }
             Type::Bit(size) => {
-                members.push(quote!{ #name: bit::<#size> });
+                members.push(quote!{ pub #name: bit::<#size> });
             }
             x => {
                 todo!("struct member {}", x)
@@ -680,7 +680,7 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
                 generate_control_table(ast, control, table, &param_types, ctx);
             let name = format_ident!("{}_table_{}", control.name, table.name);
             ctx.functions.insert(name.to_string(), quote!{
-                fn #name<'a>() -> #type_tokens {
+                pub fn #name<'a>() -> #type_tokens {
                     #table_tokens
                 }
             });
@@ -693,7 +693,7 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
         let name = format_ident!("{}_apply", control.name);
         let apply_body = generate_control_apply_body(ast, control, ctx);
         ctx.functions.insert(name.to_string(), quote!{
-            fn #name<'a>(#(#params),*) {
+            pub fn #name<'a>(#(#params),*) {
                 #apply_body
             }
         });
@@ -917,7 +917,7 @@ fn generate_control_table(
     let table_name = format_ident!("{}_table", table.name);
     let key_type = quote!{ (#(#key_type_tokens),*) };
     let table_type = quote!{
-        std::collections::HashMap::<#key_type, &'static dyn Fn(#(#control_param_types),*)>
+        std::collections::HashMap::<#key_type, &'a dyn Fn(#(#control_param_types),*)>
     };
 
     let mut tokens = quote!{
