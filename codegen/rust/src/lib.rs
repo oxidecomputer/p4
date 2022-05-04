@@ -629,18 +629,17 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         } else {
             size >> 3
         };
-        let end = offset + required_bytes;
         let ty = rust_type(&member.ty, true);
         member_values.push(quote! {
             #name: unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.as_mut_ptr().add(#offset), #end))? 
+                    buf.add(#offset), #required_bytes))?
             }
         });
         set_statements.push(quote! {
             self.#name = unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.as_mut_ptr().add(#offset), #end))? 
+                    buf.add(#offset), #required_bytes))?
             }
         });
         offset += required_bytes;
@@ -649,11 +648,13 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     generated.extend(quote! {
         impl<'a> Header<'a> for #name<'a> {
             fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
+                let buf = buf.as_mut_ptr();
                 Ok(Self {
                     #(#member_values),*
                 })
             }
             fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
+                let buf = buf.as_mut_ptr();
                 #(#set_statements);*;
                 Ok(())
             }
