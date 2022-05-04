@@ -629,18 +629,17 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         } else {
             size >> 3
         };
-        let end = offset + required_bytes;
         let ty = rust_type(&member.ty, true);
         member_values.push(quote! {
             #name: unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.as_mut_ptr().add(#offset), #end))? 
+                    buf.as_mut_ptr().add(#offset), #required_bytes))?
             }
         });
         set_statements.push(quote! {
             self.#name = unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.as_mut_ptr().add(#offset), #end))? 
+                    buf.as_mut_ptr().add(#offset), #required_bytes))?
             }
         });
         offset += required_bytes;
