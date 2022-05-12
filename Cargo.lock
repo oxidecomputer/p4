@@ -354,3 +354,4 @@ dependencies = [
 [[package]]
 name = "xfr"
 version = "0.1.0"
+source = "git+https://github.com/oxidecomputer/xfr#c48d590b05ef491a41319b02ccf911c767ba0c63"

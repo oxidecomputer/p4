@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 p4-macro = { path = "../lang/p4-macro" }
 p4rs = { path = "../lang/p4rs" }
-xfr = { path = "/Users/ry/src/xfr" }
+xfr = { git = "https://github.com/oxidecomputer/xfr" }
