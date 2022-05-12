@@ -1,0 +1,9 @@
+[package]
+name = "p4-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p4-macro = { path = "../lang/p4-macro" }
+p4rs = { path = "../lang/p4rs" }
+xfr = { path = "/Users/ry/src/xfr" }

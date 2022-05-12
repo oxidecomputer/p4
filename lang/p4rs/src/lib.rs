@@ -1,3 +1,4 @@
+#![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![allow(non_camel_case_types)]
 
@@ -97,14 +98,14 @@ pub struct packet_in<'a>{
 
 #[derive(Debug)]
 pub struct Ethernet<'a> {
-    pub dst: &'a mut [u8],
-    pub src: &'a mut [u8],
-    pub ethertype: &'a mut [u8],
+    pub dst: Option<&'a mut [u8]>,
+    pub src: Option<&'a mut [u8]>,
+    pub ethertype: Option<&'a mut [u8]>,
 }
 
 /// A fixed length header trait.
 pub trait Header<'a> {
-    fn new(buf: &'a mut[u8]) -> Result<Self, TryFromSliceError> where Self: Sized;
+    fn new() -> Self;
     fn size() -> usize;
     fn set(&mut self, buf: &'a mut[u8]) -> Result<(), TryFromSliceError>;
 }
@@ -116,16 +117,8 @@ pub trait VarHeader<'a> {
 }
 
 impl<'a> Header<'a> for Ethernet<'a> {
-    fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
-        if buf.len() < 14 {
-            return Err(TryFromSliceError(buf.len()));
-        }
-        unsafe { 
-            let dst = &mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6);
-            let src = &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(6), 6);
-            let ethertype = &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(12), 2);
-            Ok(Self{ src, dst, ethertype })
-        }
+    fn new() -> Self {
+            Self{ src: None, dst: None, ethertype: None }
     }
 
     fn size() -> usize {
@@ -137,11 +130,13 @@ impl<'a> Header<'a> for Ethernet<'a> {
             return Err(TryFromSliceError(buf.len()));
         }
         unsafe {
-            self.dst = &mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6);
-            self.src =
-                &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(6), 6);
-            self.ethertype =
-                &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(12), 2);
+            self.dst = Some(&mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6));
+            self.src = Some(
+                &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(6), 6)
+            );
+            self.ethertype = Some(
+                &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(12), 2)
+            );
         }
         Ok(())
     }
@@ -154,6 +149,13 @@ impl <'a> packet_in<'a> {
         Self{ data, index: 0 }
     }
 
+    // TODO: this function signature is a bit unforunate in the sense that the
+    // p4 compiler generates call sites based on a p4 `packet_in` extern
+    // definition. But based on that definition, there is no way for the
+    // compiler to know that this function returns a result that needs to be
+    // interrogated. In fact, the signature for packet_in::extract from the p4
+    // standard library requires the return type to be `void`, so this signature
+    // is in direct contradiction to that.
     pub fn extract<H: Header<'a>>(&mut self, h: &mut H) -> Result<(), TryFromSliceError>{
         // The crux of the situation here is we have a reference to mutable
         // data, and we (packet_in) do not own that mutable data, so the only
@@ -207,6 +209,8 @@ impl <'a> packet_in<'a> {
             self.index + n,
         ) };
         self.index += n;
-        H::new(shared_mut)
+        let mut x = H::new();
+        x.set(shared_mut)?;
+        Ok(x)
     }
 }

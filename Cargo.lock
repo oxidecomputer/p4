@@ -183,6 +183,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "p4-tests"
+version = "0.1.0"
+dependencies = [
+ "p4-macro",
+ "p4rs",
+ "xfr",
+]
+
+[[package]]
 name = "p4rs"
 version = "0.1.0"
 
@@ -341,3 +350,7 @@ dependencies = [
  "p4-rust",
  "regex",
 ]
+
+[[package]]
+name = "xfr"
+version = "0.1.0"

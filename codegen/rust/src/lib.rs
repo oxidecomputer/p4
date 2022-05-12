@@ -603,7 +603,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     for member in &h.members {
         let name = format_ident!("{}", member.name);
         let ty = rust_type(&member.ty, true);
-        members.push(quote! { pub #name: #ty });
+        members.push(quote! { pub #name: Option::<#ty> });
     }
 
     let mut generated = quote! {
@@ -631,27 +631,23 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         };
         let ty = rust_type(&member.ty, true);
         member_values.push(quote! {
-            #name: unsafe {
-                #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.add(#offset), #required_bytes))?
-            }
+            #name: None
         });
         set_statements.push(quote! {
-            self.#name = unsafe {
+            self.#name = Some( unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
                     buf.add(#offset), #required_bytes))?
-            }
+            } )
         });
         offset += required_bytes;
     }
 
     generated.extend(quote! {
         impl<'a> Header<'a> for #name<'a> {
-            fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
-                let buf = buf.as_mut_ptr();
-                Ok(Self {
+            fn new() -> Self {
+                Self {
                     #(#member_values),*
-                })
+                }
             }
             fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
                 let buf = buf.as_mut_ptr();
@@ -702,7 +698,7 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
 
 }
 fn generate_control_apply_body(
-    ast: &AST,
+    _ast: &AST,
     control: &Control,
     ctx: &mut Context,
 ) -> TokenStream {
