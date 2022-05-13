@@ -186,6 +186,7 @@ dependencies = [
 name = "p4-tests"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "p4-macro",
  "p4rs",
  "xfr",
@@ -354,4 +355,4 @@ dependencies = [
 [[package]]
 name = "xfr"
 version = "0.1.0"
-source = "git+https://github.com/oxidecomputer/xfr#c48d590b05ef491a41319b02ccf911c767ba0c63"
+source = "git+https://github.com/oxidecomputer/xfr#3fc6292a691150b8bacc3fd0dbcbcc3bb62497d7"

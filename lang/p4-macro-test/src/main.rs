@@ -7,11 +7,12 @@ fn main() {
         0x86, 0xdd, // ipv6 ethertype
     ];
 
-    let eth = ethernet_t::new(&mut buf).unwrap();
+    let mut eth = ethernet_t::new();
+    eth.set(&mut buf).unwrap();
 
     println!("dst: {:x?}", eth.dst_addr);
     println!("src: {:x?}", eth.src_addr);
-    let ethertype: u16 = eth.ether_type.into();
+    let ethertype: u16 = eth.ether_type.unwrap().into();
     println!("ethertype: {:x?}", ethertype);
 
 }

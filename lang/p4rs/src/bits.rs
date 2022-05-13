@@ -53,6 +53,18 @@ impl From<u8> for bit<8> {
     }
 }
 
+impl Into<u8> for bit<8> {
+    fn into(self) -> u8 {
+        self.0[0]
+    }
+}
+
+impl Into<usize> for bit<8> {
+    fn into(self) -> usize {
+        self.0[0] as usize
+    }
+}
+
 impl std::hash::Hash for bit<8> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0[0].hash(state)
