@@ -2,10 +2,8 @@
 #![feature(generic_const_exprs)]
 #![allow(non_camel_case_types)]
 
-//TODO measure the weight of returning TryFromSlice error versus just dropping
-//and incrementing a counter. Relying on dtrace for more detailed debugging.
-
 use std::fmt;
+use std::ptr::slice_from_raw_parts_mut;
 
 pub use bits::bit_slice;
 pub use bits::bit;
@@ -13,13 +11,16 @@ pub use error::TryFromSliceError;
 
 pub mod error;
 pub mod bits;
-
+pub mod hicuts;
 
 #[derive(Debug)]
 pub struct Bit<'a, const N: usize>(pub &'a [u8]);
 
 impl<'a, const N: usize> Bit<'a, N> {
 
+    //TODO measure the weight of returning TryFromSlice error versus just
+    //dropping and incrementing a counter. Relying on dtrace for more detailed
+    //debugging.
     pub fn new(data: &'a [u8]) -> Result<Self, TryFromSliceError>  {
         let required_bytes = if N & 7 > 0 {
             (N >> 3) + 1
@@ -65,23 +66,6 @@ impl<'a> std::cmp::PartialEq for Bit<'a, 8> {
 
 impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 
-/*
-pub struct packet_in<'a>(pub &'a mut [u8]);
-
-pub trait Header<'a> {
-    fn set(&mut self, data: &'a mut [u8]) -> Result<(), TryFromSliceError>;
-}
-
-impl<'a> packet_in<'a> {
-    pub fn extract<H: Header<'a>>(&mut self, h: &mut H) -> Result<(), TryFromSliceError> {
-        h.set(self.0)
-    }
-}
-*/
-
-// ============================================================================
-
-use std::ptr::slice_from_raw_parts_mut;
 
 /// Every packet that goes through a P4 pipeline is represented as a `packet_in`
 /// instance. `packet_in` objects wrap an underlying mutable data reference that

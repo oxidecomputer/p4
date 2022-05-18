@@ -1,6 +1,11 @@
 use crate::ast::{AST, Parser};
 use crate::lexer::Token;
 
+// TODO Check List
+// This is a running list of things to check
+//
+// - Table keys should be constrained to bit, varbit, int
+
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     /// Level of this diagnostic.
