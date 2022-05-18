@@ -1,16 +1,14 @@
-/// This is a recurisve descent parser for the P4 language.
-
-use crate::lexer::{self, Lexer, Token, Kind};
-use crate::error::{Error, ParserError};
 use crate::ast::{
-    self,
-    AST, Type, Constant, Header, HeaderMember, Typedef, Control, Direction,
-    ControlParameter, Action, Table, ActionParameter, MatchKind, Variable,
-    Statement, Expression, Lvalue, KeySetElement, ActionRef, ConstTableEntry,
-    Struct, StructMember, State, Transition, Select, SelectElement, Call,
-    BinOp, StatementBlock, PackageInstance, Package, PackageParameter, Extern,
-    ExternMethod,
+    self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
+    Constant, Control, ControlParameter, Direction, Expression, Extern,
+    ExternMethod, Header, HeaderMember, KeySetElement, Lvalue, MatchKind,
+    Package, PackageInstance, PackageParameter, Select, SelectElement, State,
+    Statement, StatementBlock, Struct, StructMember, Table, Transition, Type,
+    Typedef, Variable, AST,
 };
+use crate::error::{Error, ParserError};
+/// This is a recurisve descent parser for the P4 language.
+use crate::lexer::{self, Kind, Lexer, Token};
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -19,32 +17,30 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Parser{ lexer, backlog: Vec::new() }
+        Parser {
+            lexer,
+            backlog: Vec::new(),
+        }
     }
 
     pub fn run(&mut self) -> Result<AST, Error> {
-
         let mut gp = GlobalParser::new(self);
         let ast = gp.run()?;
         Ok(ast)
-
     }
 
     pub fn next_token(&mut self) -> Result<Token, Error> {
-
         if self.backlog.is_empty() {
             Ok(self.lexer.next()?)
         } else {
             Ok(self.backlog.pop().unwrap())
         }
-
     }
 
     /// Consume a series of tokens constituting a path. Returns the first
     /// non-path element found.
     #[allow(dead_code)]
     fn parse_path(&mut self) -> Result<(String, Token), Error> {
-
         let mut path = String::new();
         loop {
             let token = self.next_token()?;
@@ -53,55 +49,51 @@ impl<'a> Parser<'a> {
                 lexer::Kind::Dot => path += ".",
                 lexer::Kind::Forwardslash => path += "/",
                 lexer::Kind::Backslash => path += "\\",
-                _ => return Ok((path, token))
+                _ => return Ok((path, token)),
             }
         }
     }
 
-    fn expect_token(
-        &mut self,
-        expected: lexer::Kind,
-    )
-    -> Result<(), Error> {
-
+    fn expect_token(&mut self, expected: lexer::Kind) -> Result<(), Error> {
         let token = self.next_token()?;
         if token.kind != expected {
-            return Err(ParserError{
+            return Err(ParserError {
                 at: token.clone(),
                 message: format!(
                     "Found {} expected '{}'.",
-                    token.kind,
-                    expected,
+                    token.kind, expected,
                 ),
                 source: self.lexer.lines[token.line].into(),
-            }.into())
+            }
+            .into());
         }
         Ok(())
-
     }
 
     fn parse_identifier(&mut self) -> Result<(String, Token), Error> {
-
         let token = self.next_token()?;
-        Ok((match token.kind {
-            Kind::Identifier(ref name) => name.into(),
-            Kind::Apply => {
-                // sometimes apply is not the keyword but a method called
-                // against tables.
-                "apply".into()
-            }
-            _ => {
-                return Err(ParserError{
-                    at: token.clone(),
-                    message: format!(
-                        "Found {} expected identifier.",
-                        token.kind,
-                    ),
-                    source: self.lexer.lines[token.line].into(),
-                }.into())
-            }
-        }, token))
-
+        Ok((
+            match token.kind {
+                Kind::Identifier(ref name) => name.into(),
+                Kind::Apply => {
+                    // sometimes apply is not the keyword but a method called
+                    // against tables.
+                    "apply".into()
+                }
+                _ => {
+                    return Err(ParserError {
+                        at: token.clone(),
+                        message: format!(
+                            "Found {} expected identifier.",
+                            token.kind,
+                        ),
+                        source: self.lexer.lines[token.line].into(),
+                    }
+                    .into())
+                }
+            },
+            token,
+        ))
     }
 
     fn parse_lvalue(&mut self) -> Result<Lvalue, Error> {
@@ -111,9 +103,7 @@ impl<'a> Parser<'a> {
             let (ident, tk) = self.parse_identifier()?;
             match first_token {
                 Some(_) => {}
-                None => {
-                    first_token = Some(tk)
-                }
+                None => first_token = Some(tk),
             }
             name = name + &ident;
             let token = self.next_token()?;
@@ -123,50 +113,59 @@ impl<'a> Parser<'a> {
                     self.backlog.push(token);
                     break;
                 }
-            } 
+            }
         }
-        Ok(Lvalue{ name, token: first_token.unwrap() })
+        Ok(Lvalue {
+            name,
+            token: first_token.unwrap(),
+        })
     }
 
     fn parse_type(&mut self) -> Result<(Type, Token), Error> {
-
         let token = self.next_token()?;
-        Ok((match &token.kind {
-            lexer::Kind::Bool => Type::Bool,
-            lexer::Kind::Error => Type::Error,
-            lexer::Kind::String => Type::String,
-            lexer::Kind::Bit => 
-                Type::Bit(self.parse_optional_width_parameter()?),
+        Ok((
+            match &token.kind {
+                lexer::Kind::Bool => Type::Bool,
+                lexer::Kind::Error => Type::Error,
+                lexer::Kind::String => Type::String,
+                lexer::Kind::Bit => {
+                    Type::Bit(self.parse_optional_width_parameter()?)
+                }
 
-            lexer::Kind::Varbit => 
-                Type::Varbit(self.parse_optional_width_parameter()?),
+                lexer::Kind::Varbit => {
+                    Type::Varbit(self.parse_optional_width_parameter()?)
+                }
 
-            lexer::Kind::Int =>
-                Type::Int(self.parse_optional_width_parameter()?),
+                lexer::Kind::Int => {
+                    Type::Int(self.parse_optional_width_parameter()?)
+                }
 
-            lexer::Kind::Identifier(name) => Type::UserDefined(name.clone()),
+                lexer::Kind::Identifier(name) => {
+                    Type::UserDefined(name.clone())
+                }
 
-            _ => {
-                return Err(ParserError{
-                    at: token.clone(),
-                    message: format!(
-                        "Found {} expected type.",
-                        token.kind,
-                    ),
-                    source: self.lexer.lines[token.line].into(),
-                }.into())
-            }
-        }, token))
-
+                _ => {
+                    return Err(
+                        ParserError {
+                            at: token.clone(),
+                            message: format!(
+                                "Found {} expected type.",
+                                token.kind,
+                            ),
+                            source: self.lexer.lines[token.line].into(),
+                        }
+                        .into(),
+                    )
+                }
+            },
+            token,
+        ))
     }
 
-    fn parse_optional_width_parameter(
-        &mut self
-    ) -> Result<usize, Error> {
-
+    fn parse_optional_width_parameter(&mut self) -> Result<usize, Error> {
         let token = self.next_token()?;
         match &token.kind {
-            lexer::Kind::AngleOpen => { }
+            lexer::Kind::AngleOpen => {}
             _ => {
                 // no argument implies a size of 1 (7.1.6.2)
                 self.backlog.push(token);
@@ -178,7 +177,7 @@ impl<'a> Parser<'a> {
         let width = match &token.kind {
             lexer::Kind::IntLiteral(w) => w,
             _ => {
-                return Err(ParserError{
+                return Err(ParserError {
                     at: token.clone(),
                     message: format!(
                         "Integer literal expected for width parameter, \
@@ -186,19 +185,17 @@ impl<'a> Parser<'a> {
                         token.kind,
                     ),
                     source: self.lexer.lines[token.line].into(),
-                }.into())
+                }
+                .into())
             }
         };
 
         self.expect_token(Kind::AngleClose)?;
 
-
         Ok(*width as usize)
-
     }
 
     pub fn parse_direction(&mut self) -> Result<(Direction, Token), Error> {
-
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::In => Ok((Direction::In, token)),
@@ -209,7 +206,6 @@ impl<'a> Parser<'a> {
                 Ok((Direction::Unspecified, token))
             }
         }
-
     }
 
     pub fn parse_variable(&mut self) -> Result<Variable, Error> {
@@ -224,7 +220,7 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        Ok(Variable{ty, name})
+        Ok(Variable { ty, name })
     }
 
     pub fn parse_constant(&mut self) -> Result<Constant, Error> {
@@ -233,16 +229,19 @@ impl<'a> Parser<'a> {
         self.expect_token(lexer::Kind::Equals)?;
         let initializer = self.parse_expression()?;
         self.expect_token(lexer::Kind::Semicolon)?;
-        Ok(Constant{ty, name, initializer})
+        Ok(Constant {
+            ty,
+            name,
+            initializer,
+        })
     }
 
-    pub fn parse_expression(&mut self) -> Result<Box::<Expression>, Error> {
+    pub fn parse_expression(&mut self) -> Result<Box<Expression>, Error> {
         let mut ep = ExpressionParser::new(self);
         Ok(ep.run()?)
     }
 
-    pub fn parse_keyset(&mut self) -> Result<Vec::<KeySetElement>, Error> {
-
+    pub fn parse_keyset(&mut self) -> Result<Vec<KeySetElement>, Error> {
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::ParenOpen => {
@@ -272,7 +271,7 @@ impl<'a> Parser<'a> {
                         lexer::Kind::Comma => continue,
                         lexer::Kind::ParenClose => return Ok(elements),
                         _ => {
-                            return Err(ParserError{
+                            return Err(ParserError {
                                 at: token.clone(),
                                 message: format!(
                                     "Found {} expected: \
@@ -280,8 +279,9 @@ impl<'a> Parser<'a> {
                                     dont-care match",
                                     token.kind,
                                 ),
-                                source: self.lexer.lines[token.line].into()
-                            }.into())
+                                source: self.lexer.lines[token.line].into(),
+                            }
+                            .into())
                         }
                     }
                 }
@@ -310,47 +310,46 @@ impl<'a> Parser<'a> {
                         lexer::Kind::Comma => continue,
                         lexer::Kind::ParenClose => return Ok(elements),
                         _ => {
-                            return Err(ParserError{
+                            return Err(ParserError {
                                 at: token.clone(),
                                 message: format!(
                                     "Found {} expected: \
                                     comma or close paren after mask",
                                     token.kind,
                                 ),
-                                source: self.lexer.lines[token.line].into()
-                            }.into())
+                                source: self.lexer.lines[token.line].into(),
+                            }
+                            .into())
                         }
                     }
-
                 }
                 //TODO Default case
                 //TODO DontCare case
                 _ => {
-                    return Err(ParserError{
+                    return Err(ParserError {
                         at: token.clone(),
                         message: format!(
                             "Found {} expected: keyset expression",
                             token.kind,
                         ),
-                        source: self.lexer.lines[token.line].into()
-                    }.into())
+                        source: self.lexer.lines[token.line].into(),
+                    }
+                    .into())
                 }
-
             }
         }
     }
 
     // parse a tuple of expressions (<expr>, <expr> ...), used for both tuples
     // and function call sites
-    pub fn parse_expr_parameters(&mut self)
-    -> Result<Vec::<Box::<Expression>>, Error> {
-
+    pub fn parse_expr_parameters(
+        &mut self,
+    ) -> Result<Vec<Box<Expression>>, Error> {
         let mut result = Vec::new();
 
         self.expect_token(lexer::Kind::ParenOpen)?;
 
         loop {
-
             let token = self.next_token()?;
 
             // check if we've reached the end of the parameters
@@ -378,15 +377,12 @@ impl<'a> Parser<'a> {
                     continue;
                 }
             }
-
         }
 
         Ok(result)
-
     }
 
     fn try_parse_binop(&mut self) -> Result<Option<BinOp>, Error> {
-
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
@@ -399,12 +395,9 @@ impl<'a> Parser<'a> {
                 Ok(None)
             }
         }
-
     }
 
-    pub fn parse_statement_block(&mut self)
-    -> Result<StatementBlock, Error> {
-
+    pub fn parse_statement_block(&mut self) -> Result<StatementBlock, Error> {
         let mut result = StatementBlock::default();
 
         self.expect_token(lexer::Kind::CurlyOpen)?;
@@ -417,10 +410,10 @@ impl<'a> Parser<'a> {
                 lexer::Kind::CurlyClose => break,
 
                 // variable declaration / initialization
-                lexer::Kind::Bool 
+                lexer::Kind::Bool
                 | lexer::Kind::Error
                 | lexer::Kind::Bit
-                | lexer::Kind::Int 
+                | lexer::Kind::Int
                 | lexer::Kind::String => {
                     self.backlog.push(token);
                     let var = self.parse_variable()?;
@@ -434,48 +427,42 @@ impl<'a> Parser<'a> {
                 }
 
                 lexer::Kind::Identifier(_) => {
-
                     // push the identifier token into the backlog and run the
                     // statement parser
                     self.backlog.push(token);
                     let mut sp = StatementParser::new(self);
                     let stmt = sp.run()?;
                     result.statements.push(stmt);
-
                 }
 
-                _ => {
-                    return Err(ParserError{
-                        at: token.clone(),
-                        message: format!(
-                            "Found {} expected variable, constant, statement or \
+                _ => return Err(ParserError {
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected variable, constant, statement or \
                             instantiation.",
-                            token.kind,
-                        ),
-                        source: self.lexer.lines[token.line].into(),
-                    }.into())
+                        token.kind,
+                    ),
+                    source: self.lexer.lines[token.line].into(),
                 }
+                .into()),
             }
-
         }
 
         Ok(result)
     }
 
     pub fn parse_parameters(&mut self) -> Result<Vec<ControlParameter>, Error> {
-
         let mut result = Vec::new();
         self.expect_token(lexer::Kind::ParenOpen)?;
 
         loop {
-
             let token = self.next_token()?;
 
             // check if we've reached the end of the parameters
             if token.kind == lexer::Kind::ParenClose {
                 break;
             }
-            
+
             // if the token was not a closing paren push it into the backlog and
             // carry on.
             self.backlog.push(token);
@@ -486,7 +473,7 @@ impl<'a> Parser<'a> {
             let (name, ntk) = self.parse_identifier()?;
             let token = self.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
-                result.push(ControlParameter{
+                result.push(ControlParameter {
                     direction,
                     ty,
                     name,
@@ -499,7 +486,7 @@ impl<'a> Parser<'a> {
             self.backlog.push(token.clone());
             self.expect_token(lexer::Kind::Comma)?;
 
-            result.push(ControlParameter{
+            result.push(ControlParameter {
                 direction,
                 ty,
                 name,
@@ -507,15 +494,12 @@ impl<'a> Parser<'a> {
                 ty_token: ttk,
                 name_token: ntk,
             });
-
         }
 
         Ok(result)
     }
 
-    pub fn parse_type_parameters(
-        &mut self) -> Result<Vec::<String>, Error> {
-
+    pub fn parse_type_parameters(&mut self) -> Result<Vec<String>, Error> {
         let mut result = Vec::new();
 
         self.expect_token(lexer::Kind::AngleOpen)?;
@@ -523,41 +507,40 @@ impl<'a> Parser<'a> {
         loop {
             let (ident, _) = self.parse_identifier()?;
             result.push(ident);
-            
+
             let token = self.next_token()?;
             match token.kind {
                 lexer::Kind::AngleClose => break,
                 lexer::Kind::Comma => continue,
                 _ => {
-                    return Err(ParserError{
+                    return Err(ParserError {
                         at: token.clone(),
                         message: format!(
                             "Found {} expected: type parameter",
                             token.kind,
                         ),
-                        source: self.lexer.lines[token.line].into()
-                    }.into())
+                        source: self.lexer.lines[token.line].into(),
+                    }
+                    .into())
                 }
             }
         }
 
         Ok(result)
-
     }
 }
 
 /// Top level parser for parsing elements are global scope.
 pub struct GlobalParser<'a, 'b> {
-    parser: &'b mut Parser<'a>
+    parser: &'b mut Parser<'a>,
 }
 
 impl<'a, 'b> GlobalParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        Self{ parser }
+        Self { parser }
     }
 
     pub fn run(&'b mut self) -> Result<AST, Error> {
-
         let mut prog = AST::default();
 
         loop {
@@ -568,16 +551,18 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
                     }
                     self.handle_token(token, &mut prog)?;
                 }
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             };
         }
 
         Ok(prog)
-
     }
 
-    pub fn handle_token(&mut self, token: Token, ast: &mut AST)
-    -> Result<(), Error> {
+    pub fn handle_token(
+        &mut self,
+        token: Token,
+        ast: &mut AST,
+    ) -> Result<(), Error> {
         match token.kind {
             lexer::Kind::Const => self.handle_const_decl(ast)?,
             lexer::Kind::Header => self.handle_header_decl(ast)?,
@@ -587,16 +572,15 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             lexer::Kind::Parser => self.handle_parser(ast, token)?,
             lexer::Kind::Package => self.handle_package(ast)?,
             lexer::Kind::Extern => self.handle_extern(ast)?,
-            lexer::Kind::Identifier(typ) =>
-                self.handle_package_instance(typ, ast)?,
+            lexer::Kind::Identifier(typ) => {
+                self.handle_package_instance(typ, ast)?
+            }
             _ => {}
         }
         Ok(())
     }
 
-    pub fn handle_const_decl(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_const_decl(&mut self, ast: &mut AST) -> Result<(), Error> {
         // the first token after const must be a type
         let (ty, _) = self.parser.parse_type()?;
 
@@ -607,14 +591,16 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         self.parser.expect_token(lexer::Kind::Equals)?;
         let initializer = self.parser.parse_expression()?;
 
-        ast.constants.push(Constant{ty, name, initializer});
+        ast.constants.push(Constant {
+            ty,
+            name,
+            initializer,
+        });
 
         Ok(())
     }
 
-    pub fn handle_header_decl(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_header_decl(&mut self, ast: &mut AST) -> Result<(), Error> {
         // the first token of a header must be an identifier
         let (name, _) = self.parser.parse_identifier()?;
 
@@ -641,7 +627,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             let (name, _) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            header.members.push(HeaderMember{ty, name});
+            header.members.push(HeaderMember { ty, name });
         }
 
         ast.headers.push(header);
@@ -649,9 +635,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn handle_struct_decl(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_struct_decl(&mut self, ast: &mut AST) -> Result<(), Error> {
         // the first token of a struct must be an identifier
         let (name, _) = self.parser.parse_identifier()?;
 
@@ -678,7 +662,11 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             let (name, _) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            p4_struct.members.push(StructMember{ty, name, token: tyt});
+            p4_struct.members.push(StructMember {
+                ty,
+                name,
+                token: tyt,
+            });
         }
 
         ast.structs.push(p4_struct);
@@ -686,9 +674,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn handle_typedef(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_typedef(&mut self, ast: &mut AST) -> Result<(), Error> {
         // first token must be a type
         let (ty, _) = self.parser.parse_type()?;
 
@@ -697,33 +683,30 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
         self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-        ast.typedefs.push(Typedef{ty, name});
+        ast.typedefs.push(Typedef { ty, name });
 
         Ok(())
-
     }
 
-    pub fn handle_control(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_control(&mut self, ast: &mut AST) -> Result<(), Error> {
         let mut cp = ControlParser::new(self.parser);
         let control = cp.run()?;
         ast.controls.push(control);
         Ok(())
     }
 
-    pub fn handle_parser(&mut self, ast: &mut AST, start: Token)
-    -> Result<(), Error> {
-
+    pub fn handle_parser(
+        &mut self,
+        ast: &mut AST,
+        start: Token,
+    ) -> Result<(), Error> {
         let mut pp = ParserParser::new(self.parser, start);
         let parser = pp.run()?;
         ast.parsers.push(parser);
         Ok(())
     }
 
-    pub fn handle_package(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_package(&mut self, ast: &mut AST) -> Result<(), Error> {
         let (name, _) = self.parser.parse_identifier()?;
         let mut pkg = Package::new(name);
 
@@ -744,16 +727,13 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         ast.packages.push(pkg);
 
         Ok(())
-
     }
 
-    pub fn handle_extern(&mut self, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_extern(&mut self, ast: &mut AST) -> Result<(), Error> {
         let (name, token) = self.parser.parse_identifier()?;
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
-        let mut ext = Extern{
+        let mut ext = Extern {
             name,
             token,
             methods: Vec::new(),
@@ -764,7 +744,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             let (return_type, _) = self.parser.parse_type()?;
             let (name, _) = self.parser.parse_identifier()?;
 
-            let token = self.parser.next_token()?; 
+            let token = self.parser.next_token()?;
             let type_parameters = if token.kind == lexer::Kind::AngleOpen {
                 self.parser.backlog.push(token);
                 self.parser.parse_type_parameters()?
@@ -775,9 +755,9 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             let parameters = self.parser.parse_parameters()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            ext.methods.push(ExternMethod{
+            ext.methods.push(ExternMethod {
                 return_type,
-                name, 
+                name,
                 type_parameters,
                 parameters,
             });
@@ -793,12 +773,12 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         ast.externs.push(ext);
 
         Ok(())
-
     }
 
-    pub fn parse_package_parameters(&mut self, pkg: &mut Package)
-    -> Result<(), Error> {
-
+    pub fn parse_package_parameters(
+        &mut self,
+        pkg: &mut Package,
+    ) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::ParenOpen)?;
         loop {
             let token = self.parser.next_token()?;
@@ -821,25 +801,27 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
                     pkg.parameters.push(parameter);
                 }
                 _ => {
-                    return Err(ParserError{
+                    return Err(ParserError {
                         at: token.clone(),
                         message: format!(
                             "Found {} expected package parameter.",
                             token.kind,
                         ),
                         source: self.parser.lexer.lines[token.line].into(),
-                    }.into())
+                    }
+                    .into())
                 }
             }
         }
 
         Ok(())
-
     }
 
-    pub fn handle_package_instance(&mut self, typ: String, ast: &mut AST)
-    -> Result<(), Error> {
-
+    pub fn handle_package_instance(
+        &mut self,
+        typ: String,
+        ast: &mut AST,
+    ) -> Result<(), Error> {
         let mut inst = PackageInstance::new(typ);
 
         self.parser.expect_token(lexer::Kind::ParenOpen)?;
@@ -865,9 +847,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
         ast.package_instance = Some(inst);
         Ok(())
-
     }
-
 }
 
 /// Parser for parsing control definitions
@@ -876,13 +856,11 @@ pub struct ControlParser<'a, 'b> {
 }
 
 impl<'a, 'b> ControlParser<'a, 'b> {
-
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        Self{ parser }
+        Self { parser }
     }
 
     pub fn run(&mut self) -> Result<Control, Error> {
-
         let (name, _) = self.parser.parse_identifier()?;
         let mut control = Control::new(name);
 
@@ -890,7 +868,8 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         match token.kind {
             lexer::Kind::AngleOpen => {
                 self.parser.backlog.push(token);
-                control.type_parameters = self.parser.parse_type_parameters()?;
+                control.type_parameters =
+                    self.parser.parse_type_parameters()?;
             }
             _ => {
                 self.parser.backlog.push(token);
@@ -901,9 +880,7 @@ impl<'a, 'b> ControlParser<'a, 'b> {
 
         let token = self.parser.next_token()?;
         match token.kind {
-            lexer::Kind::Semicolon => {
-                return Ok(control)
-            }
+            lexer::Kind::Semicolon => return Ok(control),
             _ => {
                 self.parser.backlog.push(token);
             }
@@ -912,11 +889,9 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         self.parse_body(&mut control)?;
 
         Ok(control)
-
     }
 
     pub fn parse_body(&mut self, control: &mut Control) -> Result<(), Error> {
-
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         // iterate over body statements
@@ -929,37 +904,32 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                 lexer::Kind::Table => self.parse_table(control)?,
                 lexer::Kind::Apply => self.parse_apply(control)?,
                 _ => {
-                    return Err(ParserError{
+                    return Err(ParserError {
                         at: token.clone(),
                         message: format!(
                             "Found {} expected: \
                             action, table or end of control",
                             token.kind,
                         ),
-                        source: self.parser.lexer.lines[token.line].into()
-                    }.into())
+                        source: self.parser.lexer.lines[token.line].into(),
+                    }
+                    .into())
                 }
             }
-
         }
 
         Ok(())
-
     }
 
-    pub fn parse_action(
-        &mut self, control: &mut Control) -> Result<(), Error> {
-
+    pub fn parse_action(&mut self, control: &mut Control) -> Result<(), Error> {
         let mut ap = ActionParser::new(self.parser);
         let action = ap.run()?;
         control.actions.push(action);
 
         Ok(())
-
     }
 
     pub fn parse_table(&mut self, control: &mut Control) -> Result<(), Error> {
-
         let mut tp = TableParser::new(self.parser);
         let table = tp.run()?;
         control.tables.push(table);
@@ -967,28 +937,23 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn parse_apply(
-        &mut self, control: &mut Control) -> Result<(), Error> {
-
+    pub fn parse_apply(&mut self, control: &mut Control) -> Result<(), Error> {
         control.apply = self.parser.parse_statement_block()?;
 
         Ok(())
     }
-
 }
 
 pub struct ActionParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
-impl <'a, 'b> ActionParser<'a, 'b> {
-
+impl<'a, 'b> ActionParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
         Self { parser }
     }
 
     pub fn run(&mut self) -> Result<Action, Error> {
-
         let (name, _) = self.parser.parse_identifier()?;
         let mut action = Action::new(name);
 
@@ -997,23 +962,22 @@ impl <'a, 'b> ActionParser<'a, 'b> {
         action.statement_block = self.parser.parse_statement_block()?;
 
         Ok(action)
-
     }
 
     pub fn parse_parameters(
-        &mut self, action: &mut Action) -> Result<(), Error> {
-
+        &mut self,
+        action: &mut Action,
+    ) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::ParenOpen)?;
 
         loop {
-
             let token = self.parser.next_token()?;
 
             // check if we've reached the end of the parameters
             if token.kind == lexer::Kind::ParenClose {
                 break;
             }
-            
+
             // if the token was not a closing paren push it into the backlog and
             // carry on.
             self.parser.backlog.push(token);
@@ -1023,7 +987,7 @@ impl <'a, 'b> ActionParser<'a, 'b> {
             let (name, name_token) = self.parser.parse_identifier()?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
-                action.parameters.push(ActionParameter{
+                action.parameters.push(ActionParameter {
                     ty,
                     name,
                     ty_token,
@@ -1034,49 +998,44 @@ impl <'a, 'b> ActionParser<'a, 'b> {
             self.parser.backlog.push(token);
             self.parser.expect_token(lexer::Kind::Comma)?;
 
-            action.parameters.push(ActionParameter{
+            action.parameters.push(ActionParameter {
                 ty,
                 name,
                 ty_token,
                 name_token,
             });
-
         }
 
         Ok(())
     }
 
-
-
-    pub fn parse_sized_variable(&mut self, _ty: Type) -> Result<Variable, Error> {
+    pub fn parse_sized_variable(
+        &mut self,
+        _ty: Type,
+    ) -> Result<Variable, Error> {
         todo!();
     }
-
 }
 
 pub struct TableParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
-impl <'a, 'b> TableParser<'a, 'b> {
-
+impl<'a, 'b> TableParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
         Self { parser }
     }
 
     pub fn run(&mut self) -> Result<Table, Error> {
-
         let (name, _) = self.parser.parse_identifier()?;
         let mut table = Table::new(name);
 
         self.parse_body(&mut table)?;
-        
-        Ok(table)
 
+        Ok(table)
     }
 
     pub fn parse_body(&mut self, table: &mut Table) -> Result<(), Error> {
-
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         loop {
@@ -1085,21 +1044,25 @@ impl <'a, 'b> TableParser<'a, 'b> {
                 lexer::Kind::CurlyClose => break,
                 lexer::Kind::Key => self.parse_key(table)?,
                 lexer::Kind::Actions => self.parse_actions(table)?,
-                lexer::Kind::DefaultAction => self.parse_default_action(table)?,
+                lexer::Kind::DefaultAction => {
+                    self.parse_default_action(table)?
+                }
                 lexer::Kind::Size => {
                     self.parser.expect_token(lexer::Kind::Equals)?;
                     let token = self.parser.next_token()?;
                     let size = match token.kind {
                         lexer::Kind::IntLiteral(x) => x,
                         _ => {
-                            return Err(ParserError{
+                            return Err(ParserError {
                                 at: token.clone(),
                                 message: format!(
                                     "Found {} expected constant integer",
                                     token.kind,
                                 ),
-                                source: self.parser.lexer.lines[token.line].into()
-                            }.into())
+                                source: self.parser.lexer.lines[token.line]
+                                    .into(),
+                            }
+                            .into())
                         }
                     };
                     self.parser.expect_token(lexer::Kind::Semicolon)?;
@@ -1111,37 +1074,36 @@ impl <'a, 'b> TableParser<'a, 'b> {
                         lexer::Kind::Entries => self.parse_entries(table)?,
                         //TODO need handle regular constants?
                         _ => {
-                            return Err(ParserError{
+                            return Err(ParserError {
                                 at: token.clone(),
                                 message: format!(
                                     "Found {} expected: entries",
                                     token.kind,
                                 ),
-                                source: self.parser.lexer.lines[token.line].into()
-                            }.into())
+                                source: self.parser.lexer.lines[token.line]
+                                    .into(),
+                            }
+                            .into())
                         }
                     }
                 }
-                _ => {
-                    return Err(ParserError{
-                        at: token.clone(),
-                        message: format!(
-                            "Found {} expected: key, actions, entries or end of \
+                _ => return Err(ParserError {
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected: key, actions, entries or end of \
                             table",
-                            token.kind,
-                        ),
-                        source: self.parser.lexer.lines[token.line].into()
-                    }.into())
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into(),
                 }
+                .into()),
             }
         }
 
         Ok(())
-
     }
 
     pub fn parse_key(&mut self, table: &mut Table) -> Result<(), Error> {
-
         self.parser.expect_token(lexer::Kind::Equals)?;
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
@@ -1160,35 +1122,30 @@ impl <'a, 'b> TableParser<'a, 'b> {
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
             table.key.insert(key, match_kind);
-
         }
 
         Ok(())
-
     }
 
     pub fn parse_match_kind(&mut self) -> Result<MatchKind, Error> {
-
         let token = self.parser.next_token()?;
         match token.kind {
             lexer::Kind::Exact => Ok(MatchKind::Exact),
             lexer::Kind::Ternary => Ok(MatchKind::Ternary),
             lexer::Kind::Lpm => Ok(MatchKind::LongestPrefixMatch),
-            _ => {
-                Err(ParserError{
-                    at: token.clone(),
-                    message: format!(
-                        "Found {} expected match kind: exact, ternary or lpm",
-                        token.kind,
-                    ),
-                    source: self.parser.lexer.lines[token.line].into(),
-                }.into())
+            _ => Err(ParserError {
+                at: token.clone(),
+                message: format!(
+                    "Found {} expected match kind: exact, ternary or lpm",
+                    token.kind,
+                ),
+                source: self.parser.lexer.lines[token.line].into(),
             }
+            .into()),
         }
     }
 
     pub fn parse_actions(&mut self, table: &mut Table) -> Result<(), Error> {
-
         self.parser.expect_token(lexer::Kind::Equals)?;
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
@@ -1205,16 +1162,15 @@ impl <'a, 'b> TableParser<'a, 'b> {
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
             table.actions.push(action_name);
-
         }
 
         Ok(())
-
     }
 
     pub fn parse_default_action(
-        &mut self, table: &mut Table) -> Result<(), Error> {
-
+        &mut self,
+        table: &mut Table,
+    ) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::Equals)?;
         (table.default_action, _) = self.parser.parse_identifier()?;
         self.parser.expect_token(lexer::Kind::Semicolon)?;
@@ -1222,7 +1178,6 @@ impl <'a, 'b> TableParser<'a, 'b> {
     }
 
     pub fn parse_entries(&mut self, table: &mut Table) -> Result<(), Error> {
-
         self.parser.expect_token(lexer::Kind::Equals)?;
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
@@ -1239,7 +1194,6 @@ impl <'a, 'b> TableParser<'a, 'b> {
         }
 
         Ok(())
-
     }
 
     pub fn parse_entry(&mut self) -> Result<ConstTableEntry, Error> {
@@ -1247,9 +1201,8 @@ impl <'a, 'b> TableParser<'a, 'b> {
         self.parser.expect_token(lexer::Kind::Colon)?;
         let action = self.parse_actionref()?;
         self.parser.expect_token(lexer::Kind::Semicolon)?;
-        Ok(ConstTableEntry{ keyset, action })
+        Ok(ConstTableEntry { keyset, action })
     }
-
 
     pub fn parse_actionref(&mut self) -> Result<ActionRef, Error> {
         let (name, aref_tk) = self.parser.parse_identifier()?;
@@ -1274,47 +1227,44 @@ impl <'a, 'b> TableParser<'a, 'b> {
                             return Ok(actionref);
                         }
                         _ => {
-                            return Err(ParserError{
+                            return Err(ParserError {
                                 at: token.clone(),
                                 message: format!(
                                     "Found {} expected: action parameter",
                                     token.kind,
                                 ),
-                                source: self.parser.lexer.lines[token.line].into()
-                            }.into())
+                                source: self.parser.lexer.lines[token.line]
+                                    .into(),
+                            }
+                            .into())
                         }
                     }
                 }
             }
-            _ => {
-                Err(ParserError{
-                    at: token.clone(),
-                    message: format!(
-                        "Found {} expected: reference to action, or \
+            _ => Err(ParserError {
+                at: token.clone(),
+                message: format!(
+                    "Found {} expected: reference to action, or \
                         parameterized reference to action",
-                        token.kind,
-                    ),
-                    source: self.parser.lexer.lines[token.line].into()
-                }.into())
+                    token.kind,
+                ),
+                source: self.parser.lexer.lines[token.line].into(),
             }
-
+            .into()),
         }
     }
-
 }
 
 pub struct StatementParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
-impl <'a, 'b> StatementParser<'a, 'b> {
-
+impl<'a, 'b> StatementParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
         Self { parser }
     }
 
     pub fn run(&mut self) -> Result<Statement, Error> {
-
         // wrap the identifier as an lvalue, consuming any dot
         // concatenated references
         let lval = self.parser.parse_lvalue()?;
@@ -1327,22 +1277,27 @@ impl <'a, 'b> StatementParser<'a, 'b> {
                 self.parse_call(lval)?
             }
             lexer::Kind::AngleOpen => self.parse_parameterized_call(lval)?,
-            _ => return Err(ParserError{
-                at: token.clone(),
-                message: format!(
-                    "Found {} expected assignment or function/method call.",
-                    token.kind,
-                ),
-                source: self.parser.lexer.lines[token.line].into(),
-            }.into())
+            _ => {
+                return Err(ParserError {
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected assignment or function/method call.",
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into(),
+                }
+                .into())
+            }
         };
 
         self.parser.expect_token(lexer::Kind::Semicolon)?;
         Ok(statement)
-
     }
 
-    pub fn parse_assignment(&mut self, lval: Lvalue) -> Result<Statement, Error> {
+    pub fn parse_assignment(
+        &mut self,
+        lval: Lvalue,
+    ) -> Result<Statement, Error> {
         let mut ep = ExpressionParser::new(self.parser);
         let expression = ep.run()?;
         Ok(Statement::Assignment(lval, expression))
@@ -1350,34 +1305,30 @@ impl <'a, 'b> StatementParser<'a, 'b> {
 
     pub fn parse_call(&mut self, lval: Lvalue) -> Result<Statement, Error> {
         let args = self.parser.parse_expr_parameters()?;
-        Ok(Statement::Call(Call{lval, args}))
+        Ok(Statement::Call(Call { lval, args }))
     }
 
     pub fn parse_parameterized_call(
-        &mut self, _lval: Lvalue) -> Result<Statement, Error> {
+        &mut self,
+        _lval: Lvalue,
+    ) -> Result<Statement, Error> {
         todo!();
     }
-
 }
 
 pub struct ExpressionParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
-impl <'a, 'b> ExpressionParser<'a, 'b> {
-
+impl<'a, 'b> ExpressionParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
         Self { parser }
     }
 
-    pub fn run(&mut self) -> Result<Box::<Expression>, Error> {
-
-
+    pub fn run(&mut self) -> Result<Box<Expression>, Error> {
         let token = self.parser.next_token()?;
         let lhs = match token.kind {
-            lexer::Kind::IntLiteral(value) => {
-                Expression::IntegerLit(value)
-            }
+            lexer::Kind::IntLiteral(value) => Expression::IntegerLit(value),
             lexer::Kind::BitLiteral(width, value) => {
                 Expression::BitLit(width, value)
             }
@@ -1389,18 +1340,21 @@ impl <'a, 'b> ExpressionParser<'a, 'b> {
                 let lval = self.parser.parse_lvalue()?;
                 Expression::Lvalue(lval)
             }
-            _ => return Err(ParserError{
-                at: token.clone(),
-                message: format!(
-                    "Found {} expected expression.",
-                    token.kind,
-                ),
-                source: self.parser.lexer.lines[token.line].into(),
-            }.into())
+            _ => {
+                return Err(ParserError {
+                    at: token.clone(),
+                    message: format!(
+                        "Found {} expected expression.",
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into(),
+                }
+                .into())
+            }
         };
 
         // check for binary operator
-         match self.parser.try_parse_binop()? {
+        match self.parser.try_parse_binop()? {
             Some(op) => {
                 // recurse to rhs
                 let mut ep = ExpressionParser::new(self.parser);
@@ -1409,8 +1363,6 @@ impl <'a, 'b> ExpressionParser<'a, 'b> {
             }
             None => Ok(Box::new(lhs)),
         }
-
-
     }
 }
 
@@ -1421,13 +1373,11 @@ pub struct ParserParser<'a, 'b> {
 }
 
 impl<'a, 'b> ParserParser<'a, 'b> {
-
     pub fn new(parser: &'b mut Parser<'a>, start: Token) -> Self {
-        Self{ parser, start }
+        Self { parser, start }
     }
 
     pub fn run(&mut self) -> Result<ast::Parser, Error> {
-
         let (name, _) = self.parser.parse_identifier()?;
         let mut parser = ast::Parser::new(name, self.start.clone());
 
@@ -1442,14 +1392,11 @@ impl<'a, 'b> ParserParser<'a, 'b> {
             }
         }
 
-
         self.parse_parameters(&mut parser)?;
 
         let token = self.parser.next_token()?;
         match token.kind {
-            lexer::Kind::Semicolon => {
-                return Ok(parser)
-            }
+            lexer::Kind::Semicolon => return Ok(parser),
             _ => {
                 self.parser.backlog.push(token);
             }
@@ -1458,24 +1405,22 @@ impl<'a, 'b> ParserParser<'a, 'b> {
         self.parse_body(&mut parser)?;
 
         Ok(parser)
-
     }
 
-
     pub fn parse_parameters(
-        &mut self, parser: &mut ast::Parser) -> Result<(), Error> {
-
+        &mut self,
+        parser: &mut ast::Parser,
+    ) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::ParenOpen)?;
 
         loop {
-
             let token = self.parser.next_token()?;
 
             // check if we've reached the end of the parameters
             if token.kind == lexer::Kind::ParenClose {
                 break;
             }
-            
+
             // if the token was not a closing paren push it into the backlog and
             // carry on.
             self.parser.backlog.push(token);
@@ -1486,7 +1431,7 @@ impl<'a, 'b> ParserParser<'a, 'b> {
             let (name, ntk) = self.parser.parse_identifier()?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
-                parser.parameters.push(ControlParameter{
+                parser.parameters.push(ControlParameter {
                     direction,
                     ty,
                     name,
@@ -1499,7 +1444,7 @@ impl<'a, 'b> ParserParser<'a, 'b> {
             self.parser.backlog.push(token.clone());
             self.parser.expect_token(lexer::Kind::Comma)?;
 
-            parser.parameters.push(ControlParameter{
+            parser.parameters.push(ControlParameter {
                 direction,
                 ty,
                 name,
@@ -1507,14 +1452,15 @@ impl<'a, 'b> ParserParser<'a, 'b> {
                 ty_token: ttk,
                 name_token: ntk,
             });
-
         }
 
         Ok(())
     }
 
-    pub fn parse_body(&mut self, parser: &mut ast::Parser) -> Result<(), Error> {
-
+    pub fn parse_body(
+        &mut self,
+        parser: &mut ast::Parser,
+    ) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         // iterate over body statements
@@ -1525,59 +1471,53 @@ impl<'a, 'b> ParserParser<'a, 'b> {
                 lexer::Kind::CurlyClose => break,
                 lexer::Kind::State => self.parse_state(parser)?,
                 _ => {
-                    return Err(ParserError{
+                    return Err(ParserError {
                         at: token.clone(),
                         message: format!(
                             "Found {} expected: state or nd of parser",
                             token.kind,
                         ),
-                        source: self.parser.lexer.lines[token.line].into()
-                    }.into())
+                        source: self.parser.lexer.lines[token.line].into(),
+                    }
+                    .into())
                 }
             }
-
         }
 
         Ok(())
-
     }
 
     pub fn parse_state(
-        &mut self, parser: &mut ast::Parser) -> Result<(), Error> {
-
+        &mut self,
+        parser: &mut ast::Parser,
+    ) -> Result<(), Error> {
         let mut sp = StateParser::new(self.parser);
         let state = sp.run()?;
         parser.states.push(state);
 
         Ok(())
     }
-
 }
-
 
 pub struct StateParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
-impl <'a, 'b> StateParser<'a, 'b> {
-
+impl<'a, 'b> StateParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
         Self { parser }
     }
 
     pub fn run(&mut self) -> Result<State, Error> {
-
         let (name, _) = self.parser.parse_identifier()?;
         let mut state = State::new(name);
 
         self.parse_body(&mut state)?;
 
         Ok(state)
-
     }
 
     pub fn parse_body(&mut self, state: &mut State) -> Result<(), Error> {
-
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         loop {
@@ -1588,10 +1528,10 @@ impl <'a, 'b> StateParser<'a, 'b> {
                 lexer::Kind::CurlyClose => break,
 
                 // variable declaration / initialization
-                lexer::Kind::Bool 
+                lexer::Kind::Bool
                 | lexer::Kind::Error
                 | lexer::Kind::Bit
-                | lexer::Kind::Int 
+                | lexer::Kind::Int
                 | lexer::Kind::String => {
                     self.parser.backlog.push(token);
                     let var = self.parser.parse_variable()?;
@@ -1605,41 +1545,35 @@ impl <'a, 'b> StateParser<'a, 'b> {
                 }
 
                 lexer::Kind::Identifier(_) => {
-
                     // push the identifier token into the backlog and run the
                     // statement parser
                     self.parser.backlog.push(token);
                     let mut sp = StatementParser::new(self.parser);
                     let stmt = sp.run()?;
                     state.statements.push(stmt);
-
                 }
 
                 lexer::Kind::Transition => {
                     self.parse_transition(state)?;
                 }
 
-                _ => {
-                    return Err(ParserError{
-                        at: token.clone(),
-                        message: format!(
-                            "Found {}: expected variable, constant, statement or \
+                _ => return Err(ParserError {
+                    at: token.clone(),
+                    message: format!(
+                        "Found {}: expected variable, constant, statement or \
                             instantiation.",
-                            token.kind,
-                        ),
-                        source: self.parser.lexer.lines[token.line].into(),
-                    }.into())
+                        token.kind,
+                    ),
+                    source: self.parser.lexer.lines[token.line].into(),
                 }
+                .into()),
             }
-
         }
 
         Ok(())
-
     }
 
     pub fn parse_transition(&mut self, state: &mut State) -> Result<(), Error> {
-
         let token = self.parser.next_token()?;
 
         match token.kind {
@@ -1653,51 +1587,43 @@ impl <'a, 'b> StateParser<'a, 'b> {
                 self.parser.expect_token(lexer::Kind::Semicolon)?;
             }
             _ => {
-                return Err(ParserError{
+                return Err(ParserError {
                     at: token.clone(),
                     message: format!(
                         "Found {}: expected select or identifier",
                         token.kind,
                     ),
                     source: self.parser.lexer.lines[token.line].into(),
-                }.into())
+                }
+                .into())
             }
         }
 
         Ok(())
-
     }
-
 }
 
 pub struct SelectParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
 
-impl <'a, 'b> SelectParser<'a, 'b> {
-
+impl<'a, 'b> SelectParser<'a, 'b> {
     pub fn new(parser: &'b mut Parser<'a>) -> Self {
         Self { parser }
     }
 
     pub fn run(&mut self) -> Result<Select, Error> {
-
         let mut select = Select::default();
         select.parameters = self.parser.parse_expr_parameters()?;
         self.parse_body(&mut select)?;
 
         Ok(select)
-
     }
 
-
-    pub fn parse_body(
-        &mut self, select: &mut Select) -> Result<(), Error> {
-
+    pub fn parse_body(&mut self, select: &mut Select) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         loop {
-
             let token = self.parser.next_token()?;
 
             // check if we've reached the end of the parameters
@@ -1710,11 +1636,9 @@ impl <'a, 'b> SelectParser<'a, 'b> {
             self.parser.expect_token(lexer::Kind::Colon)?;
             let (name, _) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
-            select.elements.push(SelectElement{keyset, name});
-
+            select.elements.push(SelectElement { keyset, name });
         }
 
         Ok(())
     }
-
 }

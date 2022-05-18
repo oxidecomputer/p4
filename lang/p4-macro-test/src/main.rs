@@ -14,5 +14,4 @@ fn main() {
     println!("src: {:x?}", eth.src_addr);
     let ethertype: u16 = eth.ether_type.unwrap().into();
     println!("ethertype: {:x?}", ethertype);
-
 }

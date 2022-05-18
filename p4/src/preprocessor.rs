@@ -14,28 +14,27 @@ pub struct PreprocessorResult {
 
 impl Default for PreprocessorResult {
     fn default() -> Self {
-        Self{
+        Self {
             elements: PreprocessorElements::default(),
             lines: Vec::new(),
         }
     }
 }
 
-
 #[derive(Debug)]
 pub struct PreprocessorElements {
-    pub includes: Vec<String>
+    pub includes: Vec<String>,
 }
 
 impl Default for PreprocessorElements {
     fn default() -> Self {
-        Self{ includes: Vec::new() }
+        Self {
+            includes: Vec::new(),
+        }
     }
 }
 
-pub fn run(source: &str)
--> Result<PreprocessorResult, PreprocessorError> {
-
+pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
     let mut result = PreprocessorResult::default();
     //let mut macros = Vec::new();
     let mut macros_to_process = Vec::new();
@@ -44,29 +43,28 @@ pub fn run(source: &str)
     //
     // first break the source up into lines
     //
-    
+
     let lines: Vec<&str> = source.lines().collect();
     let mut new_lines: Vec<&str> = Vec::new();
 
     //
     // process each line of the input
     //
-    
-    for (i, line) in lines.iter().enumerate() {
 
+    for (i, line) in lines.iter().enumerate() {
         //
         // see if we're in a macro
         //
 
         match current_macro {
-            None => {},
+            None => {}
             Some(ref mut m) => {
                 if !line.ends_with(r"\") {
                     m.body += &format!("\n{}", line);
                     macros_to_process.push(m.clone());
                     current_macro = None;
                 } else {
-                    m.body += &format!("\n{}", &line[..line.len()-1]);
+                    m.body += &format!("\n{}", &line[..line.len() - 1]);
                 }
                 continue;
             }
@@ -87,7 +85,7 @@ pub fn run(source: &str)
 
         if line.starts_with("#define") {
             let (name, value) = process_macro_begin(i, line)?;
-            let m = Macro{
+            let m = Macro {
                 name: name,
                 body: value,
             };
@@ -103,9 +101,8 @@ pub fn run(source: &str)
         //
         // if we are here, this is not a line to be pre-processed
         //
-        
-        new_lines.push(line)
 
+        new_lines.push(line)
     }
 
     //println!("macros to process\n{:#?}", macros_to_process);
@@ -122,17 +119,18 @@ pub fn run(source: &str)
     }
 
     Ok(result)
-
 }
 
-fn process_include(i: usize, line: &str, result: &mut PreprocessorResult)
--> Result<(), PreprocessorError> {
-
+fn process_include(
+    i: usize,
+    line: &str,
+    result: &mut PreprocessorResult,
+) -> Result<(), PreprocessorError> {
     let (begin, end) = if let Some(begin) = line.find('<') {
         match line[begin..].find('>') {
-            Some(end) => (begin+1, begin+end),
+            Some(end) => (begin + 1, begin + end),
             None => {
-                return Err(PreprocessorError{
+                return Err(PreprocessorError {
                     line: i,
                     message: "Unterminated '<'".into(),
                     source: line.to_string(),
@@ -141,9 +139,9 @@ fn process_include(i: usize, line: &str, result: &mut PreprocessorResult)
         }
     } else if let Some(begin) = line.find('"') {
         match line[begin..].find('"') {
-            Some(end) => (begin+1, begin+end),
+            Some(end) => (begin + 1, begin + end),
             None => {
-                return Err(PreprocessorError{
+                return Err(PreprocessorError {
                     line: i,
                     message: "Unterminated '\"'".into(),
                     source: line.to_string(),
@@ -151,36 +149,36 @@ fn process_include(i: usize, line: &str, result: &mut PreprocessorResult)
             }
         }
     } else {
-        return Err(PreprocessorError{
+        return Err(PreprocessorError {
             line: i,
             message: "Invalid #include".into(),
             source: line.to_string(),
-        })
+        });
     };
 
     if end < line.len() {
-        for c in line[end+1..].chars() {
+        for c in line[end + 1..].chars() {
             if !c.is_whitespace() {
-                return Err(PreprocessorError{
+                return Err(PreprocessorError {
                     line: i,
                     message: format!(
                         "Unexpected character after #include '{}'",
                         c,
                     ),
                     source: line.to_string(),
-                })
+                });
             }
         }
     }
     result.elements.includes.push(line[begin..end].into());
 
     Ok(())
-
 }
 
-fn process_macro_begin(i: usize, line: &str)
--> Result<(String, String), PreprocessorError> {
-
+fn process_macro_begin(
+    i: usize,
+    line: &str,
+) -> Result<(String, String), PreprocessorError> {
     let mut parts = line.split_whitespace();
     // discard #define
     parts.next();
@@ -188,7 +186,7 @@ fn process_macro_begin(i: usize, line: &str)
     let name = match parts.next() {
         Some(n) => n.into(),
         None => {
-            return Err(PreprocessorError{
+            return Err(PreprocessorError {
                 line: i,
                 message: "Macros must have a name".into(),
                 source: line.to_string(),
@@ -202,5 +200,4 @@ fn process_macro_begin(i: usize, line: &str)
     };
 
     Ok((name, value))
-
 }

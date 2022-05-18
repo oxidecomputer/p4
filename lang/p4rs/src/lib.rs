@@ -5,34 +5,28 @@
 use std::fmt;
 use std::ptr::slice_from_raw_parts_mut;
 
-pub use bits::bit_slice;
 pub use bits::bit;
+pub use bits::bit_slice;
 pub use error::TryFromSliceError;
 
-pub mod error;
 pub mod bits;
+pub mod error;
 pub mod hicuts;
 
 #[derive(Debug)]
 pub struct Bit<'a, const N: usize>(pub &'a [u8]);
 
 impl<'a, const N: usize> Bit<'a, N> {
-
     //TODO measure the weight of returning TryFromSlice error versus just
     //dropping and incrementing a counter. Relying on dtrace for more detailed
     //debugging.
-    pub fn new(data: &'a [u8]) -> Result<Self, TryFromSliceError>  {
-        let required_bytes = if N & 7 > 0 {
-            (N >> 3) + 1
-        } else {
-            N >> 3
-        };
+    pub fn new(data: &'a [u8]) -> Result<Self, TryFromSliceError> {
+        let required_bytes = if N & 7 > 0 { (N >> 3) + 1 } else { N >> 3 };
         if data.len() < required_bytes {
-            return Err(TryFromSliceError(N))
+            return Err(TryFromSliceError(N));
         }
         Ok(Self(&data[..required_bytes]))
     }
-
 }
 
 impl<'a, const N: usize> fmt::LowerHex for Bit<'a, N> {
@@ -66,11 +60,10 @@ impl<'a> std::cmp::PartialEq for Bit<'a, 8> {
 
 impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 
-
 /// Every packet that goes through a P4 pipeline is represented as a `packet_in`
 /// instance. `packet_in` objects wrap an underlying mutable data reference that
 /// is ultimately rooted in a memory mapped region containing a ring of packets.
-pub struct packet_in<'a>{
+pub struct packet_in<'a> {
     /// The underlying data. Owned by an external, memory-mapped packet ring.
     pub data: &'a mut [u8],
 
@@ -91,46 +84,53 @@ pub struct Ethernet<'a> {
 pub trait Header<'a> {
     fn new() -> Self;
     fn size() -> usize;
-    fn set(&mut self, buf: &'a mut[u8]) -> Result<(), TryFromSliceError>;
+    fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError>;
 }
 
 /// A variable length header trait.
 pub trait VarHeader<'a> {
-    fn new(buf: &'a mut[u8]) -> Result<Self, TryFromSliceError> where Self: Sized;
-    fn set(&mut self, buf: &'a mut[u8]) -> Result<usize, TryFromSliceError>;
+    fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError>
+    where
+        Self: Sized;
+    fn set(&mut self, buf: &'a mut [u8]) -> Result<usize, TryFromSliceError>;
 }
 
 impl<'a> Header<'a> for Ethernet<'a> {
     fn new() -> Self {
-            Self{ src: None, dst: None, ethertype: None }
+        Self {
+            src: None,
+            dst: None,
+            ethertype: None,
+        }
     }
 
     fn size() -> usize {
         14
     }
 
-    fn set(&mut self, buf: &'a mut[u8]) -> Result<(), TryFromSliceError> {
+    fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
         if buf.len() < 14 {
             return Err(TryFromSliceError(buf.len()));
         }
         unsafe {
-            self.dst = Some(&mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6));
-            self.src = Some(
-                &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(6), 6)
-            );
-            self.ethertype = Some(
-                &mut *slice_from_raw_parts_mut(buf.as_mut_ptr().add(12), 2)
-            );
+            self.dst =
+                Some(&mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6));
+            self.src = Some(&mut *slice_from_raw_parts_mut(
+                buf.as_mut_ptr().add(6),
+                6,
+            ));
+            self.ethertype = Some(&mut *slice_from_raw_parts_mut(
+                buf.as_mut_ptr().add(12),
+                2,
+            ));
         }
         Ok(())
     }
 }
 
-
-impl <'a> packet_in<'a> {
-
+impl<'a> packet_in<'a> {
     pub fn new(data: &'a mut [u8]) -> Self {
-        Self{ data, index: 0 }
+        Self { data, index: 0 }
     }
 
     // TODO: this function signature is a bit unforunate in the sense that the
@@ -140,7 +140,10 @@ impl <'a> packet_in<'a> {
     // interrogated. In fact, the signature for packet_in::extract from the p4
     // standard library requires the return type to be `void`, so this signature
     // is in direct contradiction to that.
-    pub fn extract<H: Header<'a>>(&mut self, h: &mut H) -> Result<(), TryFromSliceError>{
+    pub fn extract<H: Header<'a>>(
+        &mut self,
+        h: &mut H,
+    ) -> Result<(), TryFromSliceError> {
         // The crux of the situation here is we have a reference to mutable
         // data, and we (packet_in) do not own that mutable data, so the only
         // way we can give someone else a mutable reference to that data is by
@@ -164,10 +167,12 @@ impl <'a> packet_in<'a> {
         // already been given out to some other `H` instance.
         //
         let n = H::size();
-        let shared_mut = unsafe{ &mut *std::ptr::slice_from_raw_parts_mut(
-            self.data.as_mut_ptr(),
-            self.index + n,
-        ) };
+        let shared_mut = unsafe {
+            &mut *std::ptr::slice_from_raw_parts_mut(
+                self.data.as_mut_ptr(),
+                self.index + n,
+            )
+        };
         h.set(shared_mut)?;
         self.index += n;
         Ok(())
@@ -186,12 +191,16 @@ impl <'a> packet_in<'a> {
 
     // This is the same as extract except we return a new header instead of
     // modifying an existing one.
-    pub fn extract_new<H: Header<'a>>(&mut self) -> Result<H, TryFromSliceError> {
+    pub fn extract_new<H: Header<'a>>(
+        &mut self,
+    ) -> Result<H, TryFromSliceError> {
         let n = H::size();
-        let shared_mut = unsafe{ &mut *std::ptr::slice_from_raw_parts_mut(
-            self.data.as_mut_ptr(),
-            self.index + n,
-        ) };
+        let shared_mut = unsafe {
+            &mut *std::ptr::slice_from_raw_parts_mut(
+                self.data.as_mut_ptr(),
+                self.index + n,
+            )
+        };
         self.index += n;
         let mut x = H::new();
         x.set(shared_mut)?;

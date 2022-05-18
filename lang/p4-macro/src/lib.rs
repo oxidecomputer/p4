@@ -1,9 +1,9 @@
 use std::fs;
 
+use p4::check::Diagnostics;
+use p4::{check, error, error::SemanticError, lexer, parser, preprocessor};
 use proc_macro::TokenStream;
 use syn::{parse, LitStr};
-use p4::{preprocessor, lexer, parser, check, error, error::SemanticError};
-use p4::check::Diagnostics;
 
 #[proc_macro]
 pub fn use_p4(item: TokenStream) -> TokenStream {
@@ -20,7 +20,6 @@ fn do_use_p4(item: TokenStream) -> Result<TokenStream, syn::Error> {
 }
 
 fn generate_rs(filename: String) -> Result<TokenStream, syn::Error> {
-
     //TODO gracefull error handling
 
     let contents = fs::read_to_string(filename).unwrap();
@@ -44,7 +43,7 @@ fn check(lines: &Vec<&str>, diagnostics: &Diagnostics) {
     if !errors.is_empty() {
         let mut err = Vec::new();
         for e in errors {
-            err.push(SemanticError{
+            err.push(SemanticError {
                 at: e.token.clone(),
                 message: e.message.clone(),
                 source: lines[e.token.line].into(),

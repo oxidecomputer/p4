@@ -4,26 +4,26 @@ use crate::error::TryFromSliceError;
 // not have a one in bit positions 0, 1 or 2, so just OR those all together and
 // shift any one found to the 0 position and add to implement the "round up".
 macro_rules! bytes {
-    (N) => {
-        {(N>>3)+((N&0b1)|((N&0b10)>>1)|((N&0b100)>>2))}
-    };
+    (N) => {{
+        (N >> 3) + ((N & 0b1) | ((N & 0b10) >> 1) | ((N & 0b100) >> 2))
+    }};
 }
 
 #[derive(Debug)]
 pub struct bit_slice<'a, const N: usize>(&'a mut [u8]);
 
-impl<'a, const N: usize> bit_slice<'a, N> 
-{
-    pub fn new(data: &'a mut [u8]) -> Result<Self, TryFromSliceError>  {
+impl<'a, const N: usize> bit_slice<'a, N> {
+    pub fn new(data: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
         if data.len() < bytes!(N) {
-            return Err(TryFromSliceError(bytes!(N)))
+            return Err(TryFromSliceError(bytes!(N)));
         }
         Ok(Self(&mut data[..bytes!(N)]))
     }
 
     // WARNING: Don't do this on the data path. It copies the contents.
-    pub fn to_owned(&self) -> bit::<N> 
-    where [u8; bytes!(N)]: Sized
+    pub fn to_owned(&self) -> bit<N>
+    where
+        [u8; bytes!(N)]: Sized,
     {
         let mut result = bit::<N>::new();
         for i in 0..bit::<N>::BYTES {
@@ -34,14 +34,16 @@ impl<'a, const N: usize> bit_slice<'a, N>
 }
 
 #[derive(Debug)]
-pub struct bit<const N: usize>([u8;bytes!(N)])
-where [u8;bytes!(N)]: Sized;
+pub struct bit<const N: usize>([u8; bytes!(N)])
+where
+    [u8; bytes!(N)]: Sized;
 
 impl<const N: usize> bit<N>
-where [u8;bytes!(N)]: Sized
+where
+    [u8; bytes!(N)]: Sized,
 {
     const BYTES: usize = bytes!(N);
-    
+
     pub fn new() -> Self {
         Self([0u8; bytes!(N)])
     }
@@ -84,9 +86,9 @@ mod tests {
     use super::*;
     #[test]
     fn bits_basic() {
-        let mut buf: [u8;16] = [
-            0x0,0x1,0x2,0x3,0x4,0x5,0x6,0x7,
-            0x8,0x9,0xa,0xb,0xc,0xd,0xe,0xf,
+        let mut buf: [u8; 16] = [
+            0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc,
+            0xd, 0xe, 0xf,
         ];
 
         let bs = bit_slice::<9>(&mut buf[7..]);

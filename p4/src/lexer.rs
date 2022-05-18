@@ -1,13 +1,11 @@
-use std::fmt;
 use crate::error::TokenError;
+use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Kind {
-
     //
     // keywords
     //
-    
     Const,
     Header,
     Typedef,
@@ -37,7 +35,6 @@ pub enum Kind {
     //
     // types
     //
-    
     Bool,
     Error,
     Bit,
@@ -48,7 +45,6 @@ pub enum Kind {
     //
     // lexical elements
     //
-    
     AngleOpen,
     AngleClose,
     CurlyOpen,
@@ -73,7 +69,6 @@ pub enum Kind {
     //
     // operators
     //
-    
     DoubleEquals,
     Equals,
     Plus,
@@ -89,11 +84,9 @@ pub enum Kind {
     Carat,
     GreaterThanEquals,
 
-
     //
     // literals
     //
-    
     /// An integer literal. The following are literal examples and their
     /// associated types.
     ///     - `10`   : int
@@ -119,23 +112,21 @@ pub enum Kind {
     /// First element is number of bits (prefix before w) second element is
     /// value (suffix after w).
     SignedLiteral(u16, i128),
-    
+
     TrueLiteral,
     FalseLiteral,
     StringLiteral(String),
 
     /// End of file.
-    Eof
+    Eof,
 }
 
 impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-
             //
             // keywords
             //
-            
             Kind::Const => write!(f, "keyword const"),
             Kind::Header => write!(f, "keyword header"),
             Kind::Typedef => write!(f, "keyword typedef"),
@@ -165,7 +156,6 @@ impl fmt::Display for Kind {
             //
             // types
             //
-
             Kind::Bool => write!(f, "type bool"),
             Kind::Error => write!(f, "type error"),
             Kind::Bit => write!(f, "type bit"),
@@ -176,7 +166,6 @@ impl fmt::Display for Kind {
             //
             // lexical elements
             //
-
             Kind::AngleOpen => write!(f, "<"),
             Kind::AngleClose => write!(f, ">"),
             Kind::CurlyOpen => write!(f, "{}", "{"),
@@ -193,7 +182,6 @@ impl fmt::Display for Kind {
             //
             // preprocessor
             //
-            
             Kind::PoundInclude => write!(f, "preprocessor statement #include"),
             Kind::PoundDefine => write!(f, "preprocessor statement #define"),
             Kind::Backslash => write!(f, "\\"),
@@ -202,7 +190,6 @@ impl fmt::Display for Kind {
             //
             // operators
             //
-
             Kind::DoubleEquals => write!(f, "operator =="),
             Kind::Equals => write!(f, "operator ="),
             Kind::Plus => write!(f, "operator +"),
@@ -221,12 +208,12 @@ impl fmt::Display for Kind {
             //
             // literals
             //
-
             Kind::IntLiteral(x) => write!(f, "int literal '{}'", x),
             Kind::Identifier(x) => write!(f, "identifier '{}'", x),
             Kind::BitLiteral(w, x) => write!(f, "bit literal '{}w{}'", w, x),
-            Kind::SignedLiteral(w, x) =>
-                write!(f, "signed literal {}s{}", w, x),
+            Kind::SignedLiteral(w, x) => {
+                write!(f, "signed literal {}s{}", w, x)
+            }
             Kind::TrueLiteral => write!(f, "boolean literal true"),
             Kind::FalseLiteral => write!(f, "boolean literal false"),
             Kind::StringLiteral(x) => write!(f, "string literal '{}'", x),
@@ -265,22 +252,20 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
-
     pub fn new(lines: Vec<&'a str>) -> Self {
-
         if lines.is_empty() {
-            return Self{
+            return Self {
                 cursor: "",
                 line: 0,
                 col: 0,
                 lines: lines,
                 show_tokens: false,
-            }
+            };
         }
 
         let start = lines[0];
 
-        Self{
+        Self {
             cursor: start,
             line: 0,
             col: 0,
@@ -290,20 +275,17 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn next(&mut self) -> Result<Token, TokenError> {
-
         let token = self.do_next()?;
         if self.show_tokens {
             println!("{}", token);
         }
         Ok(token)
-
     }
     fn do_next(&mut self) -> Result<Token, TokenError> {
-
         self.check_end_of_line();
 
         if self.line >= self.lines.len() {
-            return Ok(Token{
+            return Ok(Token {
                 kind: Kind::Eof,
                 col: self.col,
                 line: self.line,
@@ -313,7 +295,7 @@ impl<'a> Lexer<'a> {
         while self.skip_whitespace() {}
         while self.skip_comment() {}
         if self.line >= self.lines.len() {
-            return Ok(Token{
+            return Ok(Token {
                 kind: Kind::Eof,
                 col: self.col,
                 line: self.line,
@@ -633,13 +615,12 @@ impl<'a> Lexer<'a> {
 
         let len = self.skip_token();
 
-        Err(TokenError{
+        Err(TokenError {
             line: self.line,
             col: self.col - len,
             source: self.lines[self.line].into(),
-            len
-         })
-
+            len,
+        })
     }
 
     fn match_identifier(&mut self) -> Option<Token> {
@@ -657,7 +638,7 @@ impl<'a> Lexer<'a> {
                 return None;
             }
         }
-        let token = Token{
+        let token = Token {
             kind: Kind::Identifier(tok.into()),
             col: self.col,
             line: self.line,
@@ -671,30 +652,29 @@ impl<'a> Lexer<'a> {
         c.is_ascii_alphabetic() || c == '_'
     }
 
-
     fn parse_bitsized(
-        &self, 
-        tok: &str, 
+        &self,
+        tok: &str,
         n: usize,
         ctor: fn(u16, u128) -> Kind,
     ) -> Option<Token> {
         let bits = match tok[..n].parse::<u16>() {
-            Ok(n) => n, 
+            Ok(n) => n,
             Err(_) => return None,
         };
-        let value = if tok[n+1..].starts_with("0x") {
-            match u128::from_str_radix(&tok[n+3..], 16) {
-                Ok(n) => n, 
+        let value = if tok[n + 1..].starts_with("0x") {
+            match u128::from_str_radix(&tok[n + 3..], 16) {
+                Ok(n) => n,
                 Err(_) => return None,
             }
         } else {
-            match u128::from_str_radix(&tok[n+1..], 10) {
-                Ok(n) => n, 
+            match u128::from_str_radix(&tok[n + 1..], 10) {
+                Ok(n) => n,
                 Err(_) => return None,
             }
         };
-        let token = Token{
-            kind: ctor(bits, value), 
+        let token = Token {
+            kind: ctor(bits, value),
             col: self.col,
             line: self.line,
         };
@@ -704,28 +684,28 @@ impl<'a> Lexer<'a> {
     // TODO copy pasta from parse_bitsized, but no trait to hold on to for
     // from_str_radix to generalize
     fn parse_intsized(
-        &self, 
-        tok: &str, 
+        &self,
+        tok: &str,
         n: usize,
         ctor: fn(u16, i128) -> Kind,
     ) -> Option<Token> {
         let bits = match tok[..n].parse::<u16>() {
-            Ok(n) => n, 
+            Ok(n) => n,
             Err(_) => return None,
         };
-        let value = if tok[n+1..].starts_with("0x") {
-            match i128::from_str_radix(&tok[n+3..], 16) {
-                Ok(n) => n, 
+        let value = if tok[n + 1..].starts_with("0x") {
+            match i128::from_str_radix(&tok[n + 3..], 16) {
+                Ok(n) => n,
                 Err(_) => return None,
             }
         } else {
-            match i128::from_str_radix(&tok[n+1..], 10) {
-                Ok(n) => n, 
+            match i128::from_str_radix(&tok[n + 1..], 10) {
+                Ok(n) => n,
                 Err(_) => return None,
             }
         };
-        let token = Token{
-            kind: ctor(bits, value), 
+        let token = Token {
+            kind: ctor(bits, value),
             col: self.col,
             line: self.line,
         };
@@ -751,16 +731,14 @@ impl<'a> Lexer<'a> {
         };
 
         match leading {
-            Some(n) => {
-                match self.parse_bitsized(tok, n, Kind::BitLiteral) {
-                    Some(token) => {
-                        self.col += len;
-                        self.cursor = &self.cursor[len..];
-                        return Some(token)
-                    }
-                    None => return None
+            Some(n) => match self.parse_bitsized(tok, n, Kind::BitLiteral) {
+                Some(token) => {
+                    self.col += len;
+                    self.cursor = &self.cursor[len..];
+                    return Some(token);
                 }
-            }
+                None => return None,
+            },
             None => {}
         }
 
@@ -776,16 +754,14 @@ impl<'a> Lexer<'a> {
         };
 
         match leading {
-            Some(n) => {
-                match self.parse_intsized(tok, n, Kind::SignedLiteral) {
-                    Some(token) => {
-                        self.col += len;
-                        self.cursor = &self.cursor[len..];
-                        return Some(token)
-                    }
-                    None => return None
+            Some(n) => match self.parse_intsized(tok, n, Kind::SignedLiteral) {
+                Some(token) => {
+                    self.col += len;
+                    self.cursor = &self.cursor[len..];
+                    return Some(token);
                 }
-            }
+                None => return None,
+            },
             None => {}
         }
 
@@ -794,7 +770,7 @@ impl<'a> Lexer<'a> {
             let chars = tok.chars();
             for c in chars {
                 if !c.is_ascii_hexdigit() {
-                    return None
+                    return None;
                 }
             }
             i128::from_str_radix(tok, 16).expect("parse hex int")
@@ -802,12 +778,12 @@ impl<'a> Lexer<'a> {
             let chars = tok.chars();
             for c in chars {
                 if !c.is_ascii_digit() {
-                    return None
+                    return None;
                 }
             }
             tok.parse::<i128>().expect("parse int")
         };
-        let token = Token{
+        let token = Token {
             kind: Kind::IntLiteral(value),
             col: self.col,
             line: self.line,
@@ -824,9 +800,9 @@ impl<'a> Lexer<'a> {
             if self.line < self.lines.len() {
                 self.cursor = self.lines[self.line];
             } else {
-                break
+                break;
             }
-        } 
+        }
     }
 
     fn skip_whitespace(&mut self) -> bool {
@@ -834,7 +810,7 @@ impl<'a> Lexer<'a> {
         let mut skipped = false;
         while match chars.next() {
             Some(n) => n.is_whitespace(),
-            None => false
+            None => false,
         } {
             skipped = true;
             self.cursor = &self.cursor[1..];
@@ -849,7 +825,7 @@ impl<'a> Lexer<'a> {
         let mut chars = self.cursor.chars();
         while match chars.next() {
             Some(n) => !n.is_whitespace() && !Self::is_separator(n),
-            None => false
+            None => false,
         } {
             len += 1
         }
@@ -861,11 +837,11 @@ impl<'a> Lexer<'a> {
     fn skip_comment(&mut self) -> bool {
         if self.cursor.starts_with("//") {
             self.skip_line_comment();
-            return true
+            return true;
         }
         if self.cursor.starts_with("/*") {
             self.skip_block_comment();
-            return true
+            return true;
         }
         false
     }
@@ -884,14 +860,14 @@ impl<'a> Lexer<'a> {
                             self.cursor = &self.cursor[len..];
                             self.check_end_of_line();
                             self.skip_whitespace();
-                            return
+                            return;
                         }
                         _ => {
                             len += 1;
                             break;
                         }
                     }
-                }
+                },
                 _ => {
                     len += 1;
                     continue;
@@ -903,11 +879,11 @@ impl<'a> Lexer<'a> {
     fn skip_line_comment(&mut self) {
         let mut chars = self.cursor.chars();
         match chars.next() {
-            Some('/') => {},
+            Some('/') => {}
             _ => return,
         }
         match chars.next() {
-            Some('/') => {},
+            Some('/') => {}
             _ => return,
         }
         let mut len = 2;
@@ -929,7 +905,7 @@ impl<'a> Lexer<'a> {
         let tok = self.peek_token();
         let len = text.len();
         if tok.to_lowercase() == text.to_lowercase() {
-            let token = Token{
+            let token = Token {
                 kind: kind,
                 col: self.col,
                 line: self.line,
@@ -958,7 +934,7 @@ impl<'a> Lexer<'a> {
             Some('[') => return &self.cursor[..1],
             Some(']') => return &self.cursor[..1],
             Some('.') => return &self.cursor[..1],
-            Some(':') => return &self.cursor[..1], 
+            Some(':') => return &self.cursor[..1],
             Some('*') => return &self.cursor[..1],
             Some('!') => return &self.cursor[..1],
             Some('|') => return &self.cursor[..1],
@@ -966,43 +942,33 @@ impl<'a> Lexer<'a> {
             Some('^') => return &self.cursor[..1],
             Some('\\') => return &self.cursor[..1],
             Some('/') => return &self.cursor[..1],
-            Some('=') => {
-                match chars.next() {
-                    Some('=') => return &self.cursor[..2],
-                    _ => return &self.cursor[..1],
-                }
-            }
-            Some('>') => {
-                match chars.next() {
-                    Some('=') => return &self.cursor[..2],
-                    _ => return &self.cursor[..1],
-                }
-            }
-            Some('<') => {
-                match chars.next() {
-                    Some('=') => return &self.cursor[..2],
-                    Some('<') => return &self.cursor[..2],
-                    _ => return &self.cursor[..1],
-                }
-            }
-            Some('&') => {
-                match chars.next() {
-                    Some('&') => {
-                        match chars.next() {
-                            Some('&') => return &self.cursor[..3],
-                            _ => return &self.cursor[..2],
-                        }
-                    }
-                    _ => return &self.cursor[..1],
-                }
-            }
+            Some('=') => match chars.next() {
+                Some('=') => return &self.cursor[..2],
+                _ => return &self.cursor[..1],
+            },
+            Some('>') => match chars.next() {
+                Some('=') => return &self.cursor[..2],
+                _ => return &self.cursor[..1],
+            },
+            Some('<') => match chars.next() {
+                Some('=') => return &self.cursor[..2],
+                Some('<') => return &self.cursor[..2],
+                _ => return &self.cursor[..1],
+            },
+            Some('&') => match chars.next() {
+                Some('&') => match chars.next() {
+                    Some('&') => return &self.cursor[..3],
+                    _ => return &self.cursor[..2],
+                },
+                _ => return &self.cursor[..1],
+            },
             _ => {}
         };
 
         let mut len = 1;
         while match chars.next() {
             Some(n) => !Self::is_separator(n),
-            None => false
+            None => false,
         } {
             len += 1
         }
@@ -1017,70 +983,70 @@ impl<'a> Lexer<'a> {
             return true;
         }
         if c == ':' {
-            return true
+            return true;
         }
         if c == ';' {
-            return true
+            return true;
         }
         if c == '*' {
-            return true
+            return true;
         }
         if c == '+' {
-            return true
+            return true;
         }
         if c == '-' {
-            return true
+            return true;
         }
         if c == '<' {
-            return true
+            return true;
         }
         if c == '>' {
-            return true
+            return true;
         }
         if c == '{' {
-            return true
+            return true;
         }
         if c == '}' {
-            return true
+            return true;
         }
         if c == '=' {
-            return true
+            return true;
         }
         if c == '(' {
-            return true
+            return true;
         }
         if c == ')' {
-            return true
+            return true;
         }
         if c == '[' {
-            return true
+            return true;
         }
         if c == ']' {
-            return true
+            return true;
         }
         if c == '&' {
-            return true
+            return true;
         }
         if c == '.' {
-            return true
+            return true;
         }
         if c == '!' {
-            return true
+            return true;
         }
         if c == '^' {
-            return true
+            return true;
         }
         if c == '|' {
-            return true
+            return true;
         }
         if c == '~' {
-            return true
+            return true;
         }
         if c == '\\' {
-            return true
+            return true;
         }
         if c == '/' {
-            return true
+            return true;
         }
         return false;
     }

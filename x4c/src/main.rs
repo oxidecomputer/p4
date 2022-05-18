@@ -1,8 +1,8 @@
-use std::fs;
-use clap::Parser;
 use anyhow::{anyhow, Result};
-use p4::{preprocessor, lexer, parser, check, error, error::SemanticError};
+use clap::Parser;
 use p4::check::Diagnostics;
+use p4::{check, error, error::SemanticError, lexer, parser, preprocessor};
+use std::fs;
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
@@ -22,7 +22,6 @@ struct Opts {
     /// What target to generate code for
     #[clap(arg_enum)]
     target: Target,
-
 }
 
 #[derive(clap::ArgEnum, Clone)]
@@ -37,7 +36,7 @@ fn main() -> Result<()> {
 
     let contents = fs::read_to_string(opts.filename)
         .map_err(|e| anyhow!("read input: {}", e))?;
-    
+
     let ppr = preprocessor::run(&contents)?;
     if opts.show_pre {
         println!("{:#?}", ppr.elements);
@@ -79,7 +78,7 @@ fn check(lines: &Vec<&str>, diagnostics: &Diagnostics) -> Result<()> {
     if !errors.is_empty() {
         let mut err = Vec::new();
         for e in errors {
-            err.push(SemanticError{
+            err.push(SemanticError {
                 at: e.token.clone(),
                 message: e.message.clone(),
                 source: lines[e.token.line].into(),

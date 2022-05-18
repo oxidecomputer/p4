@@ -1,4 +1,4 @@
-use crate::ast::{AST, Parser};
+use crate::ast::{Parser, AST};
 use crate::lexer::Token;
 
 // TODO Check List
@@ -16,7 +16,7 @@ pub struct Diagnostic {
 
     /// The first token from the lexical element where the semantic error was
     /// detected.
-    pub token: Token
+    pub token: Token,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -62,19 +62,19 @@ impl ParserChecker {
     }
 
     pub fn start_state(parser: &Parser, diags: &mut Vec<Diagnostic>) {
-
         for s in &parser.states {
             if s.name == "start" {
                 return;
             }
         }
 
-        diags.push(Diagnostic{
+        diags.push(Diagnostic {
             level: Level::Error,
             message: format!(
-                "start state not found for parser {}", parser.name),
+                "start state not found for parser {}",
+                parser.name
+            ),
             token: parser.token.clone(),
         });
-
     }
 }

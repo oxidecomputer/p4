@@ -6,11 +6,11 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    AST, Direction, Type, Struct, Header, Parser, State, Transition,
-    Statement, Lvalue, ControlParameter, Expression, Control, Action,
-    ActionParameter, Table, KeySetElement,
+    Action, ActionParameter, Control, ControlParameter, Direction, Expression,
+    Header, KeySetElement, Lvalue, Parser, State, Statement, Struct, Table,
+    Transition, Type, AST,
 };
-use p4::check::{Diagnostics, Diagnostic, Level};
+use p4::check::{Diagnostic, Diagnostics, Level};
 
 /// An object for keeping track of state as we generate code.
 #[derive(Default)]
@@ -25,9 +25,7 @@ struct Context {
     diags: Diagnostics,
 }
 
-
 pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
-
     let (tokens, diags) = emit_tokens(ast);
 
     //
@@ -37,11 +35,9 @@ pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
     fs::write("out.rs", prettyplease::unparse(&f))?;
 
     Ok(diags)
-
 }
 
 pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
-
     //
     // initialize a context to track state while we generate code
     //
@@ -55,13 +51,12 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
     handle_parsers(ast, &mut ctx);
     handle_control_blocks(ast, &mut ctx);
 
-
     //
     // collect all the tokens we generated into one stream
     //
-    
+
     // start with use statements
-    let mut tokens = quote!{ use p4rs::*; };
+    let mut tokens = quote! { use p4rs::*; };
 
     // structs
     for s in ctx.structs.values() {
@@ -74,7 +69,6 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
     }
 
     (tokens, ctx.diags)
-
 }
 
 fn handle_headers(ast: &AST, ctx: &mut Context) {
@@ -84,19 +78,15 @@ fn handle_headers(ast: &AST, ctx: &mut Context) {
 }
 
 fn handle_structs(ast: &AST, ctx: &mut Context) {
-
     for s in &ast.structs {
         generate_struct(ast, s, ctx);
     }
-
 }
 
 fn handle_parsers(ast: &AST, ctx: &mut Context) {
-
     // parsers
     handle_parser_out_parameters(ast, ctx);
     handle_parser_states(ast, ctx);
-
 }
 
 fn handle_parser_states(ast: &AST, ctx: &mut Context) {
@@ -113,8 +103,6 @@ fn generate_parser_state_function(
     state: &State,
     ctx: &mut Context,
 ) {
-
-
     let function_name = format_ident!("{}_{}", parser.name, state.name);
 
     let mut args = Vec::new();
@@ -139,7 +127,6 @@ fn generate_parser_state_function(
     };
 
     ctx.functions.insert(function_name.to_string(), function);
-
 }
 
 fn generate_parser_state_function_body(
@@ -148,11 +135,9 @@ fn generate_parser_state_function_body(
     state: &State,
     ctx: &mut Context,
 ) -> TokenStream {
-
     let mut tokens = generate_parser_state_statements(ast, parser, state, ctx);
     tokens.extend(generate_parser_state_transition(ast, parser, state, ctx));
     tokens
-
 }
 
 fn generate_parser_state_statements(
@@ -161,7 +146,6 @@ fn generate_parser_state_statements(
     state: &State,
     ctx: &mut Context,
 ) -> TokenStream {
-
     let tokens = TokenStream::new();
 
     for stmt in &state.statements {
@@ -171,17 +155,14 @@ fn generate_parser_state_statements(
                 todo!("parser state assignment statement");
             }
             Statement::Call(call) => {
-                match check_parser_state_lvalue(
-                    ast,
-                    parser,
-                    &call.lval,
-                    ctx
-                ) {
+                match check_parser_state_lvalue(ast, parser, &call.lval, ctx) {
                     Ok(_) => {
-                        let lval: Vec<TokenStream> = call.lval.name
+                        let lval: Vec<TokenStream> = call
+                            .lval
+                            .name
                             .split(".")
                             .map(|x| format_ident!("{}", x))
-                            .map(|x| quote!{ #x })
+                            .map(|x| quote! { #x })
                             .collect();
 
                         let mut args = Vec::new();
@@ -195,16 +176,18 @@ fn generate_parser_state_statements(
                                     for parg in &parser.parameters {
                                         if parg.name == root {
                                             match parg.direction {
-                                                Direction::Out | Direction::InOut => {
+                                                Direction::Out
+                                                | Direction::InOut => {
                                                     mut_arg = true;
                                                 }
                                                 _ => {}
                                             }
                                         }
                                     }
-                                    let lvref: Vec<TokenStream> = parts.iter()
+                                    let lvref: Vec<TokenStream> = parts
+                                        .iter()
                                         .map(|x| format_ident!("{}", x))
-                                        .map(|x| quote!{ #x })
+                                        .map(|x| quote! { #x })
                                         .collect();
                                     if mut_arg {
                                         args.push(quote! { &mut #(#lvref).* });
@@ -212,13 +195,13 @@ fn generate_parser_state_statements(
                                         args.push(quote! { #(#lvref).* });
                                     }
                                 }
-                                x => todo!("extern arg {:?}", x)
+                                x => todo!("extern arg {:?}", x),
                             }
                         }
                         return quote! {
                             #(#lval).* ( #(#args),* );
                         };
-                    },
+                    }
                     Err(_) => return tokens, //error added to diagnostics
                 }
             }
@@ -226,7 +209,6 @@ fn generate_parser_state_statements(
     }
 
     tokens
-
 }
 
 fn check_parser_state_lvalue(
@@ -234,8 +216,7 @@ fn check_parser_state_lvalue(
     parser: &Parser,
     lval: &Lvalue,
     ctx: &mut Context,
-) -> Result<(),()> {
-
+) -> Result<(), ()> {
     // an lvalue can be dot separated e.g. foo.bar.baz, start by getting the
     // root of the lvalue and resolving that.
     let parts: Vec<&str> = lval.name.split(".").collect();
@@ -261,85 +242,91 @@ fn check_lvalue_chain(
     ty: &Type,
     ast: &AST,
     ctx: &mut Context,
-) -> Result<Type,()> {
+) -> Result<Type, ()> {
     match ty {
         Type::Bool => {
-            if parts.len() > 0 { 
-                ctx.diags.push(Diagnostic{
+            if parts.len() > 0 {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type bool does not have a member {}", parts[0]),
+                        "type bool does not have a member {}",
+                        parts[0]
+                    ),
                     token: lval.token.clone(),
                 });
-                return Err(())
+                return Err(());
             }
-            return Ok(ty.clone())
+            return Ok(ty.clone());
         }
         Type::Error => {
-            if parts.len() > 0 { 
-                ctx.diags.push(Diagnostic{
+            if parts.len() > 0 {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type error does not have a member {}", parts[1]),
+                        "type error does not have a member {}",
+                        parts[1]
+                    ),
                     token: lval.token.clone(),
                 });
-                return Err(())
+                return Err(());
             }
-            return Ok(ty.clone())
+            return Ok(ty.clone());
         }
         Type::Bit(size) => {
-            if parts.len() > 0 { 
-                ctx.diags.push(Diagnostic{
+            if parts.len() > 0 {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "type bit<{}> does not have a member {}",
-                        size,
-                        parts[0]),
+                        size, parts[0]
+                    ),
                     token: lval.token.clone(),
                 });
-                return Err(())
+                return Err(());
             }
-            return Ok(ty.clone())
+            return Ok(ty.clone());
         }
         Type::Varbit(size) => {
-            if parts.len() > 0 { 
-                ctx.diags.push(Diagnostic{
+            if parts.len() > 0 {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "type varbit<{}> does not have a member {}",
-                        size,
-                        parts[0]),
+                        size, parts[0]
+                    ),
                     token: lval.token.clone(),
                 });
-                return Err(())
+                return Err(());
             }
-            return Ok(ty.clone())
+            return Ok(ty.clone());
         }
         Type::Int(size) => {
-            if parts.len() > 0 { 
-                ctx.diags.push(Diagnostic{
+            if parts.len() > 0 {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "type int<{}> does not have a member {}",
-                        size,
-                        parts[0]),
+                        size, parts[0]
+                    ),
                     token: lval.token.clone(),
                 });
-                return Err(())
+                return Err(());
             }
-            return Ok(ty.clone())
+            return Ok(ty.clone());
         }
         Type::String => {
-            if parts.len() > 0 { 
-                ctx.diags.push(Diagnostic{
+            if parts.len() > 0 {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type string does not have a member {}", parts[0]),
+                        "type string does not have a member {}",
+                        parts[0]
+                    ),
                     token: lval.token.clone(),
                 });
-                return Err(())
+                return Err(());
             }
-            return Ok(ty.clone())
+            return Ok(ty.clone());
         }
         Type::UserDefined(name) => {
             // get the parent type definition from the AST and check for the
@@ -356,12 +343,11 @@ fn check_lvalue_chain(
                                 ctx,
                             );
                         } else {
-                            return Ok(member.ty.clone())
+                            return Ok(member.ty.clone());
                         }
                     }
                 }
-            }
-            else if let Some(parent) = ast.get_header(name) {
+            } else if let Some(parent) = ast.get_header(name) {
                 for member in &parent.members {
                     if member.name == parts[0] {
                         if parts.len() > 1 {
@@ -373,45 +359,44 @@ fn check_lvalue_chain(
                                 ctx,
                             );
                         } else {
-                            return Ok(member.ty.clone())
+                            return Ok(member.ty.clone());
                         }
                     }
                 }
-            }
-            else if let Some(parent) = ast.get_extern(name) {
-                for method in &parent.methods{
+            } else if let Some(parent) = ast.get_extern(name) {
+                for method in &parent.methods {
                     if method.name == parts[0] {
                         if parts.len() > 1 {
-                            ctx.diags.push(Diagnostic{
+                            ctx.diags.push(Diagnostic {
                                 level: Level::Error,
                                 message: format!(
-                                    "extern methods do not have members"),
+                                    "extern methods do not have members"
+                                ),
                                 token: lval.token.clone(),
                             });
                             return Err(());
                         } else {
-                            return Ok(ty.clone()) //TODO function/method type?
+                            return Ok(ty.clone()); //TODO function/method type?
                         }
                     }
                 }
-            }
-            else {
-                ctx.diags.push(Diagnostic{
+            } else {
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!(
-                        "type {} is not defined", name),
+                    message: format!("type {} is not defined", name),
                     token: lval.token.clone(),
                 });
                 return Err(());
             }
-            ctx.diags.push(Diagnostic{
+            ctx.diags.push(Diagnostic {
                 level: Level::Error,
                 message: format!(
-                    "type {} does not have a member {}", name, parts[0]),
+                    "type {} does not have a member {}",
+                    name, parts[0]
+                ),
                 token: lval.token.clone(),
             });
             return Err(());
-             
         }
     };
 }
@@ -422,7 +407,7 @@ fn get_parser_arg<'a>(
 ) -> Option<&'a ControlParameter> {
     for arg in &parser.parameters {
         if arg.name == arg_name {
-            return Some(arg)
+            return Some(arg);
         }
     }
     None
@@ -434,7 +419,7 @@ fn get_control_arg<'a>(
 ) -> Option<&'a ControlParameter> {
     for arg in &control.parameters {
         if arg.name == arg_name {
-            return Some(arg)
+            return Some(arg);
         }
     }
     None
@@ -446,7 +431,7 @@ fn get_action_arg<'a>(
 ) -> Option<&'a ActionParameter> {
     for arg in &action.parameters {
         if arg.name == arg_name {
-            return Some(arg)
+            return Some(arg);
         }
     }
     None
@@ -458,29 +443,25 @@ fn generate_parser_state_transition(
     state: &State,
     _ctx: &mut Context,
 ) -> TokenStream {
-
     match &state.transition {
-        Some(Transition::Reference(next_state)) => {
-            match next_state.as_str() {
-                "accept" => quote! { return true; },
-                "reject" => quote! { return false; },
-                state_ref => {
-                    let state_name = format_ident!(
-                        "{}_{}", parser.name, state_ref);
+        Some(Transition::Reference(next_state)) => match next_state.as_str() {
+            "accept" => quote! { return true; },
+            "reject" => quote! { return false; },
+            state_ref => {
+                let state_name = format_ident!("{}_{}", parser.name, state_ref);
 
-                    let mut args = Vec::new();
-                    for arg in &parser.parameters {
-                        let name = format_ident!("{}", arg.name);
-                        args.push(quote! { #name } );
-                    }
-                    quote! { return #state_name( #(#args),* ); }
+                let mut args = Vec::new();
+                for arg in &parser.parameters {
+                    let name = format_ident!("{}", arg.name);
+                    args.push(quote! { #name });
                 }
+                quote! { return #state_name( #(#args),* ); }
             }
-        }
+        },
         Some(Transition::Select(_)) => {
             todo!();
         }
-        None => quote! { return false; } // implicit reject?
+        None => quote! { return false; }, // implicit reject?
     }
 }
 
@@ -495,29 +476,24 @@ fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
     //
     for parser in &ast.parsers {
         for parameter in &parser.parameters {
-
             // ignore parameters not in an out direction, we're just generating
             // supporting data structures right now.
             if parameter.direction != Direction::Out {
                 continue;
             }
             if let Type::UserDefined(ref typename) = parameter.ty {
-                if let Some(_decl) = ast.get_struct(typename) { }
-                else {
+                if let Some(_decl) = ast.get_struct(typename) {
+                } else {
                     // semantic error undefined type
-                    ctx.diags.push(Diagnostic{
+                    ctx.diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!(
-                            "Undefined type {}",
-                            parameter.ty,
-                        ),
+                        message: format!("Undefined type {}", parameter.ty,),
                         token: parameter.ty_token.clone(),
                     });
                 }
-            }
-            else {
+            } else {
                 // semantic error, out parameters must be structures
-                ctx.diags.push(Diagnostic{
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "Out parameter must be a struct, found {}",
@@ -525,14 +501,12 @@ fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
                     ),
                     token: parameter.ty_token.clone(),
                 });
-                    
             }
         }
     }
 }
 
 fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
-
     let mut members = Vec::new();
 
     let mut needs_lifetime = false;
@@ -548,23 +522,19 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                         generate_header(ast, decl, ctx)
                     }
                     let ty = format_ident!("{}", typename);
-                    members.push(quote!{ pub #name: #ty::<'a> });
+                    members.push(quote! { pub #name: #ty::<'a> });
                     needs_lifetime = true;
-                }
-                else {
+                } else {
                     // semantic error undefined header
-                    ctx.diags.push(Diagnostic{
+                    ctx.diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!(
-                            "Undefined header {}",
-                            member.ty,
-                        ),
+                        message: format!("Undefined header {}", member.ty,),
                         token: member.token.clone(),
                     });
                 }
             }
             Type::Bit(size) => {
-                members.push(quote!{ pub #name: bit::<#size> });
+                members.push(quote! { pub #name: bit::<#size> });
             }
             x => {
                 todo!("struct member {}", x)
@@ -575,9 +545,9 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
     let name = format_ident!("{}", s.name);
 
     let lifetime = if needs_lifetime {
-        quote!{ <'a> }
+        quote! { <'a> }
     } else {
-        quote!{}
+        quote! {}
     };
 
     let structure = quote! {
@@ -589,15 +559,13 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
     ctx.structs.insert(s.name.clone(), structure);
 }
 
-
 fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
-
     let name = format_ident!("{}", h.name);
 
     //
     // genrate a rust struct for the header
     //
-    
+
     // generate struct members
     let mut members = Vec::new();
     for member in &h.members {
@@ -616,7 +584,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     //
     // generate a constructor that maps the header onto a byte slice
     //
-    
+
     // generate member assignments
     let mut member_values = Vec::new();
     let mut set_statements = Vec::new();
@@ -661,11 +629,9 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     });
 
     ctx.structs.insert(h.name.clone(), generated);
-
 }
 
 fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
-
     for control in &ast.controls {
         let (mut params, param_types) = control_parameters(ast, control, ctx);
 
@@ -676,39 +642,42 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
             let (type_tokens, table_tokens) =
                 generate_control_table(ast, control, table, &param_types, ctx);
             let name = format_ident!("{}_table_{}", control.name, table.name);
-            ctx.functions.insert(name.to_string(), quote!{
-                pub fn #name<'a>() -> #type_tokens {
-                    #table_tokens
-                }
-            });
+            ctx.functions.insert(
+                name.to_string(),
+                quote! {
+                    pub fn #name<'a>() -> #type_tokens {
+                        #table_tokens
+                    }
+                },
+            );
             let name = format_ident!("{}", table.name);
-            params.push(quote!{
+            params.push(quote! {
                 #name: &#type_tokens
             });
         }
 
         let name = format_ident!("{}_apply", control.name);
         let apply_body = generate_control_apply_body(ast, control, ctx);
-        ctx.functions.insert(name.to_string(), quote!{
-            pub fn #name<'a>(#(#params),*) {
-                #apply_body
-            }
-        });
+        ctx.functions.insert(
+            name.to_string(),
+            quote! {
+                pub fn #name<'a>(#(#params),*) {
+                    #apply_body
+                }
+            },
+        );
     }
-
 }
 fn generate_control_apply_body(
     _ast: &AST,
     control: &Control,
     ctx: &mut Context,
 ) -> TokenStream {
-
     let mut tokens = TokenStream::new();
 
     for stmt in &control.apply.statements {
         match stmt {
             Statement::Call(c) => {
-
                 // TODO only supporting tably apply calls for now
 
                 //
@@ -716,10 +685,12 @@ fn generate_control_apply_body(
                 //
                 let parts: Vec<&str> = c.lval.name.split(".").collect();
                 if parts.len() != 2 || parts[1] != "apply" {
-                    ctx.diags.push(Diagnostic{
+                    ctx.diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!("Only <tablename>.apply() calls are
-                            supported in apply blocks right now"),
+                        message: format!(
+                            "Only <tablename>.apply() calls are
+                            supported in apply blocks right now"
+                        ),
                         token: c.lval.token.clone(),
                     });
                     return tokens;
@@ -727,11 +698,11 @@ fn generate_control_apply_body(
                 let table = match control.get_table(parts[0]) {
                     Some(table) => table,
                     None => {
-                        ctx.diags.push(Diagnostic{
+                        ctx.diags.push(Diagnostic {
                             level: Level::Error,
-                            message: format!("Table {} not found in control {}",
-                                parts[0],
-                                control.name,
+                            message: format!(
+                                "Table {} not found in control {}",
+                                parts[0], control.name,
                             ),
                             token: c.lval.token.clone(),
                         });
@@ -742,36 +713,38 @@ fn generate_control_apply_body(
                 //
                 // match an action based on the key material
                 //
-                
+
                 // TODO only supporting direct matches right now and implicitly
                 // assuming all match kinds are direct
-                let table_name: Vec<TokenStream> = table.name.split(".")
+                let table_name: Vec<TokenStream> = table
+                    .name
+                    .split(".")
                     .map(|x| format_ident!("{}", x))
-                    .map(|x| quote!{ #x })
+                    .map(|x| quote! { #x })
                     .collect();
 
                 let mut action_args = Vec::new();
                 for p in &control.parameters {
                     let name = format_ident!("{}", p.name);
-                    action_args.push(quote!{ #name });
+                    action_args.push(quote! { #name });
                 }
 
                 for (lval, _match_kind) in &table.key {
                     //TODO check lvalue ref here, should already be checked at
                     //this point?
-                    let lvref: Vec<TokenStream> = lval.name.split(".")
+                    let lvref: Vec<TokenStream> = lval
+                        .name
+                        .split(".")
                         .map(|x| format_ident!("{}", x))
-                        .map(|x| quote!{ #x })
+                        .map(|x| quote! { #x })
                         .collect();
-                    tokens.extend(quote!{
+                    tokens.extend(quote! {
                         match #(#table_name).*.get(&#(#lvref).*) {
                             Some(action) => action(#(#action_args),*),
                             None => {},
                         }
                     })
                 }
-
-
             }
             x => todo!("control apply statement {:?}", x),
         }
@@ -799,17 +772,18 @@ fn control_parameters(
                         let lifetime = type_lifetime(ast, &arg.ty);
                         match &arg.direction {
                             Direction::Out | Direction::InOut => {
-                                params.push(quote!{ #name: &mut #ty #lifetime });
-                                types.push(quote!{ &mut #ty #lifetime });
+                                params
+                                    .push(quote! { #name: &mut #ty #lifetime });
+                                types.push(quote! { &mut #ty #lifetime });
                             }
                             _ => {
-                                params.push(quote!{ #name: &#ty #lifetime });
-                                types.push(quote!{ &#ty #lifetime });
+                                params.push(quote! { #name: &#ty #lifetime });
+                                types.push(quote! { &#ty #lifetime });
                             }
                         }
                     }
                     None => {
-                        ctx.diags.push(Diagnostic{
+                        ctx.diags.push(Diagnostic {
                             level: Level::Error,
                             message: format!("Undefined type {}", typename),
                             token: arg.ty_token.clone(),
@@ -821,7 +795,7 @@ fn control_parameters(
             _ => {
                 let name = format_ident!("{}", arg.name);
                 let ty = rust_type(&arg.ty, false);
-                params.push(quote!{ #name: &#ty });
+                params.push(quote! { #name: &#ty });
             }
         }
     }
@@ -835,7 +809,6 @@ fn generate_control_action(
     action: &Action,
     ctx: &mut Context,
 ) {
-
     let name = format_ident!("{}_action_{}", control.name, action.name);
     let (mut params, _) = control_parameters(ast, control, ctx);
 
@@ -846,10 +819,10 @@ fn generate_control_action(
                 Some(_) => {
                     let name = format_ident!("{}", arg.name);
                     let ty = rust_type(&arg.ty, false);
-                    params.push(quote!{ #name: #ty });
+                    params.push(quote! { #name: #ty });
                 }
                 None => {
-                    ctx.diags.push(Diagnostic{
+                    ctx.diags.push(Diagnostic {
                         level: Level::Error,
                         message: format!("Undefined type {}", typename),
                         token: arg.ty_token.clone(),
@@ -860,32 +833,32 @@ fn generate_control_action(
         } else {
             let name = format_ident!("{}", arg.name);
             let ty = rust_type(&arg.ty, false);
-            params.push(quote!{ #name: #ty });
+            params.push(quote! { #name: #ty });
         }
     }
 
     let body = generate_control_action_body(ast, control, action, ctx);
 
-    ctx.functions.insert(name.to_string(), quote!{
-        fn #name<'a>(#(#params),*) {
-            #body
-        }
-    });
-
+    ctx.functions.insert(
+        name.to_string(),
+        quote! {
+            fn #name<'a>(#(#params),*) {
+                #body
+            }
+        },
+    );
 }
 
 fn generate_control_table(
     ast: &AST,
     control: &Control,
     table: &Table,
-    control_param_types: &Vec::<TokenStream>,
+    control_param_types: &Vec<TokenStream>,
     ctx: &mut Context,
 ) -> (TokenStream, TokenStream) {
-
     let mut key_type_tokens: Vec<TokenStream> = Vec::new();
     let mut key_types: Vec<Type> = Vec::new();
     for k in table.key.keys() {
-
         let parts: Vec<&str> = k.name.split(".").collect();
         let root = parts[0];
 
@@ -893,61 +866,63 @@ fn generate_control_table(
             Some(param) => {
                 if parts.len() > 1 {
                     match check_lvalue_chain(
-                        &k, &parts[1..], &param.ty, ast, ctx) {
+                        &k,
+                        &parts[1..],
+                        &param.ty,
+                        ast,
+                        ctx,
+                    ) {
                         Ok(ty) => {
                             key_types.push(ty.clone());
                             key_type_tokens.push(rust_type(&ty, false));
                         }
                         Err(_) => {
                             //TODO diagnostics
-                            return (quote!{}, quote!{})
+                            return (quote! {}, quote! {});
                         }
                     }
                 }
             }
-            None => { 
+            None => {
                 todo!();
             }
         }
     }
 
     let table_name = format_ident!("{}_table", table.name);
-    let key_type = quote!{ (#(#key_type_tokens),*) };
-    let table_type = quote!{
+    let key_type = quote! { (#(#key_type_tokens),*) };
+    let table_type = quote! {
         std::collections::HashMap::<#key_type, &'a dyn Fn(#(#control_param_types),*)>
     };
 
-    let mut tokens = quote!{
+    let mut tokens = quote! {
         let mut #table_name: #table_type = std::collections::HashMap::new();
     };
 
     if table.const_entries.is_empty() {
-        tokens.extend(quote!{ #table_name });
+        tokens.extend(quote! { #table_name });
         return (table_type, tokens);
     }
 
     for entry in &table.const_entries {
-
         let mut keyset = Vec::new();
         for (i, k) in entry.keyset.iter().enumerate() {
             match k {
-                KeySetElement::Expression(e) => {
-                    match e.as_ref() {
-                        Expression::IntegerLit(v) => {
-                            let tytk = &key_type_tokens[i];
-                            match &key_types[i] {
-                                Type::Bit(n) => {
-                                    if *n <= 8 {
-                                        let v = *v as u8;
-                                        keyset.push(quote!{ #tytk::from(#v) });
-                                    }
+                KeySetElement::Expression(e) => match e.as_ref() {
+                    Expression::IntegerLit(v) => {
+                        let tytk = &key_type_tokens[i];
+                        match &key_types[i] {
+                            Type::Bit(n) => {
+                                if *n <= 8 {
+                                    let v = *v as u8;
+                                    keyset.push(quote! { #tytk::from(#v) });
                                 }
-                                x => todo!("keyset expression type {:?}", x),
                             }
+                            x => todo!("keyset expression type {:?}", x),
                         }
-                        x => todo!("const entry keyset expression {:?}", x),
                     }
-                }
+                    x => todo!("const entry keyset expression {:?}", x),
+                },
                 x => todo!("key set element {:?}", x),
             }
         }
@@ -955,23 +930,23 @@ fn generate_control_table(
         let action = match control.get_action(&entry.action.name) {
             Some(action) => action,
             None => {
-                ctx.diags.push(Diagnostic{
+                ctx.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!(
-                        "action {} not found", entry.action.name),
+                    message: format!("action {} not found", entry.action.name),
                     token: entry.action.token.clone(),
                 });
-                return (quote!{}, quote!{})
+                return (quote! {}, quote! {});
             }
         };
 
         let mut action_fn_args = Vec::new();
         for arg in &control.parameters {
             let a = format_ident!("{}", arg.name);
-            action_fn_args.push(quote!{ #a });
+            action_fn_args.push(quote! { #a });
         }
 
-        let action_fn_name = format_ident!("{}_action_{}", control.name, entry.action.name);
+        let action_fn_name =
+            format_ident!("{}_action_{}", control.name, entry.action.name);
         for (i, expr) in entry.action.parameters.iter().enumerate() {
             match expr.as_ref() {
                 Expression::IntegerLit(v) => {
@@ -980,7 +955,7 @@ fn generate_control_table(
                         Type::Bit(n) => {
                             if *n <= 8 {
                                 let v = *v as u8;
-                                action_fn_args.push(quote!{ #tytk::from(#v) });
+                                action_fn_args.push(quote! { #tytk::from(#v) });
                             }
                         }
                         x => todo!("action praam expression type {:?}", x),
@@ -993,22 +968,19 @@ fn generate_control_table(
         let mut closure_params = Vec::new();
         for x in &control.parameters {
             let name = format_ident!("{}", x.name);
-            closure_params.push(quote!{ #name });
+            closure_params.push(quote! { #name });
         }
 
-
-        tokens.extend(quote!{
+        tokens.extend(quote! {
             #table_name.insert((#(#keyset),*), &|#(#closure_params),*|{
                 #action_fn_name(#(#action_fn_args),*);
             });
         });
-        
     }
 
-    tokens.extend(quote!{ #table_name });
+    tokens.extend(quote! { #table_name });
 
     (table_type, tokens)
-
 }
 
 fn generate_control_action_body(
@@ -1017,7 +989,6 @@ fn generate_control_action_body(
     action: &Action,
     ctx: &mut Context,
 ) -> TokenStream {
-
     let mut ts = TokenStream::new();
 
     for statement in &action.statement_block.statements {
@@ -1026,7 +997,6 @@ fn generate_control_action_body(
                 continue;
             }
             Statement::Assignment(lval, expr) => {
-
                 // check the lhs
                 let parts: Vec<&str> = lval.name.split(".").collect();
                 let root = parts[0];
@@ -1034,50 +1004,58 @@ fn generate_control_action_body(
                     Some(param) => {
                         if parts.len() > 1 {
                             match check_lvalue_chain(
-                                &lval, &parts[1..], &param.ty, ast, ctx) {
+                                &lval,
+                                &parts[1..],
+                                &param.ty,
+                                ast,
+                                ctx,
+                            ) {
                                 Ok(_) => {}
-                                Err(_) => return quote!{},
+                                Err(_) => return quote! {},
                             }
                         }
                     }
-                    None => {
-                        match get_action_arg(action, root) {
-                            Some(_param) => { }
-                            None => {
-                                todo!();
-                            }
+                    None => match get_action_arg(action, root) {
+                        Some(_param) => {}
+                        None => {
+                            todo!();
                         }
-                    }
+                    },
                 };
-                let lhs: Vec<TokenStream> = parts.iter()
+                let lhs: Vec<TokenStream> = parts
+                    .iter()
                     .map(|x| format_ident!("{}", x))
-                    .map(|x| quote!{ #x })
+                    .map(|x| quote! { #x })
                     .collect();
 
                 // check the rhs
                 let rhs = match expr.as_ref() {
                     Expression::Lvalue(rhs_lval) => {
-                        let parts: Vec<&str> = rhs_lval.name.split(".").collect();
+                        let parts: Vec<&str> =
+                            rhs_lval.name.split(".").collect();
                         let root = parts[0];
                         match get_control_arg(control, root) {
                             Some(param) => {
                                 if parts.len() > 1 {
                                     match check_lvalue_chain(
-                                        &lval, &parts[1..], &param.ty, ast, ctx) {
+                                        &lval,
+                                        &parts[1..],
+                                        &param.ty,
+                                        ast,
+                                        ctx,
+                                    ) {
                                         Ok(_) => {}
-                                        Err(_) => return quote!{},
+                                        Err(_) => return quote! {},
                                     }
                                 }
                                 &rhs_lval.name
                             }
-                            None => {
-                                match get_action_arg(action, root) {
-                                    Some(_) => &rhs_lval.name,
-                                    None => {
-                                        todo!();
-                                    }
+                            None => match get_action_arg(action, root) {
+                                Some(_) => &rhs_lval.name,
+                                None => {
+                                    todo!();
                                 }
-                            }
+                            },
                         }
                     }
                     x => {
@@ -1087,10 +1065,10 @@ fn generate_control_action_body(
                 let rhs: Vec<TokenStream> = rhs
                     .split(".")
                     .map(|x| format_ident!("{}", x))
-                    .map(|x| quote!{ #x })
+                    .map(|x| quote! { #x })
                     .collect();
 
-                ts.extend(quote!{ #(#lhs).* = #(#rhs ).* });
+                ts.extend(quote! { #(#lhs).* = #(#rhs ).* });
             }
             Statement::Call(_) => {
                 todo!("handle control action function/method calls");
@@ -1099,7 +1077,6 @@ fn generate_control_action_body(
     }
 
     ts
-
 }
 
 /// Return the rust type for a given P4 type. To support zero copy pipelines,
@@ -1122,8 +1099,8 @@ fn rust_type(ty: &Type, header_member: bool) -> TokenStream {
         Type::String => quote! { String },
         Type::UserDefined(name) => {
             let typename = format_ident!("{}", name);
-            quote!{ #typename }
-        },
+            quote! { #typename }
+        }
     }
 }
 
@@ -1141,18 +1118,22 @@ fn type_size(ty: &Type) -> usize {
 
 fn type_lifetime(ast: &AST, ty: &Type) -> TokenStream {
     if requires_lifetime(ast, ty) {
-        quote!{<'a>}
+        quote! {<'a>}
     } else {
-        quote!{}
+        quote! {}
     }
 }
 
 fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
     match ty {
-        Type::Bool | Type::Error | Type::Bit(_) | Type::Int(_) |
-        Type::Varbit(_) | Type::String => {
+        Type::Bool
+        | Type::Error
+        | Type::Bit(_)
+        | Type::Int(_)
+        | Type::Varbit(_)
+        | Type::String => {
             return false;
-        },
+        }
         Type::UserDefined(typename) => {
             if let Some(_) = ast.get_header(typename) {
                 return true;
