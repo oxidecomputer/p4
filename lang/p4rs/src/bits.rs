@@ -73,13 +73,53 @@ impl std::hash::Hash for bit<8> {
     }
 }
 
+/* XXX generic version below should suffice
 impl<'a> std::cmp::PartialEq for bit<8> {
     fn eq(&self, other: &Self) -> bool {
         self.0[0] == other.0[0]
     }
 }
+*/
 
 impl std::cmp::Eq for bit<8> {}
+
+// ordinals -------------------------------------------------------------------
+
+impl<const N: usize> std::cmp::PartialEq for bit::<N> 
+where
+    [u8; bytes!(N)]: Sized,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<const N: usize> std::cmp::PartialEq<bit_slice<'_, N>> for bit::<N> 
+where
+    [u8; bytes!(N)]: Sized,
+{
+    fn eq(&self, other: &bit_slice<N>) -> bool {
+        self.0.as_slice() == other.0
+    }
+}
+
+impl<const N: usize> std::cmp::PartialOrd for bit::<N> 
+where
+    [u8; bytes!(N)]: Sized,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.0.cmp(&other.0))
+    }
+}
+
+impl<const N: usize> std::cmp::PartialOrd<bit_slice<'_, N>> for bit::<N> 
+where
+    [u8; bytes!(N)]: Sized,
+{
+    fn partial_cmp(&self, other: &bit_slice<N>) -> Option<std::cmp::Ordering> {
+        Some(self.0.as_slice().cmp(&other.0))
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -12,6 +12,7 @@ pub use error::TryFromSliceError;
 pub mod bits;
 pub mod error;
 pub mod hicuts;
+pub mod hicuts_gen;
 
 #[derive(Debug)]
 pub struct Bit<'a, const N: usize>(pub &'a [u8]);
