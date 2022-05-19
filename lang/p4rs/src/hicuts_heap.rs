@@ -181,6 +181,17 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         let over = (&upper - &lower) + 1;
 
         loop {
+
+            println!("======================================================");
+            println!("======================================================");
+            println!("");
+            println!("");
+            println!("                      x={:?}", x);
+            println!("");
+            println!("");
+            println!("======================================================");
+            println!("======================================================");
+
             if bound.is_zero() {
                 break;
             }
@@ -278,24 +289,25 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             for r in rules {
                 let r_begin = Self::extract_field(d, layout, &r.range.begin);
                 let r_end = Self::extract_field(d, layout, &r.range.end);
-                println!("r_begin={:?}, r_end={:?}", r_begin, r_end);
+                println!("  r_begin={:?}, r_end={:?}", r_begin, r_end);
 
                 let begin = r_begin >= p_begin && r_begin < p_end;
                 let end = r_end >= p_begin && r_end < p_end;
                 let contain = r_begin <= p_begin && r_end >= p_end;
 
                 if begin | end | contain {
-                    println!("{:?} -> {:?}", r, p);
+                    println!("  -> {:?}", r);
                     p.rules.push(r.clone());
                 }
             }
 
             partition = &partition + 1;
+            result.push(p);
+
             if partition >= count {
                 break;
             }
 
-            result.push(p);
         }
 
         result

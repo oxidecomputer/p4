@@ -121,6 +121,17 @@ impl<const K: usize> DecisionTree<K> {
         let mut partitions = Vec::new();
         let over = (upper - lower) + 1;
         loop {
+
+            println!("======================================================");
+            println!("======================================================");
+            println!("");
+            println!("");
+            println!("                      x={:?}", x);
+            println!("");
+            println!("");
+            println!("======================================================");
+            println!("======================================================");
+
             if bound == 0 {
                 break;
             }
@@ -193,7 +204,7 @@ impl<const K: usize> DecisionTree<K> {
                 // beginning and end of the rule in the given dimension
                 let r_begin = r.intervals[d].begin;
                 let r_end = r.intervals[d].end;
-                println!("r_begin={}, r_end={}", r_begin, r_end);
+                println!("  r_begin={}, r_end={}", r_begin, r_end);
 
                 // There are 3 overlap conditions to check
                 //
@@ -206,7 +217,7 @@ impl<const K: usize> DecisionTree<K> {
 
                 // add the rule to the partition if there is any overlap
                 if begin | end | contain {
-                    println!("{:?} -> {:?}", r, p);
+                    println!("  -> {:?}", r);
                     p.rules.push(r.clone());
                 }
             }
