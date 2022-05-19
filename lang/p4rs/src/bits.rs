@@ -4,10 +4,12 @@ use crate::error::TryFromSliceError;
 // not have a one in bit positions 0, 1 or 2, so just OR those all together and
 // shift any one found to the 0 position and add to implement the "round up".
 macro_rules! bytes {
-    (N) => {{
-        (N >> 3) + ((N & 0b1) | ((N & 0b10) >> 1) | ((N & 0b100) >> 2))
+    ($n: expr) => {{
+        ($n >> 3) + (($n & 0b1) | (($n & 0b10) >> 1) | (($n & 0b100) >> 2))
     }};
 }
+
+pub(crate) use bytes;
 
 #[derive(Debug)]
 pub struct bit_slice<'a, const N: usize>(&'a mut [u8]);
@@ -33,7 +35,7 @@ impl<'a, const N: usize> bit_slice<'a, N> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct bit<const N: usize>([u8; bytes!(N)])
 where
     [u8; bytes!(N)]: Sized;
@@ -43,11 +45,36 @@ where
     [u8; bytes!(N)]: Sized,
 {
     const BYTES: usize = bytes!(N);
+    pub const ZERO: Self = Self([u8::MIN; bytes!(N)]);
 
     pub fn new() -> Self {
         Self([0u8; bytes!(N)])
     }
+
+    // TODO: it would be nice if these could be made compile time constants, but
+    // my rust-fu is failing me for implementing max as a constant
+    pub fn min() -> Self {
+        Self([u8::MIN; bytes!(N)])
+    }
+    pub fn max() -> Self {
+        let mut s = Self([u8::MAX; bytes!(N)]);
+
+        // if N is not on a byte boundary, set the highest order bit to the
+        // maximum possible value within N
+        let r = 0b111&N;
+        if r != 0 {
+            s.0[Self::BYTES-1] = ((1<<r) - 1) as u8;
+        }
+        s
+    }
+
+    pub fn field(&self, offset: usize, width: usize) -> Field {
+        Field(&self.0[offset..offset+width])
+    }
+
 }
+
+pub struct Field<'a>(&'a [u8]);
 
 impl From<u8> for bit<8> {
     fn from(x: u8) -> bit<8> {
@@ -121,6 +148,156 @@ where
     }
 }
 
+// arithmetic -----------------------------------------------------------------
+// TODO using bigint for now, later directly operate on bit<N>, we can probably
+// heavily optimize for sizes less that 256 with specific implementations for
+// specific sizes like impl std::ops::Sub for bit<1> in terms of u8 ....
+// bit<100> interms of u128 ... etc
+
+impl<const N: usize> std::ops::Sub for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a - b;
+        let mut result = Self::new();
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result
+    }
+}
+
+impl<const N: usize> std::ops::Sub<u8> for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn sub(self, other: u8) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&[other]);
+        let c = a - b;
+        let mut result = Self::new();
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result
+    }
+}
+
+impl<const N: usize> std::ops::Add<u8> for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn add(self, other: u8) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&[other]);
+        let c = a + b;
+        let mut result = Self::new();
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result
+    }
+}
+
+impl<const N: usize> std::ops::Add for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a + b;
+        let mut result = Self::new();
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result
+    }
+}
+
+impl<const N: usize> std::ops::Div for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a / b;
+        let mut result = Self::new();
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result
+    }
+}
+
+impl<const N: usize> std::ops::Mul for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a * b;
+        let mut result = Self::new();
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result
+    }
+}
+
+impl<const N: usize> std::ops::Shr<usize> for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Output = Self;
+
+    fn shr(self, rhs: usize) -> Self::Output {
+        let mut b = num::bigint::BigUint::from_bytes_be(&self.0);
+        b >>= rhs;
+        let mut result = Self::new();
+        result.0.copy_from_slice(b.to_bytes_be().as_slice());
+        result
+    }
+}
+
+impl<const N: usize> IntoIterator for bit<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Item = bit<N>;
+    type IntoIter = BitIntoIterator<N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            bit: self,
+        }
+    }
+}
+
+pub struct BitIntoIterator<const N: usize>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    bit: bit<N>,
+}
+
+impl<const N: usize> Iterator for BitIntoIterator<N>
+where
+    [u8; bytes!(N)]: Sized,
+{
+    type Item = bit<N>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.bit  = self.bit + 1;
+        Some(self.bit)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,6 +313,49 @@ mod tests {
         let owned_bs = bs.to_owned();
 
         assert_eq!(owned_bs.0, [0x7, 0x8]);
+    }
+
+    #[test]
+    fn max() {
+        
+        let x = bit::<1>::max();
+        assert_eq!(x.0, [0b1u8]);
+
+        let x = bit::<2>::max();
+        assert_eq!(x.0, [0b11u8]);
+
+        let x = bit::<3>::max();
+        assert_eq!(x.0, [0b111u8]);
+
+        let x = bit::<4>::max();
+        assert_eq!(x.0, [0b1111u8]);
+
+        let x = bit::<5>::max();
+        assert_eq!(x.0, [0b11111u8]);
+
+        let x = bit::<6>::max();
+        assert_eq!(x.0, [0b111111u8]);
+
+        let x = bit::<7>::max();
+        assert_eq!(x.0, [0b1111111u8]);
+
+        let x = bit::<8>::max();
+        assert_eq!(x.0, [0b11111111u8]);
+
+        let x = bit::<9>::max();
+        assert_eq!(x.0, [0b11111111u8, 0b1]);
+
+        let x = bit::<10>::max();
+        assert_eq!(x.0, [0b11111111u8, 0b11]);
+
+        let x = bit::<11>::max();
+        assert_eq!(x.0, [0b11111111u8, 0b111]);
+
+        let x = bit::<16>::max();
+        assert_eq!(x.0, [0b11111111u8, 0b11111111u8]);
+
+        let x = bit::<19>::max();
+        assert_eq!(x.0, [0b11111111u8, 0b11111111u8, 0b111u8]);
     }
 }
 

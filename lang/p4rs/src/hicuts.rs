@@ -31,7 +31,7 @@ impl<const K: usize> DecisionTree<K> {
             root: Self::cut(
                 binth,
                 spfac,
-                domain.map(|x| Interval::new(0, 1 << x)),
+                domain.map(|x| Interval::new(0, (1 << x)-1)),
                 rules,
             ),
         }
@@ -114,17 +114,18 @@ impl<const K: usize> DecisionTree<K> {
 
         let lower = min;
         let upper = max;
-        let mut x = upper / 2;
+        let mut x = (upper / 2) + 1;
         let mut bound = x / 2;
         let goal = (spfac * rules.len() as f32) as usize;
         let mut rule_count = 0;
         let mut partitions = Vec::new();
+        let over = (upper - lower) + 1;
         loop {
             if bound == 0 {
                 break;
             }
 
-            partitions = Self::partition(&rules, d, min, x, upper - lower);
+            partitions = Self::partition(&rules, d, min, x, over);
 
             rule_count = partitions.iter().map(|x| x.rules.len()).sum();
 
@@ -140,6 +141,7 @@ impl<const K: usize> DecisionTree<K> {
             if rule_count == goal {
                 break;
             }
+
             if rule_count > goal {
                 x -= bound;
                 bound /= 2;
@@ -182,6 +184,8 @@ impl<const K: usize> DecisionTree<K> {
             let p_begin = begin + psize * partition;
             let p_end = p_begin + psize;
 
+            println!("p_begin={}, p_end={}", p_begin, p_end);
+
             let mut p =
                 Partition::<K>::new(Interval::new(p_begin, p_end), Vec::new());
 
@@ -189,6 +193,7 @@ impl<const K: usize> DecisionTree<K> {
                 // beginning and end of the rule in the given dimension
                 let r_begin = r.intervals[d].begin;
                 let r_end = r.intervals[d].end;
+                println!("r_begin={}, r_end={}", r_begin, r_end);
 
                 // There are 3 overlap conditions to check
                 //
@@ -201,6 +206,7 @@ impl<const K: usize> DecisionTree<K> {
 
                 // add the rule to the partition if there is any overlap
                 if begin | end | contain {
+                    println!("{:?} -> {:?}", r, p);
                     p.rules.push(r.clone());
                 }
             }
@@ -352,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn example_from_paper() {
+    fn basic_example_from_paper() {
         let rules = rules_from_paper();
 
         let d = DecisionTree::<2>::new(2, 1.5, [8, 8], rules);

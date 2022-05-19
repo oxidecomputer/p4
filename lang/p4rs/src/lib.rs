@@ -13,6 +13,10 @@ pub mod bits;
 pub mod error;
 pub mod hicuts;
 pub mod hicuts_gen;
+pub mod hicuts_dim;
+pub mod hicuts_slice;
+pub mod hicuts_bit;
+pub mod hicuts_heap;
 
 #[derive(Debug)]
 pub struct Bit<'a, const N: usize>(pub &'a [u8]);

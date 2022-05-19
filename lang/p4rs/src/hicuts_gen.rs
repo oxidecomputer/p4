@@ -47,28 +47,28 @@ rule_type!(Rule2, A, B,);
 //
 
 macro_rules! partition_type {
-    ($name: ident, $rt: ident, $it: ident, $($t: ident,)*) => {
+    ($name: ident, $rt: ident, $($t: ident,)*) => {
 
         #[derive(Debug)]
         /// An n-dimensional partition.
-        pub struct $name<$it, $($t),*> {
-            pub interval: Interval::<$it>,
+        pub struct $name<$($t),*> {
+            pub intervals: ($(Interval::<$t>,)*),
             pub rules: Vec::<$rt::<$($t,)*>>,
         }
 
-        impl<$it, $($t),*> $name<$it, $($t),*> {
+        impl<$($t),*> $name<$($t),*> {
             pub fn new(
-                interval: Interval::<$it>,
+                intervals: ($(Interval::<$t>,)*),
                 rules: Vec::<$rt::<$($t,)*>>,
             ) -> Self {
-                Self { interval, rules }
+                Self { intervals, rules }
             }
         }
     }
 }
 
-partition_type!(Partition1, Rule1, I, A,);
-partition_type!(Partition2, Rule2, I, A, B,);
+partition_type!(Partition1, Rule1, A,);
+partition_type!(Partition2, Rule2, A, B,);
 
 //
 // Node
@@ -109,7 +109,6 @@ macro_rules! internal_type {
                 }
             }
         }
-
     }
 }
 
@@ -125,6 +124,7 @@ macro_rules! decision_tree {
         $name: ident,
         $int: ident,
         $rt: ident,
+        $pt: ident,
         $($t: ident,)*
     ) => {
 
@@ -136,7 +136,7 @@ macro_rules! decision_tree {
         }
 
         impl<$($t),*> $name<$($t),*> 
-            where $($t: MinMax),*
+            where $($t: MinMax + std::fmt::Debug),*
         {
 
             pub fn new(
@@ -158,18 +158,35 @@ macro_rules! decision_tree {
 
             pub fn cut(
                 _binth: usize,
-                _spfac: f32,
-                _domain: ($(Interval::<$t>,)*),
-                _rules: Vec<$rt<$($t),*>>,
+                spfac: f32,
+                domain: ($(Interval::<$t>,)*),
+                rules: Vec<$rt<$($t),*>>,
             ) -> $int<$($t),*> {
+
+                let (d, partitions) = Self::cut_dimension(&rules, spfac, &domain);
+
+                println!("DOMAIN={}", d);
+                println!("{:#?}", partitions);
+
+                let mut _node = $int::new(d, domain);
+
+                todo!();
+
+            }
+
+            pub fn cut_dimension(
+                _rules: &Vec<$rt<$($t),*>>,
+                _spfac: f32,
+                _domain: &($(Interval::<$t>,)*),
+            ) -> (usize, Vec::<$pt<$($t),*>>) {
                 todo!();
             }
         }
     }
 }
 
-decision_tree!(DecisionTree1, Internal1, Rule1, A,);
-decision_tree!(DecisionTree2, Internal2, Rule2, A, B,);
+decision_tree!(DecisionTree1, Internal1, Rule1, Partition1, A,);
+decision_tree!(DecisionTree2, Internal2, Rule2, Partition2, A, B,);
 
 pub trait MinMax {
     fn min() -> Self;
