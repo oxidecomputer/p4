@@ -63,7 +63,7 @@ pub struct Partition<const K: usize> {
 #[derive(Debug)]
 pub enum Node<const K: usize> {
     Internal(Internal<K>),
-    Leaf(Vec<Rule<K>>),
+    Leaf(Leaf<K>),
 }
 
 impl<const K: usize> Node<K> {
@@ -73,12 +73,15 @@ impl<const K: usize> Node<K> {
             Self::Internal(i) => {
                 format!("{}",i.dump(level))
             }
-            Self::Leaf(ref rules)=> {
+            Self::Leaf(l)=> {
+                format!("{}",l.dump(level))
+                /*
                 let mut s = format!("{}Leaf\n", indent);
                 for r in rules {
                     s += &format!("{}{}{}\n", indent, indent, r.dump());
                 }
                 s
+                */
             }
         }
     }
@@ -104,6 +107,23 @@ impl<const K: usize> Internal<K> {
             }
         }
 
+        s
+    }
+}
+
+#[derive(Debug)]
+pub struct Leaf<const K: usize> {
+    pub range: KeysetRange<K>,
+    pub rules: Vec<Rule<K>>,
+}
+
+impl<const K: usize> Leaf<K> {
+    fn dump(&self, level: usize) -> String {
+        let indent = "  ".repeat(level);
+        let mut s = format!("{}Leaf(range={})\n", indent, self.range.dump());
+        for r in &self.rules {
+            s += &format!("{}{}{}\n", indent, indent, r.dump());
+        }
         s
     }
 }
@@ -162,7 +182,10 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 
         for p in partitions {
             if p.rules.len() <= binth {
-                node.children.push(Node::<K>::Leaf(p.rules));
+                node.children.push(Node::<K>::Leaf(Leaf::<K>{
+                    range: p.range,
+                    rules: p.rules,
+                }));
             } else {
                 node.children.push(Node::<K>::Internal(Self::cut(
                     binth,
