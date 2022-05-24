@@ -20,6 +20,12 @@ impl<const K: usize> Keyset<K> {
 }
 
 impl<const K: usize> Keyset<K> {
+    fn dump(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+impl<const K: usize> Keyset<K> {
     pub const MIN: Self = Self([u8::MIN; K]);
     pub const MAX: Self = Self([u8::MAX; K]);
 }
@@ -30,10 +36,22 @@ pub struct Rule<const K: usize> {
     pub range: KeysetRange<K>
 }
 
+impl<const K: usize> Rule<K> {
+    fn dump(&self) -> String {
+        format!("{}: {}", self.name, self.range.dump())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct KeysetRange<const K: usize> {
     pub begin: Keyset<K>,
     pub end: Keyset<K>,
+}
+
+impl<const K: usize> KeysetRange<K> {
+    fn dump(&self) -> String {
+        format!("begin={} end={}", self.begin.dump(), self.end.dump())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -48,11 +66,46 @@ pub enum Node<const K: usize> {
     Leaf(Vec<Rule<K>>),
 }
 
+impl<const K: usize> Node<K> {
+    fn dump(&self, level: usize) -> String {
+        let indent = "  ".repeat(level);
+        match self {
+            Self::Internal(i) => {
+                format!("{}",i.dump(level))
+            }
+            Self::Leaf(ref rules)=> {
+                let mut s = format!("{}Leaf\n", indent);
+                for r in rules {
+                    s += &format!("{}{}{}\n", indent, indent, r.dump());
+                }
+                s
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Internal<const K: usize> {
     pub range: KeysetRange<K>,
     pub d: usize,
     pub children: Vec<Node<K>>,
+}
+
+impl<const K: usize> Internal<K> {
+    fn dump(&self, level: usize) -> String {
+        let indent = "  ".repeat(level);
+        let mut s =
+            format!("{}Internal(d={} range=({}))\n",
+                indent, self.d, self.range.dump());
+
+        if !self.children.is_empty() {
+            for c in &self.children {
+                s += &format!("{}{}", indent, c.dump(level+1));
+            }
+        }
+
+        s
+    }
 }
 
 #[derive(Debug)]
@@ -329,6 +382,16 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 
 }
 
+impl<const K: usize, const D: usize> DecisionTree<K, D> {
+    fn dump(&self) -> String{
+        let mut s = format!("DecisionTree(binth={}, spfac={} layout={:?})\n",
+            self.binth, self.spfac, self.layout,
+        );
+        s += &format!("{}", self.root.dump(0));
+        s
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Field(Vec<u8>);
 
@@ -519,6 +582,7 @@ mod tests {
         //TODO layout in byes, should be in bits
         let d = DecisionTree::<2, 2>::new(2, 1.5, [1, 1], rules);
         println!("{:#?}", d);
+        println!("{}", d.dump());
     }
 
 }
