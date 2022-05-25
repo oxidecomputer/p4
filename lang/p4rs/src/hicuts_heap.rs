@@ -52,6 +52,28 @@ impl<const K: usize> KeysetRange<K> {
     fn dump(&self) -> String {
         format!("begin={} end={}", self.begin.dump(), self.end.dump())
     }
+
+    fn contains<const D: usize>(
+        &self,
+        key: [u8; K],
+        layout: &[usize; D],
+    ) -> bool {
+        let mut off = 0;
+        for d in layout {
+            //TODO sub-byte values
+            let d_lower = &self.begin.0[off..off+d];
+            let d_upper = &self.end.0[off..off+d];
+            let v = &key[off..off+d];
+            if v < d_lower {
+                return false
+            }
+            if v > d_upper {
+                return false
+            }
+            off += d;
+        }
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,13 +97,6 @@ impl<const K: usize> Node<K> {
             }
             Self::Leaf(l)=> {
                 format!("{}",l.dump(level))
-                /*
-                let mut s = format!("{}Leaf\n", indent);
-                for r in rules {
-                    s += &format!("{}{}{}\n", indent, indent, r.dump());
-                }
-                s
-                */
             }
         }
     }
@@ -95,6 +110,7 @@ pub struct Internal<const K: usize> {
 }
 
 impl<const K: usize> Internal<K> {
+
     fn dump(&self, level: usize) -> String {
         let indent = "  ".repeat(level);
         let mut s =
@@ -108,6 +124,35 @@ impl<const K: usize> Internal<K> {
         }
 
         s
+    }
+
+    pub fn decide<'a, const D: usize>(
+        &'a self,
+        key: [u8; K],
+        layout: &[usize; D]
+    ) -> Option<&'a Rule<K>> {
+
+
+        for c in &self.children {
+            match c {
+                Node::Internal(i) => {
+                    if i.range.contains(key, layout) {
+                        return i.decide(key, layout)
+                    }
+                }
+                Node::Leaf(l) => {
+                    if l.range.contains(key, layout) {
+                        for r in &l.rules {
+                            if r.range.contains(key, layout) {
+                                return Some(&r);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -137,6 +182,15 @@ pub struct DecisionTree<const K: usize, const D: usize> {
 }
 
 impl<const K: usize, const D: usize> DecisionTree<K, D> {
+
+    pub fn decide<'a>(&'a self, key: [u8; K]) -> Option<&'a Rule<K>> {
+        if self.root.range.contains(key, &self.layout) {
+            self.root.decide(key, &self.layout)
+        } else {
+            None
+        }
+    }
+
 
     pub fn new(
         binth: usize,
@@ -343,7 +397,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             return result;
         }
 
-        let psize = &over / &count;
+        let psize = (&over / &count);
 
         let mut partition = Field(vec![0]);
         loop {
@@ -457,6 +511,16 @@ impl std::ops::Div<usize> for &Field {
     fn div(self, other: usize) -> Self::Output {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let c = a / other;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Sub<usize> for Field {
+    type Output = Field;
+
+    fn sub(self, other: usize) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let c = a - other;
         Field(c.to_bytes_be())
     }
 }
@@ -606,6 +670,16 @@ mod tests {
         let d = DecisionTree::<2, 2>::new(2, 1.5, [1, 1], rules);
         println!("{:#?}", d);
         println!("{}", d.dump());
+
+        let r = d.decide([67, 99]);
+        assert_eq!(r.unwrap().name, "r4");
+
+        let r = d.decide([22, 22]);
+        assert_eq!(r.unwrap().name, "r1");
+
+        //TODO this one is broken because of end of range saturation
+        let r = d.decide([66, 222]);
+        assert_eq!(r.unwrap().name, "r3");
     }
 
 }

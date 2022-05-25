@@ -57,7 +57,6 @@ pub struct DecisionTree<const K: usize, const D: usize>
 impl<const K: usize, const D: usize> DecisionTree<K, D> 
     where [u8; bytes!(K)]: Sized,
 {
-
     pub fn new(
         binth: usize,
         spfac: f32,
