@@ -397,13 +397,17 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             return result;
         }
 
-        let psize = (&over / &count);
+        let psize = &over / &count;
 
         let mut partition = Field(vec![0]);
         loop {
 
             let p_begin = &begin + &psize * &partition;
-            let p_end = &p_begin + &psize;
+            let mut p_end = &p_begin + &psize;
+
+            if p_end >= (1 << layout[d]*8) {
+                p_end = Field([0xff;D].to_vec());
+            }
 
             println!("p_begin={:?}, p_end={:?}", p_begin, p_end);
 
@@ -596,10 +600,26 @@ impl std::cmp::PartialEq for Field {
     }
 }
 
+impl std::cmp::PartialEq<usize> for Field {
+    fn eq(&self, other: &usize) -> bool {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.to_be_bytes());
+        a == b
+    }
+}
+
 impl std::cmp::PartialOrd for Field {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        Some(a.cmp(&b))
+    }
+}
+
+impl std::cmp::PartialOrd<usize> for Field {
+    fn partial_cmp(&self, other: &usize) -> Option<std::cmp::Ordering> {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.to_be_bytes());
         Some(a.cmp(&b))
     }
 }
@@ -677,9 +697,20 @@ mod tests {
         let r = d.decide([22, 22]);
         assert_eq!(r.unwrap().name, "r1");
 
-        //TODO this one is broken because of end of range saturation
         let r = d.decide([66, 222]);
         assert_eq!(r.unwrap().name, "r3");
+
+        let r = d.decide([67, 47]);
+        assert_eq!(r.unwrap().name, "r4");
+
+        let r = d.decide([70, 4]);
+        assert_eq!(r.unwrap().name, "r5");
+
+        let r = d.decide([188, 100]);
+        assert_eq!(r.unwrap().name, "r6");
+
+        let r = d.decide([192, 247]);
+        assert_eq!(r.unwrap().name, "r7");
     }
 
 }
