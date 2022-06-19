@@ -20,7 +20,7 @@ parser NpuParser<H>(
 
 control NpuIngress<H>(
     inout H hdr,
-    inout EgressMetadata ingress_meta,
+    inout IngressMetadata ingress_meta,
     inout EgressMetadata egress_meta,
 );
 

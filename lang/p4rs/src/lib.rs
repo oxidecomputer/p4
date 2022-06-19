@@ -1,6 +1,6 @@
 #![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 #![allow(non_camel_case_types)]
+#![feature(generic_const_exprs)]
 
 use std::fmt;
 use std::ptr::slice_from_raw_parts_mut;

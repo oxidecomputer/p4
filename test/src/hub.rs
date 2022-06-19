@@ -4,7 +4,7 @@ use std::thread::{sleep, spawn};
 use std::time::Duration;
 use xfr::{ring, FrameBuffer};
 
-p4_macro::use_p4!("/Users/ry/src/p4/p4/examples/codegen/hub.p4");
+p4_macro::use_p4!("p4/examples/codegen/hub.p4");
 
 ///
 ///                           ~~~~~~~~~~
