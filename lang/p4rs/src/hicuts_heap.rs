@@ -20,7 +20,7 @@ impl<const K: usize> Keyset<K> {
 }
 
 impl<const K: usize> Keyset<K> {
-    fn dump(&self) -> String {
+    pub fn dump(&self) -> String {
         format!("{:?}", self.0)
     }
 }
@@ -37,7 +37,7 @@ pub struct Rule<const K: usize> {
 }
 
 impl<const K: usize> Rule<K> {
-    fn dump(&self) -> String {
+    pub fn dump(&self) -> String {
         format!("{}: {}", self.name, self.range.dump())
     }
 }
@@ -89,8 +89,7 @@ pub enum Node<const K: usize> {
 }
 
 impl<const K: usize> Node<K> {
-    fn dump(&self, level: usize) -> String {
-        let indent = "  ".repeat(level);
+    pub fn dump(&self, level: usize) -> String {
         match self {
             Self::Internal(i) => {
                 format!("{}",i.dump(level))
@@ -111,7 +110,7 @@ pub struct Internal<const K: usize> {
 
 impl<const K: usize> Internal<K> {
 
-    fn dump(&self, level: usize) -> String {
+    pub fn dump(&self, level: usize) -> String {
         let indent = "  ".repeat(level);
         let mut s =
             format!("{}Internal(d={} range=({}))\n",
@@ -163,7 +162,7 @@ pub struct Leaf<const K: usize> {
 }
 
 impl<const K: usize> Leaf<K> {
-    fn dump(&self, level: usize) -> String {
+    pub fn dump(&self, level: usize) -> String {
         let indent = "  ".repeat(level);
         let mut s = format!("{}Leaf(range={})\n", indent, self.range.dump());
         for r in &self.rules {
@@ -464,7 +463,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 }
 
 impl<const K: usize, const D: usize> DecisionTree<K, D> {
-    fn dump(&self) -> String{
+    pub fn dump(&self) -> String{
         let mut s = format!("DecisionTree(binth={}, spfac={} layout={:?})\n",
             self.binth, self.spfac, self.layout,
         );

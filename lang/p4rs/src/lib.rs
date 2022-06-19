@@ -144,11 +144,12 @@ impl<'a> packet_in<'a> {
     // compiler to know that this function returns a result that needs to be
     // interrogated. In fact, the signature for packet_in::extract from the p4
     // standard library requires the return type to be `void`, so this signature
-    // is in direct contradiction to that.
+    // cannot return a result without the compiler having special knowledge of
+    // functions that happen to be called "extract".
     pub fn extract<H: Header<'a>>(
         &mut self,
         h: &mut H,
-    ) -> Result<(), TryFromSliceError> {
+    ) {
         // The crux of the situation here is we have a reference to mutable
         // data, and we (packet_in) do not own that mutable data, so the only
         // way we can give someone else a mutable reference to that data is by
@@ -178,9 +179,14 @@ impl<'a> packet_in<'a> {
                 self.index + n,
             )
         };
-        h.set(shared_mut)?;
+        match h.set(shared_mut) {
+            Ok(_) => { },
+            Err(e) => {
+                //TODO better than this
+                println!("packet extraction failed: {}", e);
+            }
+        }
         self.index += n;
-        Ok(())
         //
         // Maybe a Cell is better here? Can we move a reference with a Cell? I
         // don't want to use a RefCell and take the locking hit. This is a hot

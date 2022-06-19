@@ -7,7 +7,11 @@ use syn::{parse, LitStr};
 
 #[proc_macro]
 pub fn use_p4(item: TokenStream) -> TokenStream {
-    do_use_p4(item).unwrap()
+    //do_use_p4(item).unwrap()
+    match do_use_p4(item) {
+        Err(err) => err.to_compile_error().into(),
+        Ok(out) => out,
+    }
 }
 
 fn do_use_p4(item: TokenStream) -> Result<TokenStream, syn::Error> {
