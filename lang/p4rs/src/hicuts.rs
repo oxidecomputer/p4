@@ -1,257 +1,293 @@
+use slog::{Logger, trace};
+
+/// A keyset is a sequence of fields
+#[derive(Debug, Clone)]
+pub struct Keyset<const K: usize>([u8; K]);
+
+impl<const K: usize> Keyset<K> {
+    fn set<const D: usize>(
+        &mut self,
+        d: usize,
+        layout: &[usize; D],
+        f: &Field
+    ) {
+
+        let mut offset = 0;
+        for width in &layout[..d] {
+            offset += width;
+        }
+        let end = offset + layout[d];
+        self.0[offset..end].copy_from_slice(&f.0.as_slice()[..layout[d]]);
+    }
+}
+
+impl<const K: usize> Keyset<K> {
+    pub fn dump(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+impl<const K: usize> Keyset<K> {
+    pub const MIN: Self = Self([u8::MIN; K]);
+    pub const MAX: Self = Self([u8::MAX; K]);
+}
+
+#[derive(Debug, Clone)]
+pub struct Rule<const K: usize> {
+    pub name: String,
+    pub range: KeysetRange<K>
+}
+
+impl<const K: usize> Rule<K> {
+    pub fn dump(&self) -> String {
+        format!("{}: {}", self.name, self.range.dump())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct KeysetRange<const K: usize> {
+    pub begin: Keyset<K>,
+    pub end: Keyset<K>,
+}
+
+impl<const K: usize> KeysetRange<K> {
+    fn dump(&self) -> String {
+        format!("begin={} end={}", self.begin.dump(), self.end.dump())
+    }
+
+    fn contains<const D: usize>(
+        &self,
+        key: [u8; K],
+        layout: &[usize; D],
+    ) -> bool {
+        let mut off = 0;
+        for d in layout {
+            //TODO sub-byte values
+            let d_lower = &self.begin.0[off..off+d];
+            let d_upper = &self.end.0[off..off+d];
+            let v = &key[off..off+d];
+            if v < d_lower {
+                return false
+            }
+            if v > d_upper {
+                return false
+            }
+            off += d;
+        }
+        true
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Partition<const K: usize> {
+    pub range: KeysetRange<K>,
+    pub rules: Vec<Rule<K>>,
+}
+
 #[derive(Debug)]
-pub struct DecisionTree<const K: usize> {
-    // Tuning parameters
+pub enum Node<const K: usize> {
+    Internal(Internal<K>),
+    Leaf(Leaf<K>),
+}
+
+impl<const K: usize> Node<K> {
+    pub fn dump(&self, level: usize) -> String {
+        match self {
+            Self::Internal(i) => {
+                format!("{}",i.dump(level))
+            }
+            Self::Leaf(l)=> {
+                format!("{}",l.dump(level))
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Internal<const K: usize> {
+    pub range: KeysetRange<K>,
+    pub d: usize,
+    pub children: Vec<Node<K>>,
+}
+
+impl<const K: usize> Internal<K> {
+
+    pub fn dump(&self, level: usize) -> String {
+        let indent = "  ".repeat(level);
+        let mut s =
+            format!("{}Internal(d={} range=({}))\n",
+                indent, self.d, self.range.dump());
+
+        if !self.children.is_empty() {
+            for c in &self.children {
+                s += &format!("{}{}", indent, c.dump(level+1));
+            }
+        }
+
+        s
+    }
+
+    pub fn decide<'a, const D: usize>(
+        &'a self,
+        key: [u8; K],
+        layout: &[usize; D]
+    ) -> Option<&'a Rule<K>> {
+
+
+        for c in &self.children {
+            match c {
+                Node::Internal(i) => {
+                    if i.range.contains(key, layout) {
+                        return i.decide(key, layout)
+                    }
+                }
+                Node::Leaf(l) => {
+                    if l.range.contains(key, layout) {
+                        for r in &l.rules {
+                            if r.range.contains(key, layout) {
+                                return Some(&r);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+}
+
+#[derive(Debug)]
+pub struct Leaf<const K: usize> {
+    pub range: KeysetRange<K>,
+    pub rules: Vec<Rule<K>>,
+}
+
+impl<const K: usize> Leaf<K> {
+    pub fn dump(&self, level: usize) -> String {
+        let indent = "  ".repeat(level);
+        let mut s = format!("{}Leaf(range={})\n", indent, self.range.dump());
+        for r in &self.rules {
+            s += &format!("{}{}{}\n", indent, indent, r.dump());
+        }
+        s
+    }
+}
+
+#[derive(Debug)]
+pub struct DecisionTree<const K: usize, const D: usize> {
     pub binth: usize,
     pub spfac: f32,
-
-    pub domain: [usize; K],
+    pub layout: [usize; D],
     pub root: Internal<K>,
 }
 
-impl<const K: usize> DecisionTree<K> {
-    /// Create a new decision tree that has at most `binth` rules in each leaf
-    /// node. The overall memory requirement for the tree is proportional to the
-    /// `spfac` parameter. The depth of the tree is inversely proportional to
-    /// `binth` and `spfac`. General trends indicate the shorter the tree the
-    /// better the query performance.
-    ///
-    /// The `domain` parameter indicates the size in bits of each domain. For
-    /// example to classify IPv6/UDP packets over the destination address and
-    /// destination port you would use [128, 16].
+impl<const K: usize, const D: usize> DecisionTree<K, D> {
+
+    pub fn decide<'a>(&'a self, key: [u8; K]) -> Option<&'a Rule<K>> {
+        if self.root.range.contains(key, &self.layout) {
+            self.root.decide(key, &self.layout)
+        } else {
+            None
+        }
+    }
+
+
     pub fn new(
         binth: usize,
         spfac: f32,
-        domain: [usize; K],
+        layout: [usize; D],
         rules: Vec<Rule<K>>,
+        log: Logger,
     ) -> Self {
         Self {
             binth,
             spfac,
-            domain,
+            layout,
             root: Self::cut(
                 binth,
                 spfac,
-                domain.map(|x| Interval::new(0, (1 << x)-1)),
+                KeysetRange::<K>{
+                    begin: Keyset::<K>::MIN,
+                    end:   Keyset::<K>::MAX,
+                },
+                &layout,
                 rules,
-            ),
+                &log,
+            )
         }
     }
 
-    fn cut(
+    pub fn cut(
         binth: usize,
         spfac: f32,
-        domain: [Interval; K],
+        range: KeysetRange<K>,
+        layout: &[usize; D],
         rules: Vec<Rule<K>>,
+        log: &Logger,
     ) -> Internal<K> {
-        let (d, partitions) = Self::cut_dimension(&rules, spfac, domain);
 
-        println!("DOMAIN={}", d);
-        println!("{:#?}", partitions);
+        let (d, partitions) = Self::cut_dimension(
+            &rules, spfac, &range, layout, log);
 
-        let mut node = Internal::new(d, domain);
+        trace!(log, "DOMAIN={}", d);
+        trace!(log, "{:#?}", partitions);
+
+        let mut node = Internal::<K>{
+            range,
+            d,
+            children: Vec::new(),
+        };
 
         for p in partitions {
             if p.rules.len() <= binth {
-                node.children.push(Node::<K>::Leaf(p.rules));
+                node.children.push(Node::<K>::Leaf(Leaf::<K>{
+                    range: p.range,
+                    rules: p.rules,
+                }));
             } else {
-                let mut child_domain = domain;
-                child_domain[d] = p.interval;
                 node.children.push(Node::<K>::Internal(Self::cut(
                     binth,
                     spfac,
-                    child_domain,
+                    p.range,
+                    layout,
                     p.rules,
+                    log,
                 )));
             }
         }
 
         node
+
     }
 
-    pub fn insert(&mut self, rule: Rule<K>) {
-        self.root.insert(rule);
-    }
-
-    /// Create the partitions for a given cut. This function will optimize the
-    /// number of partitions to be the maximum possible within the spfac
-    /// heuristic.
-    pub fn partitions(
-        d: usize,
-        spfac: f32,
-        rules: &Vec<Rule<K>>,
-        min: usize,
-        max: usize,
-    ) -> (usize, Vec<Partition<K>>) {
-        // A space measure for a cut at node v (c[v]) is the sum of the number
-        // of rules in each child that would be created by the cut plus the
-        // number of times c partitions v. A cut always partitions v into equal
-        // intervals.
-        //
-        //   sm(c[v]) = sum(num_rules(child[i]) + np(c[v])
-        //
-        // If a partition is created that divides a rule, that means the rule
-        // will be present on both sides of the partition, thus replicating the
-        // rule, making a bigger tree and consuming more memory.
-        //
-        // Chosing a cut that maximizes the inequality
-        //
-        //   sm(c[v]) <= spmf(num_rules(v))
-        //
-        // constrained by
-        //
-        //   1 <= sm(c[v]) <= len(v[d]) - 1
-        //
-        // where v[d] is the length of the interval for dimension d of node v.
-        //
-        // gives us the maximum number of cuts within the tuning parameter
-        // spfac.  Which is defined as
-        //
-        //   spmf(N) = spfac * N
-
-        //
-        // run a binary search on values of np(c[v])
-        //
-
-        let lower = min;
-        let upper = max;
-        let mut x = (upper / 2) + 1;
-        let mut bound = x / 2;
-        let goal = (spfac * rules.len() as f32) as usize;
-        let mut rule_count = 0;
-        let mut partitions = Vec::new();
-        let over = (upper - lower) + 1;
-        loop {
-
-            println!("======================================================");
-            println!("======================================================");
-            println!("");
-            println!("");
-            println!("                      x={:?}", x);
-            println!("");
-            println!("");
-            println!("======================================================");
-            println!("======================================================");
-
-            if bound == 0 {
-                break;
-            }
-
-            partitions = Self::partition(&rules, d, min, x, over);
-
-            rule_count = partitions.iter().map(|x| x.rules.len()).sum();
-
-            println!(
-                "opc: check x={} bound={} goal={} rules={} parts={}",
-                x,
-                bound,
-                goal,
-                rule_count,
-                partitions.len()
-            );
-
-            if rule_count == goal {
-                break;
-            }
-
-            if rule_count > goal {
-                x -= bound;
-                bound /= 2;
-                continue;
-            }
-            if rule_count < goal {
-                x += bound;
-                bound /= 2;
-                continue;
-            }
-        }
-
-        if rule_count > goal {
-            x -= 1;
-            partitions = Self::partition(&rules, d, min, x, upper - lower);
-        }
-
-        (x, partitions)
-    }
-
-    /// Given a set of `rules`, a desired partition `count`, and a space to
-    /// partition `over`, partition the rules in dimension `d`.
-    fn partition(
-        rules: &Vec<Rule<K>>,
-        d: usize,
-        begin: usize,
-        count: usize,
-        over: usize,
-    ) -> Vec<Partition<K>> {
-        let mut result = Vec::new();
-
-        if count == 0 {
-            return result;
-        }
-
-        let psize = over / count;
-
-        for partition in 0..count {
-            //beginning and end of the partition
-            let p_begin = begin + psize * partition;
-            let p_end = p_begin + psize;
-
-            println!("p_begin={}, p_end={}", p_begin, p_end);
-
-            let mut p =
-                Partition::<K>::new(Interval::new(p_begin, p_end), Vec::new());
-
-            for r in rules {
-                // beginning and end of the rule in the given dimension
-                let r_begin = r.intervals[d].begin;
-                let r_end = r.intervals[d].end;
-                println!("  r_begin={}, r_end={}", r_begin, r_end);
-
-                // There are 3 overlap conditions to check
-                //
-                // 1. the beginning of this rule is within the partition
-                // 2. the end of this rule is within the partition
-                // 3. this rule contains the partition
-                let begin = r_begin >= p_begin && r_begin < p_end;
-                let end = r_end >= p_begin && r_end < p_end;
-                let contain = r_begin <= p_begin && r_end >= p_end;
-
-                // add the rule to the partition if there is any overlap
-                if begin | end | contain {
-                    println!("  -> {:?}", r);
-                    p.rules.push(r.clone());
-                }
-            }
-
-            result.push(p);
-        }
-
-        result
-    }
-
-    /// Decide the dimension to cut along. The heuristic employed here is to
-    /// select the dimension whose largest child is the smallest e.g. min-max on
-    /// child cardinality.
     pub fn cut_dimension(
         rules: &Vec<Rule<K>>,
         spfac: f32,
-        domain: [Interval; K],
+        range: &KeysetRange<K>,
+        layout: &[usize; D],
+        log: &Logger,
     ) -> (usize, Vec<Partition<K>>) {
+
         let mut candidates = Vec::new();
 
         for d in 0..K {
-            let (_, partitions) = Self::partitions(
+
+            let partitions = Self::partitions(
                 d,
                 spfac,
                 rules,
-                domain[d].begin,
-                domain[d].end,
+                range,
+                layout,
+                log,
             );
 
             let largest_child =
                 partitions.iter().map(|x| x.rules.len()).max().unwrap_or(0);
 
-            println!("d={} lc={} {:#?}", d, largest_child, partitions);
+            trace!(log, "d={} lc={} {:#?}", d, largest_child, partitions);
             candidates.push((largest_child, partitions));
+
         }
 
         let index = candidates
@@ -262,164 +298,450 @@ impl<const K: usize> DecisionTree<K> {
             .unwrap_or(0);
 
         (index, candidates[index].1.clone())
+
     }
 
-    /// Maximize resuse of child nodes.
-    pub fn max_reuse() {
-        todo!();
-    }
+    pub fn partitions(
+        d: usize,
+        spfac: f32,
+        rules: &Vec<Rule<K>>,
+        range: &KeysetRange<K>,
+        layout: &[usize; D],
+        log: &Logger,
+    ) -> Vec<Partition<K>> {
 
-    /// Eliminate redundancy
-    pub fn eliminate_redundancy() {
-        todo!();
-    }
-}
+        let lower = Self::extract_field(d, layout, &range.begin);
+        let upper = Self::extract_field(d, layout, &range.end);
+        let mut x = (&upper / 2) + 1;
+        let mut bound = &x / 2;
+        let goal = (spfac * rules.len() as f32) as usize;
+        let mut rule_count = 0;
+        let mut partitions = Vec::new();
+        let over = (&upper - &lower) + 1;
 
-#[derive(Debug)]
-pub enum Node<const K: usize> {
-    Internal(Internal<K>),
-    Leaf(Vec<Rule<K>>),
-}
+        loop {
 
-#[derive(Debug)]
-pub struct Internal<const K: usize> {
-    /// The intervals this internal node spans.
-    pub intervals: [Interval; K],
+            trace!(log, "======================================================");
+            trace!(log, "======================================================");
+            trace!(log, "");
+            trace!(log, "");
+            trace!(log, "                      x={:?}", x);
+            trace!(log, "");
+            trace!(log, "");
+            trace!(log, "======================================================");
+            trace!(log, "======================================================");
 
-    /// Cut dimension index
-    pub d: usize,
+            if bound.is_zero() {
+                break;
+            }
 
-    /// Child nodes of this node.
-    pub children: Vec<Node<K>>,
-}
+            partitions = Self::partition(
+                &rules,
+                d,
+                lower.clone(),
+                x.clone(),
+                over.clone(),
+                range,
+                layout,
+                log,
+            );
 
-impl<const K: usize> Internal<K> {
-    pub fn new(d: usize, intervals: [Interval; K]) -> Self {
-        Self {
-            intervals,
-            d,
-            children: Vec::new(),
+            rule_count = partitions.iter().map(|x| x.rules.len()).sum();
+
+            trace!(log,
+                "opc: check x={:?} bound={:?} goal={:?} rules={:?} parts={:?}",
+                x,
+                bound,
+                goal,
+                rule_count,
+                partitions.len()
+            );
+
+
+            if rule_count == goal {
+                break;
+            }
+
+            if rule_count > goal {
+                x = &x - &bound;
+                bound = &bound / 2;
+                continue;
+            }
+            if rule_count < goal {
+                x = &x + &bound;
+                bound = &bound / 2;
+                continue;
+            }
         }
+
+        if rule_count > goal {
+            x = &x - 1;
+            partitions = Self::partition(
+                &rules,
+                d,
+                lower.clone(),
+                x.clone(),
+                over.clone(),
+                range,
+                layout,
+                log,
+            );
+        }
+
+        partitions
+
     }
 
-    pub fn insert(&mut self, _rule: Rule<K>) {
-        todo!();
+    pub fn partition(
+        rules: &Vec<Rule<K>>,
+        d: usize,
+        begin: Field,
+        count: Field,
+        over: Field,
+        range: &KeysetRange<K>,
+        layout: &[usize; D],
+        log: &Logger,
+    ) -> Vec<Partition<K>> {
+
+        let mut result = Vec::new();
+
+        if count.is_zero() {
+            return result;
+        }
+
+        let psize = &over / &count;
+
+        let mut partition = Field(vec![0]);
+        loop {
+
+            let p_begin = &begin + &psize * &partition;
+            let mut p_end = &p_begin + &psize;
+
+            if p_end >= (1 << layout[d]*8) {
+                p_end = Field([0xff;D].to_vec());
+            }
+
+            trace!(log, "p_begin={:?}, p_end={:?}", p_begin, p_end);
+
+            let mut p_range = range.clone();
+            p_range.begin.set(d, layout, &p_begin);
+            p_range.end.set(d, layout, &p_end);
+
+            let mut p = Partition::<K>{
+                range: p_range,
+                rules: Vec::new(),
+            };
+
+            for r in rules {
+                let r_begin = Self::extract_field(d, layout, &r.range.begin);
+                let r_end = Self::extract_field(d, layout, &r.range.end);
+                trace!(log, "  r_begin={:?}, r_end={:?}", r_begin, r_end);
+
+                let begin = r_begin >= p_begin && r_begin < p_end;
+                let end = r_end >= p_begin && r_end < p_end;
+                let contain = r_begin <= p_begin && r_end >= p_end;
+
+                if begin | end | contain {
+                    trace!(log, "  -> {:?}", r);
+                    p.rules.push(r.clone());
+                }
+            }
+
+            partition = &partition + 1;
+            result.push(p);
+
+            if partition >= count {
+                break;
+            }
+
+        }
+
+        result
     }
+
+    pub fn extract_field(
+        d: usize,
+        layout: &[usize; D],
+        keyset: &Keyset<K>,
+    ) -> Field {
+
+        let mut offset = 0;
+        for width in &layout[..d] {
+            offset += width;
+        }
+        let end = offset + layout[d];
+        Field(keyset.0[offset..end].to_owned())
+    }
+
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Interval {
-    pub begin: usize,
-    pub end: usize,
-}
-
-impl Interval {
-    pub fn new(begin: usize, end: usize) -> Self {
-        Self { begin, end }
+impl<const K: usize, const D: usize> DecisionTree<K, D> {
+    pub fn dump(&self) -> String{
+        let mut s = format!("DecisionTree(binth={}, spfac={} layout={:?})\n",
+            self.binth, self.spfac, self.layout,
+        );
+        s += &format!("{}", self.root.dump(0));
+        s
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct Partition<const K: usize> {
-    pub interval: Interval,
-    pub rules: Vec<Rule<K>>,
-}
+pub struct Field(Vec<u8>);
 
-impl<const K: usize> Partition<K> {
-    pub fn new(interval: Interval, rules: Vec<Rule<K>>) -> Self {
-        Self { interval, rules }
-    }
-}
-
-impl Default for Interval {
-    fn default() -> Self {
-        Self { begin: 0, end: 0 }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Rule<const K: usize> {
-    pub name: String,
-    pub intervals: [Interval; K],
-}
-
-impl<const K: usize> Rule<K> {
-    pub fn new(name: &str, intervals: [Interval; K]) -> Self {
-        Self {
-            name: name.into(),
-            intervals,
+impl Field {
+    pub fn is_zero(&self) -> bool {
+        for x in &self.0 {
+            if *x != 0u8 {
+                return false;
+            }
         }
+        return true;
+    }
+}
+
+impl std::ops::Div for &Field {
+    type Output = Field;
+
+    fn div(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a / b;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Mul for &Field {
+    type Output = Field;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a * b;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Div<usize> for &Field {
+    type Output = Field;
+
+    fn div(self, other: usize) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let c = a / other;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Sub<usize> for Field {
+    type Output = Field;
+
+    fn sub(self, other: usize) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let c = a - other;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Sub<usize> for &Field {
+    type Output = Field;
+
+    fn sub(self, other: usize) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let c = a - other;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Sub for &Field {
+    type Output = Field;
+
+    fn sub(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a - b;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Add<usize> for &Field {
+    type Output = Field;
+
+    fn add(self, other: usize) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let c = a + other;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Add<usize> for Field {
+    type Output = Field;
+
+    fn add(self, other: usize) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let c = a + other;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Add for &Field {
+    type Output = Field;
+
+    fn add(self, other: Self) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a + b;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::ops::Add<Field> for &Field {
+    type Output = Field;
+
+    fn add(self, other: Field) -> Self::Output {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let c = a + b;
+        Field(c.to_bytes_be())
+    }
+}
+
+impl std::cmp::PartialEq for Field {
+    fn eq(&self, other: &Self) -> bool {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        a == b
+    }
+}
+
+impl std::cmp::PartialEq<usize> for Field {
+    fn eq(&self, other: &usize) -> bool {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.to_be_bytes());
+        a == b
+    }
+}
+
+impl std::cmp::PartialOrd for Field {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        Some(a.cmp(&b))
+    }
+}
+
+impl std::cmp::PartialOrd<usize> for Field {
+    fn partial_cmp(&self, other: &usize) -> Option<std::cmp::Ordering> {
+        let a = num::bigint::BigUint::from_bytes_be(&self.0);
+        let b = num::bigint::BigUint::from_bytes_be(&other.to_be_bytes());
+        Some(a.cmp(&b))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+    use slog_term;
+    use slog_async;
+    use slog::{info, Drain};
     use super::*;
 
     fn rules_from_paper() -> Vec<Rule<2>> {
         vec![
-            Rule::new("r1", [Interval::new(0, 31), Interval::new(0, 255)]),
-            Rule::new("r2", [Interval::new(0, 255), Interval::new(128, 131)]),
-            Rule::new("r3", [Interval::new(64, 71), Interval::new(128, 255)]),
-            Rule::new("r4", [Interval::new(67, 67), Interval::new(0, 127)]),
-            Rule::new("r5", [Interval::new(64, 71), Interval::new(0, 15)]),
-            Rule::new("r6", [Interval::new(128, 191), Interval::new(4, 131)]),
-            Rule::new("r7", [Interval::new(192, 192), Interval::new(0, 255)]),
+            Rule::<2>{
+                name: "r1".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([0, 0]),
+                    end: Keyset::<2>([31, 255]),
+                },
+            },
+            Rule::<2>{
+                name: "r2".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([0, 128]),
+                    end: Keyset::<2>([255, 131]),
+                },
+            },
+            Rule::<2>{
+                name: "r3".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([64, 128]),
+                    end: Keyset::<2>([71, 255]),
+                },
+            },
+            Rule::<2>{
+                name: "r4".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([67, 0]),
+                    end: Keyset::<2>([67, 127]),
+                },
+            },
+            Rule::<2>{
+                name: "r5".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([64, 0]),
+                    end: Keyset::<2>([71, 15]),
+                },
+            },
+            Rule::<2>{
+                name: "r6".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([128, 4]),
+                    end: Keyset::<2>([191, 131]),
+                },
+            },
+            Rule::<2>{
+                name: "r7".into(),
+                range: KeysetRange::<2>{
+                    begin: Keyset::<2>([192, 0]),
+                    end: Keyset::<2>([192, 255]),
+                },
+            },
         ]
     }
 
-    #[test]
-    fn basic_example_from_paper() {
-        let rules = rules_from_paper();
+    fn test_logger() -> slog::Logger {
 
-        let d = DecisionTree::<2>::new(2, 1.5, [8, 8], rules);
-        println!("{:#?}", d);
+        match env::var("RUST_LOG") {
+            Ok(_) => {}
+            Err(e) => env::set_var("RUST_LOG", "info"),
+        };
 
-        /*
-        for r in rules_from_paper() {
-            d.insert(r);
-        }
-        */
+        let decorator = slog_term::TermDecorator::new().build();
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_envlogger::new(drain).fuse();
+        let log = slog::Logger::root(std::sync::Mutex::new(drain).fuse(), slog::o!());
+        log
     }
 
     #[test]
-    fn partition_rule_count() {
+    fn heap_example_from_paper() {
         let rules = rules_from_paper();
 
-        let partitions = DecisionTree::<2>::partition(&rules, 0, 0, 4, 256);
+        let log = test_logger();
 
-        println!("{:#?}", partitions);
+        //TODO layout in byes, should be in bits
+        let d = DecisionTree::<2, 2>::new(2, 1.5, [1, 1], rules, log.clone());
+        info!(log, "{}", d.dump());
 
-        let partitioned_rule_count: usize =
-            partitions.iter().map(|x| x.rules.len()).sum();
+        let r = d.decide([67, 99]);
+        assert_eq!(r.unwrap().name, "r4");
 
-        assert_eq!(partitioned_rule_count, 10);
+        let r = d.decide([22, 22]);
+        assert_eq!(r.unwrap().name, "r1");
+
+        let r = d.decide([66, 222]);
+        assert_eq!(r.unwrap().name, "r3");
+
+        let r = d.decide([67, 47]);
+        assert_eq!(r.unwrap().name, "r4");
+
+        let r = d.decide([70, 4]);
+        assert_eq!(r.unwrap().name, "r5");
+
+        let r = d.decide([188, 100]);
+        assert_eq!(r.unwrap().name, "r6");
+
+        let r = d.decide([192, 247]);
+        assert_eq!(r.unwrap().name, "r7");
     }
 
-    #[test]
-    fn optimize_partitions() {
-        let rules = rules_from_paper();
-
-        let (optimal_partitions, partitions) =
-            DecisionTree::<2>::partitions(0, 1.5, &rules, 0, 256);
-
-        println!("{:#?}", partitions);
-
-        assert_eq!(optimal_partitions, 4);
-    }
-
-    #[test]
-    fn cut_dimension() {
-        let rules = rules_from_paper();
-
-        let (d, partitions) = DecisionTree::<2>::cut_dimension(
-            &rules,
-            1.5,
-            [Interval::new(0, 256); 2],
-        );
-
-        println!("{:#?}", partitions);
-
-        assert_eq!(d, 0);
-    }
 }
