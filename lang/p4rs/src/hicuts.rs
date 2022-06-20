@@ -38,10 +38,24 @@ pub struct Rule<const K: usize> {
     pub range: KeysetRange<K>
 }
 
+#[derive(Debug, Clone)]
+pub enum Discriminator<const K: usize> {
+    Exact(Keyset<K>),
+    Range(KeysetRange<K>),
+    Ternary(Ternary<K>),
+    Prefix(Keyset<K>),
+}
+
 impl<const K: usize> Rule<K> {
     pub fn dump(&self) -> String {
         format!("{}: {}", self.name, self.range.dump())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Ternary<const K: usize> {
+    pub key: Keyset<K>,
+    pub mask: Keyset<K>,
 }
 
 #[derive(Debug, Clone)]
@@ -166,7 +180,7 @@ pub struct Leaf<const K: usize> {
 impl<const K: usize> Leaf<K> {
     pub fn dump(&self, level: usize) -> String {
         let indent = "  ".repeat(level);
-        let mut s = format!("{}Leaf(range={})\n", indent, self.range.dump());
+        let mut s = format!("{}Leaf(range=({}))\n", indent, self.range.dump());
         for r in &self.rules {
             s += &format!("{}{}{}\n", indent, indent, r.dump());
         }
@@ -192,7 +206,17 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         }
     }
 
-
+    /// Create a new decision tree that has at most `binth` rules in each leaf
+    /// node. The overall memory requirement for the tree is proportional to the
+    /// `spfac` parameter. The depth of the tree is inversely proportional to
+    /// `binth` and `spfac`. General trends indicate the shorter the tree the
+    /// better the query performance.
+    ///
+    /// The `layout` parameter specifies the structure of keys in this tree. For
+    /// example a keyset with 3 elements, starting with a 32-bit ipv4 address, a
+    /// 16 bit port and an 8 bit value would have a layout of [4, 2, 1].
+    ///
+    /// All provided `rules` will be inserted into the tree.
     pub fn new(
         binth: usize,
         spfac: f32,
@@ -218,6 +242,12 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         }
     }
 
+    /// Create a decision tree for the provided rules by recursively cutting the
+    /// rule space along a heuristically selected dimension into a
+    /// space-optimized set of partitions. This results in a tree composed of
+    /// internal nodes that have a variable number of children and leaf nodes
+    /// that have a variable number of rules. The root internal node of the tree
+    /// is returned.
     pub fn cut(
         binth: usize,
         spfac: f32,
@@ -227,25 +257,47 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         log: &Logger,
     ) -> Internal<K> {
 
+        //
+        // start by selecting a dimension to cut along, and creating a set of
+        // partitions within that dimension.
+        //
         let (d, partitions) = Self::cut_dimension(
             &rules, spfac, &range, layout, log);
 
         trace!(log, "DOMAIN={}", d);
         trace!(log, "{:#?}", partitions);
 
+        //
+        // Create a top-level internal node for the tree.
+        //
         let mut node = Internal::<K>{
             range,
             d,
             children: Vec::new(),
         };
 
+        //
+        // Fill in the tree by recursively cutting each internal node created.
+        //
         for p in partitions {
+
+            //
+            // If the number of rules is less than or equal to the tuning
+            // parameter `binth`, then create a leaf node.
+            //
             if p.rules.len() <= binth {
                 node.children.push(Node::<K>::Leaf(Leaf::<K>{
                     range: p.range,
                     rules: p.rules,
                 }));
-            } else {
+            } 
+
+            //
+            // If the number of rules is greater than the tuning parameter
+            // `binth`, then create an internal node and recursively cut that
+            // node.
+            //
+            else {
                 node.children.push(Node::<K>::Internal(Self::cut(
                     binth,
                     spfac,
@@ -255,12 +307,15 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
                     log,
                 )));
             }
+
         }
 
         node
 
     }
 
+    /// Cut a set of rules into a partitioning of rules, choosing a dimension
+    /// to cut over that minimizes the largest partition.
     pub fn cut_dimension(
         rules: &Vec<Rule<K>>,
         spfac: f32,
@@ -271,6 +326,12 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 
         let mut candidates = Vec::new();
 
+        //
+        // determine the partition composition for each dimension, adding the
+        // partitioning along each dimension and the largest child (based on the
+        // number of contained rules) from that partitioning to a list of
+        // candidate dimensions to cut along
+        //
         for d in 0..K {
 
             let partitions = Self::partitions(
@@ -290,6 +351,9 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 
         }
 
+        //
+        // choose the partitioning with the smallest largest child
+        //
         let index = candidates
             .iter()
             .enumerate()
@@ -301,6 +365,9 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 
     }
 
+    /// Partition a set of rules along the given dimension `d`. The number of
+    /// partitions is determined as a function of the number of proivded rules
+    /// and the tuning parameter spfac.
     pub fn partitions(
         d: usize,
         spfac: f32,
@@ -319,6 +386,13 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         let mut partitions = Vec::new();
         let over = (&upper - &lower) + 1;
 
+        // Perform a binary serarch over the number of partitions to create. The
+        // goal is `spfac * rules.len()`. When a rule straddles a partition,
+        // that means the rule is replicated into both partitions. Thus a given
+        // partitioning may replicate some number of rules. The tuning parameter
+        // `spfac` is a control for this replication. The binary search starts
+        // at the midpoint between the maximum possible number of partitions and
+        // the minimum and iterates with the goal rule count as a guide.
         loop {
 
             trace!(log, "======================================================");
@@ -335,6 +409,9 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
                 break;
             }
 
+            //
+            // Create a set of count=x partitions.
+            //
             partitions = Self::partition(
                 &rules,
                 d,
@@ -346,6 +423,9 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
                 log,
             );
 
+            //
+            // Count the number of rules across the partitions.
+            //
             rule_count = partitions.iter().map(|x| x.rules.len()).sum();
 
             trace!(log,
@@ -358,10 +438,16 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             );
 
 
+            //
+            // If we've hit the goal, we're done.
+            //
             if rule_count == goal {
                 break;
             }
 
+            //
+            // Continue binary search.
+            //
             if rule_count > goal {
                 x = &x - &bound;
                 bound = &bound / 2;
@@ -374,6 +460,10 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             }
         }
 
+        //
+        // Handle the case that the binary search leaves us off by one higher
+        // than the goal.
+        //
         if rule_count > goal {
             x = &x - 1;
             partitions = Self::partition(
@@ -392,6 +482,10 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
 
     }
 
+    /// Partition `rules` `count` times over dimension `d` from starting value
+    /// `begin` ending with `begin + over`. The resulting partition inherits the
+    /// provided `d`-dimensional range with the `d`th dimension set to `(begin,
+    /// begin+over)`.
     pub fn partition(
         rules: &Vec<Rule<K>>,
         d: usize,
@@ -409,44 +503,86 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             return result;
         }
 
+        //
+        // The number of partitions to create.
+        //
         let psize = &over / &count;
 
+        //
+        // A counter to keep track of what partition we are creating during the
+        // loop.
+        //
         let mut partition = Field(vec![0]);
+
+        //
+        // Partition the space, adding the appropriate rules to each partition.
+        // Stop once `count` partitions have been created.
+        //
         loop {
 
+            //
+            // Calculate partition boundaries for this iteration.
+            //
             let p_begin = &begin + &psize * &partition;
             let mut p_end = &p_begin + &psize;
 
+            //
+            // If the end of the field exceeds the maximum value that field can
+            // hold based on it's layout size, set it to the maximum value, e.g.
+            // saturating add.
+            //
             if p_end >= (1 << layout[d]*8) {
                 p_end = Field([0xff;D].to_vec());
             }
 
             trace!(log, "p_begin={:?}, p_end={:?}", p_begin, p_end);
 
+            //
+            // Create a range for this partition based on the overarching range
+            // passed into this function. Set the beginning and ending values
+            // for the dimension of interest `d` to the partition's beginning
+            // and ending values.
+            //
             let mut p_range = range.clone();
             p_range.begin.set(d, layout, &p_begin);
             p_range.end.set(d, layout, &p_end);
-
             let mut p = Partition::<K>{
                 range: p_range,
                 rules: Vec::new(),
             };
 
+            //
+            // Iterate over the rules, determining which ones intersect with
+            // this partition, creating clones for those rules and placing them
+            // in the partition.
+            //
             for r in rules {
+
+                //
+                // Extract the beginning and ending value for this rule along
+                // the dimension of interest.
+                //
                 let r_begin = Self::extract_field(d, layout, &r.range.begin);
                 let r_end = Self::extract_field(d, layout, &r.range.end);
                 trace!(log, "  r_begin={:?}, r_end={:?}", r_begin, r_end);
 
+                //
+                // Determine if the rule intersects with this partition along
+                // the dimension of interest.
+                //
                 let begin = r_begin >= p_begin && r_begin < p_end;
                 let end = r_end >= p_begin && r_end < p_end;
                 let contain = r_begin <= p_begin && r_end >= p_end;
-
                 if begin | end | contain {
                     trace!(log, "  -> {:?}", r);
                     p.rules.push(r.clone());
                 }
             }
 
+            //
+            // Increment the partition counter and add the partition we just
+            // created to the final result.
+            //
             partition = &partition + 1;
             result.push(p);
 
@@ -459,6 +595,8 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         result
     }
 
+    /// Given a dimension `d`, `layout` with `D` dimensions, and a `keyset`,
+    /// extracth the `d`-th dimension from the keyset.
     pub fn extract_field(
         d: usize,
         layout: &[usize; D],
@@ -640,7 +778,6 @@ impl std::cmp::PartialOrd<usize> for Field {
 mod tests {
     use std::env;
     use slog_term;
-    use slog_async;
     use slog::{info, Drain};
     use super::*;
 
@@ -702,7 +839,7 @@ mod tests {
 
         match env::var("RUST_LOG") {
             Ok(_) => {}
-            Err(e) => env::set_var("RUST_LOG", "info"),
+            Err(_) => env::set_var("RUST_LOG", "info"),
         };
 
         let decorator = slog_term::TermDecorator::new().build();
@@ -742,6 +879,21 @@ mod tests {
 
         let r = d.decide([192, 247]);
         assert_eq!(r.unwrap().name, "r7");
+    }
+
+    #[test]
+    fn lpm_ipv6() {
+
+        let _rules = vec![
+            // A /24 routing rule
+            Rule::<3>{
+                name: "/24".into(),
+                range: KeysetRange::<3>{
+                    begin: Keyset::<3>([0xfd, 0x00, 0x47]),
+                    end: Keyset::<3>([0xfd, 0x00, 0x47]),
+                }
+            },
+        ];
     }
 
 }
