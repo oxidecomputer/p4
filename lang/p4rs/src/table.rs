@@ -53,15 +53,15 @@ impl<const D: usize> Table<D> {
                 result.push(entry.clone());
             }
         }
-        sort_entries(&mut result);
-        result
+        let sorted = sort_entries(result);
+        sorted 
     }
 }
 
-pub fn sort_entries<const D: usize>(entries: &mut Vec<TableEntry<D>>) {
+pub fn sort_entries<const D: usize>(mut entries: Vec<TableEntry<D>>) -> Vec<TableEntry<D>> {
 
     if entries.is_empty() {
-        return;
+        return entries;
     }
 
     // First determine how to sort. All the entries have the same keyset
@@ -81,27 +81,56 @@ pub fn sort_entries<const D: usize>(entries: &mut Vec<TableEntry<D>>) {
     for (i, k) in entries[0].key.iter().enumerate() {
         match k {
             Key::Lpm(_) => {
-                return sort_entries_by_lpm(i, entries);
+                let mut entries = prune_entries_by_lpm(i, &entries);
+                sort_entries_by_priority(&mut entries);
+                return entries;
             }
             _ => continue,
         }
     }
 
-    sort_entries_by_priority(entries);
+    sort_entries_by_priority(&mut entries);
+    entries
 
 
 }
 
-pub fn sort_entries_by_lpm<const D: usize>(d: usize, entries: &mut Vec<TableEntry<D>>) {
+// TODO - the data structures here are quite dumb. The point of this table
+// implemntation is not efficiency, it's a simple bruteish apprach that is easy
+// to move around until we nail down the, tbh, rather undefined (in terms of p4
+// spec)semantics of what the relative priorities between match types in a
+// common keyset are.
+pub fn prune_entries_by_lpm<const D: usize>(
+    d: usize,
+    entries: &Vec<TableEntry<D>>,
+) -> Vec<TableEntry<D>> {
 
-    entries.sort_by(|a, b| -> std::cmp::Ordering {
-        match (&a.key[d], &b.key[d]) {
-            (Key::Lpm(x), Key::Lpm(y)) => {
-                y.len.cmp(&x.len)
+    let mut longest_prefix = 0u8;
+
+    for e in entries {
+        match &e.key[d] {
+            Key::Lpm(x) => {
+                if x.len > longest_prefix {
+                    longest_prefix = x.len
+                }
             }
-            _ => std::cmp::Ordering::Equal,
+            _ => {}
         }
-    });
+    }
+
+    let mut result = Vec::new();
+    for e in entries {
+        match &e.key[d] {
+            Key::Lpm(x) => {
+                if x.len == longest_prefix {
+                    result.push(e.clone())
+                }
+            }
+            _ => {}
+        }
+    }
+
+    result
 
 }
 
@@ -367,13 +396,56 @@ mod tests {
         let selector = [BigUint::from(u128::from_be_bytes(addr.octets()))];
         let matches = table.match_selector(&selector);
         //println!("{:#?}", matches);
-        assert_eq!(matches.len(), 4);
+        assert_eq!(matches.len(), 1); // only one longest prefix match
         assert!(contains_entry(&matches, "a14"));
-        assert!(contains_entry(&matches, "a6"));
-        assert!(contains_entry(&matches, "a2"));
-        assert!(contains_entry(&matches, "a0"));
         // longest prefix first
         assert_eq!(matches[0].name.as_str(), "a14");
+
+    }
+
+    fn tlpm(
+        name: &str,
+        addr: &str,
+        len: u8,
+        zone: Ternary,
+        priority: u32,
+    ) -> TableEntry::<2> {
+        TableEntry::<2>{
+            key: [
+                Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }),
+                Key::Ternary(zone),
+            ],
+            priority,
+            name: name.into(),
+        }
+    }
+
+    #[test]
+    fn match_lpm_ternary_1() {
+
+        let table = Table::<2>{
+            entries: HashSet::from([
+                 tlpm("a0", "fd00:1::", 64, Ternary::DontCare, 1),
+                 tlpm("a1", "fd00:1::", 64, Ternary::Value(1u16.into()), 10),
+                 tlpm("a2", "fd00:1::", 64, Ternary::Value(2u16.into()), 10),
+                 tlpm("a3", "fd00:1::", 64, Ternary::Value(3u16.into()), 10),
+            ])
+        };
+
+        let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
+        let selector = [
+            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(0u16),
+        ];
+        let matches = table.match_selector(&selector);
+        println!("zone-0: {:#?}", matches);
+        let selector = [
+            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(2u16),
+        ];
+        let matches = table.match_selector(&selector);
+        println!("zone-2: {:#?}", matches);
+
 
     }
 

@@ -1,0 +1,4 @@
+[package]
+name = "x4c_error_codes"
+version = "0.1.0"
+edition = "2021"

@@ -3,6 +3,7 @@
 members = [
     "p4",
     "x4c",
+    "x4c_error_codes",
     "codegen/rust",
     "lang/p4rs",
     "lang/p4-macro",

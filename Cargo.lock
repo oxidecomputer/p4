@@ -694,6 +694,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "x4c_error_codes"
+version = "0.1.0"
+
+[[package]]
 name = "xfr"
 version = "0.1.0"
 source = "git+https://github.com/oxidecomputer/xfr#3fc6292a691150b8bacc3fd0dbcbcc3bb62497d7"
