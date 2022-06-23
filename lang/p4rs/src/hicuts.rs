@@ -1,4 +1,6 @@
-use slog::{Logger, trace};
+use slog::{Logger, trace, debug, warn};
+use num::bigint::BigUint;
+use num::Zero;
 
 /// A keyset is a sequence of fields
 #[derive(Debug, Clone)]
@@ -8,22 +10,30 @@ impl<const K: usize> Keyset<K> {
     fn set<const D: usize>(
         &mut self,
         d: usize,
-        layout: &[usize; D],
-        f: &Field
+        layout: &[Layout; D],
+        value: &BigUint,
     ) {
 
         let mut offset = 0;
-        for width in &layout[..d] {
-            offset += width;
+        for l in &layout[..d] {
+            offset += l.width;
         }
-        let end = offset + layout[d];
-        self.0[offset..end].copy_from_slice(&f.0.as_slice()[..layout[d]]);
+        let end = offset + layout[d].width;
+        let mut bytes = value.to_bytes_be();
+        assert!(bytes.len() <= layout[d].width);
+
+        bytes.resize(layout[d].width, 0u8);
+
+        self.0[offset..end].copy_from_slice(&bytes.as_slice()[..layout[d].width]);
     }
 }
 
 impl<const K: usize> Keyset<K> {
+    pub const FULL: Self = Self([0;K]);
+
     pub fn dump(&self) -> String {
-        format!("{:?}", self.0)
+        let x = BigUint::from_bytes_be(&self.0.as_slice());
+        format!("{:x}", x)
     }
 }
 
@@ -32,18 +42,18 @@ impl<const K: usize> Keyset<K> {
     pub const MAX: Self = Self([u8::MAX; K]);
 }
 
+/// A Rule determines how a packet is processed. The `range` of a rule
+/// determines what packets match a rule. How the `range` is interpreted depends
+/// on the layout of the decision tree. See [`MatchKind`] for more info on
+/// matching semantics.
+///
+/// A keyset range is two dense sets of values that are designed to be cache
+/// line optimized.
 #[derive(Debug, Clone)]
 pub struct Rule<const K: usize> {
     pub name: String,
-    pub range: KeysetRange<K>
-}
-
-#[derive(Debug, Clone)]
-pub enum Discriminator<const K: usize> {
-    Exact(Keyset<K>),
-    Range(KeysetRange<K>),
-    Ternary(Ternary<K>),
-    Prefix(Keyset<K>),
+    pub range: KeysetRange<K>,
+    pub mask: RuleMask<K>,
 }
 
 impl<const K: usize> Rule<K> {
@@ -52,10 +62,12 @@ impl<const K: usize> Rule<K> {
     }
 }
 
+
 #[derive(Debug, Clone)]
-pub struct Ternary<const K: usize> {
-    pub key: Keyset<K>,
-    pub mask: Keyset<K>,
+pub enum RuleMask<const K: usize> {
+    None,
+    Ternary(KeysetRange<K>),
+    Prefix(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -72,10 +84,11 @@ impl<const K: usize> KeysetRange<K> {
     fn contains<const D: usize>(
         &self,
         key: [u8; K],
-        layout: &[usize; D],
+        layout: &[Layout; D],
     ) -> bool {
         let mut off = 0;
-        for d in layout {
+        for l in layout {
+            let d = l.width;
             //TODO sub-byte values
             let d_lower = &self.begin.0[off..off+d];
             let d_upper = &self.end.0[off..off+d];
@@ -90,6 +103,35 @@ impl<const K: usize> KeysetRange<K> {
         }
         true
     }
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub struct Layout {
+    match_kind: MatchKind,
+    width: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum MatchKind {
+    /// Indicates the field requires an exact match. The `begin` element of the
+    /// range is matched against the packet field.
+    Exact,
+
+    /// Indicates a range of fields are acceptable. The packet field is tested
+    /// to see if it falls within the `begin` and `end` elements of the range.
+    Range,
+
+    /// Indicates the field requires a ternary for the provided mask. The packet
+    /// field is masked by the `end` element of the range and then tested
+    /// against the `begin` element of the range.
+    Ternary,
+
+    /// Indicates the field requres a prefix match for the specified number of
+    /// bits. The size N of the prefix is the `end` element of the range and the
+    /// the first N bits of the packet field are matched against the first N
+    /// bits of the `begin` element.
+    Prefix,
 }
 
 #[derive(Debug, Clone)]
@@ -144,7 +186,7 @@ impl<const K: usize> Internal<K> {
     pub fn decide<'a, const D: usize>(
         &'a self,
         key: [u8; K],
-        layout: &[usize; D]
+        layout: &[Layout; D]
     ) -> Option<&'a Rule<K>> {
 
 
@@ -177,7 +219,41 @@ pub struct Leaf<const K: usize> {
     pub rules: Vec<Rule<K>>,
 }
 
+
 impl<const K: usize> Leaf<K> {
+    pub fn new(range: KeysetRange<K>, mut rules: Vec<Rule<K>>) -> Self {
+
+        rules.sort_by(|a, b| -> std::cmp::Ordering {
+            match a.mask {
+                RuleMask::<K>::None | RuleMask::<K>::Ternary(_) => {
+                    match b.mask {
+                        RuleMask::<K>::None | RuleMask::<K>::Ternary(_) => {
+                            // in the case neither is a prefix, dont care
+                            std::cmp::Ordering::Equal
+                        }
+                        RuleMask::<K>::Prefix(b_prefix) => {
+                            // if b is a prefix but not a, b goes first
+                            std::cmp::Ordering::Greater
+                        }
+                    }
+                }
+                RuleMask::<K>::Prefix(a_prefix) => {
+                    match b.mask {
+                        RuleMask::<K>::None | RuleMask::<K>::Ternary(_) => {
+                            // if a is a prefix but not b, a goes first
+                            std::cmp::Ordering::Less
+                        }
+                        RuleMask::<K>::Prefix(b_prefix) => {
+                            b_prefix.cmp(&a_prefix) // descending sort
+                        }
+                    }
+                }
+            }
+        });
+
+        Self{ range, rules }
+    }
+
     pub fn dump(&self, level: usize) -> String {
         let indent = "  ".repeat(level);
         let mut s = format!("{}Leaf(range=({}))\n", indent, self.range.dump());
@@ -192,7 +268,7 @@ impl<const K: usize> Leaf<K> {
 pub struct DecisionTree<const K: usize, const D: usize> {
     pub binth: usize,
     pub spfac: f32,
-    pub layout: [usize; D],
+    pub layout: [Layout; D],
     pub root: Internal<K>,
 }
 
@@ -212,6 +288,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
     /// `binth` and `spfac`. General trends indicate the shorter the tree the
     /// better the query performance.
     ///
+    /// TODO: update this comment on layout
     /// The `layout` parameter specifies the structure of keys in this tree. For
     /// example a keyset with 3 elements, starting with a 32-bit ipv4 address, a
     /// 16 bit port and an 8 bit value would have a layout of [4, 2, 1].
@@ -220,7 +297,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
     pub fn new(
         binth: usize,
         spfac: f32,
-        layout: [usize; D],
+        layout: [Layout; D],
         rules: Vec<Rule<K>>,
         log: Logger,
     ) -> Self {
@@ -231,6 +308,13 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             root: Self::cut(
                 binth,
                 spfac,
+                // TODO: maybehapps instead of just using MIN, MAX, the match
+                // type of the layout in each dimension could be used to more
+                // tightly bound the possible values? For example a 128 bit key
+                // that matches against IPv6 addresses, but employs the prefix
+                // match type over only the first 24 bits of the address has an
+                // effective upper bound of 0xffffff << 24 as opposed to (1 <<
+                // 128) - 1 which is way larger.
                 KeysetRange::<K>{
                     begin: Keyset::<K>::MIN,
                     end:   Keyset::<K>::MAX,
@@ -252,7 +336,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         binth: usize,
         spfac: f32,
         range: KeysetRange<K>,
-        layout: &[usize; D],
+        layout: &[Layout; D],
         rules: Vec<Rule<K>>,
         log: &Logger,
     ) -> Internal<K> {
@@ -265,7 +349,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             &rules, spfac, &range, layout, log);
 
         trace!(log, "DOMAIN={}", d);
-        trace!(log, "{:#?}", partitions);
+        //trace!(log, "{:#?}", partitions);
 
         //
         // Create a top-level internal node for the tree.
@@ -286,10 +370,10 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             // parameter `binth`, then create a leaf node.
             //
             if p.rules.len() <= binth {
-                node.children.push(Node::<K>::Leaf(Leaf::<K>{
-                    range: p.range,
-                    rules: p.rules,
-                }));
+                node.children.push(Node::<K>::Leaf(Leaf::<K>::new(
+                    p.range,
+                    p.rules,
+                )));
             } 
 
             //
@@ -320,7 +404,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         rules: &Vec<Rule<K>>,
         spfac: f32,
         range: &KeysetRange<K>,
-        layout: &[usize; D],
+        layout: &[Layout; D],
         log: &Logger,
     ) -> (usize, Vec<Partition<K>>) {
 
@@ -332,7 +416,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         // number of contained rules) from that partitioning to a list of
         // candidate dimensions to cut along
         //
-        for d in 0..K {
+        for d in 0..D {
 
             let partitions = Self::partitions(
                 d,
@@ -346,7 +430,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             let largest_child =
                 partitions.iter().map(|x| x.rules.len()).max().unwrap_or(0);
 
-            trace!(log, "d={} lc={} {:#?}", d, largest_child, partitions);
+            trace!(log, "d={} lc={}", d, largest_child);
             candidates.push((largest_child, partitions));
 
         }
@@ -373,18 +457,28 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         spfac: f32,
         rules: &Vec<Rule<K>>,
         range: &KeysetRange<K>,
-        layout: &[usize; D],
+        layout: &[Layout; D],
         log: &Logger,
     ) -> Vec<Partition<K>> {
 
-        let lower = Self::extract_field(d, layout, &range.begin);
-        let upper = Self::extract_field(d, layout, &range.end);
-        let mut x = (&upper / 2) + 1;
-        let mut bound = &x / 2;
+        /*
+        let lower = Self::extract_field(d, layout, &range.begin).as_big_uint();
+        let mut upper = Self::extract_field(d, layout, &range.end).as_big_uint();
+        */
+
+        let lower = Self::min_d(d, layout, rules).as_big_uint();
+        let mut upper = Self::max_d(d, layout, rules).as_big_uint();
+       
+
+        //let mut x: BigUint = (&upper / BigUint::from(2u8)) + BigUint::from(1u8);
+        let mut x = BigUint::from(rules.len()/2);
+        let mut bound: BigUint = &x / BigUint::from(2u8);
         let goal = (spfac * rules.len() as f32) as usize;
         let mut rule_count = 0;
         let mut partitions = Vec::new();
-        let over = (&upper - &lower) + 1;
+        let over: BigUint = (&upper - &lower) + BigUint::from(1u8);
+
+        trace!(log, "lower=0x{:x} upper=0x{:x}", lower, upper);
 
         // Perform a binary serarch over the number of partitions to create. The
         // goal is `spfac * rules.len()`. When a rule straddles a partition,
@@ -399,7 +493,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             trace!(log, "======================================================");
             trace!(log, "");
             trace!(log, "");
-            trace!(log, "                      x={:?}", x);
+            trace!(log, "                      x=0x{:x}", x);
             trace!(log, "");
             trace!(log, "");
             trace!(log, "======================================================");
@@ -442,6 +536,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             // If we've hit the goal, we're done.
             //
             if rule_count == goal {
+                warn!(log, "DONE!!!");
                 break;
             }
 
@@ -450,12 +545,12 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             //
             if rule_count > goal {
                 x = &x - &bound;
-                bound = &bound / 2;
+                bound = &bound / BigUint::from(2u8);
                 continue;
             }
             if rule_count < goal {
                 x = &x + &bound;
-                bound = &bound / 2;
+                bound = &bound / BigUint::from(2u8);
                 continue;
             }
         }
@@ -465,7 +560,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         // than the goal.
         //
         if rule_count > goal {
-            x = &x - 1;
+            x = &x - BigUint::from(1u8);
             partitions = Self::partition(
                 &rules,
                 d,
@@ -489,11 +584,11 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
     pub fn partition(
         rules: &Vec<Rule<K>>,
         d: usize,
-        begin: Field,
-        count: Field,
-        over: Field,
+        begin: BigUint,
+        count: BigUint,
+        over: BigUint,
         range: &KeysetRange<K>,
-        layout: &[usize; D],
+        layout: &[Layout; D],
         log: &Logger,
     ) -> Vec<Partition<K>> {
 
@@ -504,15 +599,17 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
         }
 
         //
-        // The number of partitions to create.
+        // The size of the partitions to create.
         //
         let psize = &over / &count;
+
+        trace!(log, "p_size=0x{:x}, over=0x{:x} count=0x{:x}", psize, over, count);
 
         //
         // A counter to keep track of what partition we are creating during the
         // loop.
         //
-        let mut partition = Field(vec![0]);
+        let mut partition = BigUint::from(0u8);
 
         //
         // Partition the space, adding the appropriate rules to each partition.
@@ -531,11 +628,13 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             // hold based on it's layout size, set it to the maximum value, e.g.
             // saturating add.
             //
-            if p_end >= (1 << layout[d]*8) {
-                p_end = Field([0xff;D].to_vec());
+            //if p_end >= (1 << layout[d].width*8) {
+            let max = BigUint::from_bytes_be(&vec![0xffu8;layout[d].width].as_slice());
+            if p_end > max {
+                p_end = max.clone();
             }
 
-            trace!(log, "p_begin={:?}, p_end={:?}", p_begin, p_end);
+            trace!(log, "p_begin=0x{:x}, p_end=0x{:x}", p_begin, p_end);
 
             //
             // Create a range for this partition based on the overarching range
@@ -543,6 +642,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             // for the dimension of interest `d` to the partition's beginning
             // and ending values.
             //
+            
             let mut p_range = range.clone();
             p_range.begin.set(d, layout, &p_begin);
             p_range.end.set(d, layout, &p_end);
@@ -562,9 +662,9 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
                 // Extract the beginning and ending value for this rule along
                 // the dimension of interest.
                 //
-                let r_begin = Self::extract_field(d, layout, &r.range.begin);
-                let r_end = Self::extract_field(d, layout, &r.range.end);
-                trace!(log, "  r_begin={:?}, r_end={:?}", r_begin, r_end);
+                let r_begin = Self::extract_field(d, layout, &r.range.begin).as_big_uint();
+                let r_end = Self::extract_field(d, layout, &r.range.end).as_big_uint();
+                trace!(log, "  r_begin=0x{:x}, r_end=0x{:x}", r_begin, r_end);
 
                 //
                 // Determine if the rule intersects with this partition along
@@ -583,7 +683,7 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
             // Increment the partition counter and add the partition we just
             // created to the final result.
             //
-            partition = &partition + 1;
+            partition = &partition + BigUint::from(1u8);
             result.push(p);
 
             if partition >= count {
@@ -599,18 +699,53 @@ impl<const K: usize, const D: usize> DecisionTree<K, D> {
     /// extracth the `d`-th dimension from the keyset.
     pub fn extract_field(
         d: usize,
-        layout: &[usize; D],
+        layout: &[Layout; D],
         keyset: &Keyset<K>,
     ) -> Field {
 
         let mut offset = 0;
-        for width in &layout[..d] {
-            offset += width;
+        for l in &layout[..d] {
+            offset += l.width;
         }
-        let end = offset + layout[d];
+        let end = offset + layout[d].width;
         Field(keyset.0[offset..end].to_owned())
     }
 
+    /// minimum field value for dimension d among a set of rules.
+    pub fn min_d(
+        d: usize,
+        layout: &[Layout; D],
+        rules: &[Rule::<K>],
+    ) -> Field {
+        let mut min = Field(vec![0xffu8;K]);
+
+        for r in rules {
+            let f = Self::extract_field(d, layout, &r.range.begin);
+            if &f < &min {
+                min = f
+            }
+        }
+
+        min
+    }
+
+    /// maximum field value for dimension d among a set of rules.
+    pub fn max_d(
+        d: usize,
+        layout: &[Layout; D],
+        rules: &[Rule::<K>],
+    ) -> Field {
+        let mut max = Field(vec![0u8;K]);
+
+        for r in rules {
+            let f = Self::extract_field(d, layout, &r.range.end);
+            if &f > &max {
+                max = f
+            }
+        }
+
+        max
+    }
 }
 
 impl<const K: usize, const D: usize> DecisionTree<K, D> {
@@ -635,16 +770,24 @@ impl Field {
         }
         return true;
     }
+
+    pub fn as_big_uint(&self) -> num::bigint::BigUint {
+        num::bigint::BigUint::from_bytes_be(&self.0)
+    }
+
 }
+
 
 impl std::ops::Div for &Field {
     type Output = Field;
 
     fn div(self, other: Self) -> Self::Output {
-        let a = num::bigint::BigUint::from_bytes_be(&self.0);
-        let b = num::bigint::BigUint::from_bytes_be(&other.0);
+        let a = BigUint::from_bytes_be(&self.0);
+        let b = BigUint::from_bytes_be(&other.0);
         let c = a / b;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -655,7 +798,9 @@ impl std::ops::Mul for &Field {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a * b;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -665,7 +810,9 @@ impl std::ops::Div<usize> for &Field {
     fn div(self, other: usize) -> Self::Output {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let c = a / other;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -706,7 +853,9 @@ impl std::ops::Add<usize> for &Field {
     fn add(self, other: usize) -> Self::Output {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let c = a + other;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -716,7 +865,9 @@ impl std::ops::Add<usize> for Field {
     fn add(self, other: usize) -> Self::Output {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let c = a + other;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -727,7 +878,9 @@ impl std::ops::Add for &Field {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a + b;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -738,7 +891,9 @@ impl std::ops::Add<Field> for &Field {
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a + b;
-        Field(c.to_bytes_be())
+        let mut bytes = c.to_bytes_be();
+        bytes.resize(self.0.len(), 0);
+        Field(bytes)
     }
 }
 
@@ -789,6 +944,7 @@ mod tests {
                     begin: Keyset::<2>([0, 0]),
                     end: Keyset::<2>([31, 255]),
                 },
+                mask: RuleMask::None,
             },
             Rule::<2>{
                 name: "r2".into(),
@@ -796,6 +952,7 @@ mod tests {
                     begin: Keyset::<2>([0, 128]),
                     end: Keyset::<2>([255, 131]),
                 },
+                mask: RuleMask::None,
             },
             Rule::<2>{
                 name: "r3".into(),
@@ -803,6 +960,7 @@ mod tests {
                     begin: Keyset::<2>([64, 128]),
                     end: Keyset::<2>([71, 255]),
                 },
+                mask: RuleMask::None,
             },
             Rule::<2>{
                 name: "r4".into(),
@@ -810,6 +968,7 @@ mod tests {
                     begin: Keyset::<2>([67, 0]),
                     end: Keyset::<2>([67, 127]),
                 },
+                mask: RuleMask::None,
             },
             Rule::<2>{
                 name: "r5".into(),
@@ -817,6 +976,7 @@ mod tests {
                     begin: Keyset::<2>([64, 0]),
                     end: Keyset::<2>([71, 15]),
                 },
+                mask: RuleMask::None,
             },
             Rule::<2>{
                 name: "r6".into(),
@@ -824,6 +984,7 @@ mod tests {
                     begin: Keyset::<2>([128, 4]),
                     end: Keyset::<2>([191, 131]),
                 },
+                mask: RuleMask::None,
             },
             Rule::<2>{
                 name: "r7".into(),
@@ -831,6 +992,7 @@ mod tests {
                     begin: Keyset::<2>([192, 0]),
                     end: Keyset::<2>([192, 255]),
                 },
+                mask: RuleMask::None,
             },
         ]
     }
@@ -856,7 +1018,16 @@ mod tests {
         let log = test_logger();
 
         //TODO layout in byes, should be in bits
-        let d = DecisionTree::<2, 2>::new(2, 1.5, [1, 1], rules, log.clone());
+        let d = DecisionTree::<2, 2>::new(
+            2, 
+            1.5,
+            [
+                Layout{ match_kind: MatchKind::Range, width: 1},
+                Layout{ match_kind: MatchKind::Range, width: 1},
+            ],
+            rules,
+            log.clone()
+        );
         info!(log, "{}", d.dump());
 
         let r = d.decide([67, 99]);
@@ -884,16 +1055,100 @@ mod tests {
     #[test]
     fn lpm_ipv6() {
 
-        let _rules = vec![
+        let log = test_logger();
+
+        let rules = vec![
             // A /24 routing rule
-            Rule::<3>{
-                name: "/24".into(),
-                range: KeysetRange::<3>{
-                    begin: Keyset::<3>([0xfd, 0x00, 0x47]),
-                    end: Keyset::<3>([0xfd, 0x00, 0x47]),
-                }
+            Rule::<16>{
+                name: "fd00::47/24".into(),
+                range: KeysetRange::<16>{
+                    begin: Keyset::<16>([0xfd, 0x00, 0x47,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+                    end:   Keyset::<16>([
+                        0xfd, 0x00, 0x47,0xff,
+                        0xff, 0xff, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff
+                    ]),
+                },
+                mask: RuleMask::Prefix(24),
+            },
+            // A /32 routing rule
+            Rule::<16>{
+                name: "fd00::4700/32".into(),
+                range: KeysetRange::<16>{
+                    begin: Keyset::<16>([0xfd, 0x00, 0x47,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+                    end:   Keyset::<16>([
+                        0xfd, 0x00, 0x47,0x00,
+                        0xff, 0xff, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff
+                    ]),
+                },
+                mask: RuleMask::Prefix(32),
+            },
+            // A /48 routing rule
+            Rule::<16>{
+                name: "fd00::4700:0000/48".into(),
+                range: KeysetRange::<16>{
+                    begin: Keyset::<16>([0xfd, 0x00, 0x47,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+                    end:   Keyset::<16>([
+                        0xfd, 0x00, 0x47,0x00,
+                        0x00, 0x00, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff
+                    ]),
+                },
+                mask: RuleMask::Prefix(48),
+            },
+            // A /64 routing rule
+            Rule::<16>{
+                name: "fd00::4700:0000:0000/64".into(),
+                range: KeysetRange::<16>{
+                    begin: Keyset::<16>([0xfd, 0x00, 0x47,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+                    end:   Keyset::<16>([
+                        0xfd, 0x00, 0x47,0x00,
+                        0x00, 0x00, 0x00,0x00,
+                        0xff, 0xff, 0xff,0xff,
+                        0xff, 0xff, 0xff,0xff
+                    ]),
+                },
+                mask: RuleMask::Prefix(64),
             },
         ];
+
+        let d = DecisionTree::<16, 1>::new(
+            2, 
+            1.5,
+            [
+                Layout{ match_kind: MatchKind::Prefix, width: 16},
+            ],
+            rules,
+            log.clone()
+        );
+
+        info!(log, "{}", d.dump());
+
+        let r = d.decide(
+            [0xfd,0x00, 0x47,1, 1,0, 0,1, 0,0, 0,0, 0,0, 0,1]
+        );
+        assert_eq!(r.unwrap().name, "fd00::47/24");
+
+        let r = d.decide(
+            [0xfd,0x00, 0x47,0, 0,1, 0,1, 0,0, 0,0, 0,0, 0,1]
+        );
+        assert_eq!(r.unwrap().name, "fd00::4700/32");
+
+        let r = d.decide(
+            [0xfd,0x00, 0x47,0, 0,0, 0,1, 0,0, 0,0, 0,0, 0,1]
+        );
+        assert_eq!(r.unwrap().name, "fd00::4700:0000/48");
+
+        let r = d.decide(
+            [0xfd, 0x00, 0x47,0,0,0,0,0,0,0,0,0,0,0,0,1]
+        );
+        assert_eq!(r.unwrap().name, "fd00::4700:0000:0000/64");
+
     }
+
 
 }
