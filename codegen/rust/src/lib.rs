@@ -28,6 +28,10 @@ struct Context {
 pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
     let (tokens, diags) = emit_tokens(ast);
 
+    if !diags.errors().is_empty() {
+        return Ok(diags);
+    }
+
     //
     // format the code and write it out to a Rust source file
     //
@@ -877,7 +881,8 @@ fn generate_control_table(
                             key_type_tokens.push(rust_type(&ty, false));
                         }
                         Err(_) => {
-                            //TODO diagnostics
+                            // diagnostics have been added to context so just
+                            // bail with an empty result
                             return (quote! {}, quote! {});
                         }
                     }
