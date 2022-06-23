@@ -191,6 +191,7 @@ pub enum BinOp {
     Subtract,
     Geq,
     Eq,
+    Mask,
 }
 
 #[derive(Debug, Clone)]
