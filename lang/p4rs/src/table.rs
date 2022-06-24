@@ -58,7 +58,9 @@ impl<const D: usize> Table<D> {
     }
 }
 
-pub fn sort_entries<const D: usize>(mut entries: Vec<TableEntry<D>>) -> Vec<TableEntry<D>> {
+pub fn sort_entries<const D: usize>(
+    mut entries: Vec<TableEntry<D>>
+) -> Vec<TableEntry<D>> {
 
     if entries.is_empty() {
         return entries;
@@ -446,7 +448,84 @@ mod tests {
         let matches = table.match_selector(&selector);
         println!("zone-2: {:#?}", matches);
 
+    }
 
+    fn lpre(
+        name: &str,
+        addr: &str,
+        len: u8,
+        zone: Ternary,
+        range: (u32, u32),
+        tag: u64,
+        priority: u32,
+    ) -> TableEntry::<4> {
+        TableEntry::<4>{
+            key: [
+                Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }),
+                Key::Ternary(zone),
+                Key::Range(range.0.into(), range.1.into()),
+                Key::Exact(tag.into()),
+            ],
+            priority,
+            name: name.into(),
+        }
+    }
+
+    #[test]
+    fn match_lpm_ternary_range() {
+        let table = Table::<4>{
+            entries: HashSet::from([
+                 lpre("a0", "fd00:1::", 64, Ternary::DontCare, (80, 80), 100, 1),
+                 lpre("a1", "fd00:1::", 64, Ternary::DontCare, (443, 443), 100, 1),
+                 lpre("a2", "fd00:1::", 64, Ternary::DontCare, (80, 80), 200, 1),
+                 lpre("a3", "fd00:1::", 64, Ternary::DontCare, (443, 443), 200, 1),
+                 lpre(
+                     "a4", 
+                     "fd00:1::",
+                     64, 
+                     Ternary::Value(99u16.into()),
+                     (443, 443),
+                     200,
+                     10
+                 ),
+            ])
+        };
+        let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
+        let selector = [
+            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(0u16),
+            BigUint::from(80u32),
+            BigUint::from(100u64),
+        ];
+        let matches = table.match_selector(&selector);
+        println!("m1: {:#?}", matches);
+
+        let selector = [
+            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(0u16),
+            BigUint::from(443u32),
+            BigUint::from(200u64),
+        ];
+        let matches = table.match_selector(&selector);
+        println!("m2: {:#?}", matches);
+
+        let selector = [
+            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(99u16),
+            BigUint::from(443u32),
+            BigUint::from(200u64),
+        ];
+        let matches = table.match_selector(&selector);
+        println!("m3: {:#?}", matches);
+
+        let selector = [
+            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(99u16),
+            BigUint::from(80u32),
+            BigUint::from(200u64),
+        ];
+        let matches = table.match_selector(&selector);
+        println!("m4: {:#?}", matches);
     }
 
 }
