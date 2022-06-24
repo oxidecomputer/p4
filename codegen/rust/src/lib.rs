@@ -1240,19 +1240,23 @@ fn generate_bit_literal(
     assert!(width <= 128);
 
     if width <= 8 {
-        return quote! { bit::<#width>::from(#{value}u8) }
+        let v = value as u8;
+        return quote! { bit::<#width>::from(#v) }
     }
     else if width <= 16 {
-        return quote! { bit::<#width>::from(#{value}u16) }
+        let v = value as u16;
+        return quote! { bit::<#width>::from(#v) }
     }
     else if width <= 32 {
-        return quote! { bit::<#width>::from(#{value}u32) }
+        let v = value as u32;
+        return quote! { bit::<#width>::from(#v) }
     }
     else if width <= 64 {
-        return quote! { bit::<#width>::from(#{value}u64) }
+        let v = value as u64;
+        return quote! { bit::<#width>::from(#v) }
     }
     else {
-        return quote! { bit::<#width>::from(#{value}u128) }
+        return quote! { bit::<#width>::from(#value) }
     }
 }
 
