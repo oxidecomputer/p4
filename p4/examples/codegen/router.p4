@@ -72,7 +72,7 @@ control ingress(
 
     table router {
         key = {
-            hdr.ipv6.dst: lpm;
+            hdrr.ipv6.dst: lpm;
         }
         actions = {
             drop;

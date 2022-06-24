@@ -880,6 +880,8 @@ fn generate_control_table(
         let parts: Vec<&str> = k.name.split(".").collect();
         let root = parts[0];
 
+        // try to find the root of the key as an argument to the control block.
+        // TODO: are there other places to look for this?
         match get_control_arg(control, root) {
             Some(param) => {
                 if parts.len() > 1 {
@@ -903,7 +905,12 @@ fn generate_control_table(
                 }
             }
             None => {
-                todo!();
+                ctx.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!("Table key '{}' undefined", root),
+                    token: k.token.clone(),
+                });
+                return (quote! {}, quote! {});
             }
         }
     }
@@ -929,38 +936,6 @@ fn generate_control_table(
             match k {
                 KeySetElement::Expression(e) => {
                     keyset.push(generate_expression(e.clone(), ctx));
-                    /*
-                    match e.as_ref() {
-                    Expression::IntegerLit(v) => {
-                        let tytk = &key_type_tokens[i];
-                        match &key_types[i] {
-                            Type::Bit(n) => {
-                                //TODO cover all values of n between 1 and ??
-                                if *n <= 8 {
-                                    let v = *v as u8;
-                                    keyset.push(quote! { #tytk::from(#v) });
-                                }
-                            }
-                            x => todo!("keyset expression type {:?}", x),
-                        }
-                    }
-                    */
-                    /*
-                    Expression::Binary(v, BinOp::Mask, m) => {
-                        let tytk = &key_type_tokens[i];
-                        match &key_types[i] {
-                            Type::Bit(n) => {
-                                //TODO cover all values of n between 1 and ??
-                                if *n == 128 {
-                                    let v = *v as u128;
-                                    let m = *m as u128;
-                                    keyset.push(quote! { #tytk::from(#v | #m) });
-                                }
-                            }
-                        }
-                    }
-                    x => todo!("const entry keyset expression {:?}", x),
-                    */
                },
                 x => todo!("key set element {:?}", x),
             }
