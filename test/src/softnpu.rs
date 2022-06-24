@@ -149,7 +149,7 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
 
                 // to be filled in by pipeline
                 let mut egress_metadata = EgressMetadata {
-                    port: bit::<8>::from(0),
+                    port: bit::<8>::from(0u8),
                 };
 
                 // run the parser block

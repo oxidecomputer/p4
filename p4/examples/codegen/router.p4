@@ -31,20 +31,20 @@ struct headers_t {
 }
 
 header ethernet_t {
-    bit<48> dst_addr;
-    bit<48> src_addr;
+    bit<48> dst;
+    bit<48> src;
     bit<16> ether_type;
 }
 
 header ipv6_t {
-	bit<4>		version;
-	bit<8>		traffic_class;
-	bit<20>		flow_label;
-	bit<16>		payload_len;
-	bit<8>		next_hdr;
-	bit<8>		hop_limit;
-	bit<128> src_addr;
-	bit<128> dst_addr;
+	bit<4>	    version;
+	bit<8>	    traffic_class;
+	bit<20>	    flow_label;
+	bit<16>	    payload_len;
+	bit<8>	    next_hdr;
+	bit<8>	    hop_limit;
+	bit<128>    src;
+	bit<128>    dst;
 }
 
 parser parse(

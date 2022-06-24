@@ -82,6 +82,21 @@ impl From<u8> for bit<8> {
     }
 }
 
+impl From<u128> for bit<8> {
+    fn from(x: u128) -> bit<8> {
+        assert!(x <= 255);
+        bit::<8>([x as u8])
+    }
+}
+
+impl From<i128> for bit<8> {
+    fn from(x: i128) -> bit<8> {
+        assert!(x <= 255);
+        bit::<8>([x as u8])
+    }
+}
+
+
 impl Into<u8> for bit<8> {
     fn into(self) -> u8 {
         self.0[0]

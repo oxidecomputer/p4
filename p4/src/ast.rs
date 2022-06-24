@@ -185,7 +185,7 @@ pub enum Expression {
     Binary(Box<Expression>, BinOp, Box<Expression>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinOp {
     Add,
     Subtract,

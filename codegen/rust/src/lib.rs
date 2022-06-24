@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io;
+use std::io::{ self, Write };
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -8,7 +8,7 @@ use quote::{format_ident, quote};
 use p4::ast::{
     Action, ActionParameter, Control, ControlParameter, Direction, Expression,
     Header, KeySetElement, Lvalue, Parser, State, Statement, Struct, Table,
-    Transition, Type, AST,
+    Transition, Type, AST, BinOp,
 };
 use p4::check::{Diagnostic, Diagnostics, Level};
 
@@ -35,7 +35,21 @@ pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
     //
     // format the code and write it out to a Rust source file
     //
-    let f: syn::File = syn::parse2(tokens).unwrap();
+    let f: syn::File = match syn::parse2(tokens.clone()) {
+        Ok(f) => f,
+        Err(e) => {
+            println!("Failed to parse generated code: {:?}", e);
+            let mut out = tempfile::Builder::new()
+                .suffix(".rs")
+                .tempfile()?;
+            out.write_all(tokens.to_string().as_bytes());
+            println!("Wrote generated code to {}", out.path().display());
+            out.keep()?;
+            return Err(
+                io::Error::new(io::ErrorKind::Other, format!("{:?}", e))
+            );
+        }
+    };
     fs::write("out.rs", prettyplease::unparse(&f))?;
 
     Ok(diags)
@@ -913,11 +927,15 @@ fn generate_control_table(
         let mut keyset = Vec::new();
         for (i, k) in entry.keyset.iter().enumerate() {
             match k {
-                KeySetElement::Expression(e) => match e.as_ref() {
+                KeySetElement::Expression(e) => {
+                    keyset.push(generate_expression(e.clone(), ctx));
+                    /*
+                    match e.as_ref() {
                     Expression::IntegerLit(v) => {
                         let tytk = &key_type_tokens[i];
                         match &key_types[i] {
                             Type::Bit(n) => {
+                                //TODO cover all values of n between 1 and ??
                                 if *n <= 8 {
                                     let v = *v as u8;
                                     keyset.push(quote! { #tytk::from(#v) });
@@ -926,8 +944,24 @@ fn generate_control_table(
                             x => todo!("keyset expression type {:?}", x),
                         }
                     }
+                    */
+                    /*
+                    Expression::Binary(v, BinOp::Mask, m) => {
+                        let tytk = &key_type_tokens[i];
+                        match &key_types[i] {
+                            Type::Bit(n) => {
+                                //TODO cover all values of n between 1 and ??
+                                if *n == 128 {
+                                    let v = *v as u128;
+                                    let m = *m as u128;
+                                    keyset.push(quote! { #tytk::from(#v | #m) });
+                                }
+                            }
+                        }
+                    }
                     x => todo!("const entry keyset expression {:?}", x),
-                },
+                    */
+               },
                 x => todo!("key set element {:?}", x),
             }
         }
@@ -1167,4 +1201,72 @@ fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
             return false;
         }
     }
+}
+
+fn generate_expression(
+    expr: Box<Expression>,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    match expr.as_ref() {
+        Expression::IntegerLit(v) => {
+            quote!{ #v.into() }
+        }
+        Expression::BitLit(width, v) => {
+            generate_bit_literal(*width, *v)
+        }
+        Expression::SignedLit(width, v) => {
+            todo!("generate expression signed lit");
+        }
+        Expression::Lvalue(v) => {
+            todo!("generate expression lvalue");
+        }
+        Expression::Binary(lhs, op, rhs) => {
+            let mut ts = TokenStream::new();
+            ts.extend(generate_expression(lhs.clone(), ctx));
+            ts.extend(generate_binop(*op, ctx));
+            ts.extend(generate_expression(rhs.clone(), ctx));
+            ts
+        }
+    }
+
+}
+
+fn generate_bit_literal(
+    width: u16,
+    value: u128,
+) -> TokenStream {
+
+    assert!(width <= 128);
+
+    if width <= 8 {
+        return quote! { bit::<#width>::from(#{value}u8) }
+    }
+    else if width <= 16 {
+        return quote! { bit::<#width>::from(#{value}u16) }
+    }
+    else if width <= 32 {
+        return quote! { bit::<#width>::from(#{value}u32) }
+    }
+    else if width <= 64 {
+        return quote! { bit::<#width>::from(#{value}u64) }
+    }
+    else {
+        return quote! { bit::<#width>::from(#{value}u128) }
+    }
+}
+
+fn generate_binop(
+    op: BinOp,
+    ctx: &mut Context,
+) -> TokenStream {
+
+    match op {
+        BinOp::Add => quote! { + },
+        BinOp::Subtract=> quote! { - },
+        BinOp::Geq => quote! { >= },
+        BinOp::Eq => quote! { == },
+        BinOp::Mask => quote! { & },
+    }
+
 }
