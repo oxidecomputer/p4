@@ -126,7 +126,7 @@ fn generate_parser_state_function(
     let mut args = Vec::new();
     for arg in &parser.parameters {
         let name = format_ident!("{}", arg.name);
-        let typename = rust_type(&arg.ty, false);
+        let typename = rust_type(&arg.ty, false, 0);
         let lifetime = type_lifetime(ast, &arg.ty);
         match arg.direction {
             Direction::Out | Direction::InOut => {
@@ -590,10 +590,13 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
 
     // generate struct members
     let mut members = Vec::new();
+    let mut offset = 0;
     for member in &h.members {
+        let size = type_size(&member.ty);
         let name = format_ident!("{}", member.name);
-        let ty = rust_type(&member.ty, true);
+        let ty = rust_type(&member.ty, true, offset);
         members.push(quote! { pub #name: Option::<#ty> });
+        offset += size;
     }
 
     let mut generated = quote! {
@@ -619,7 +622,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         } else {
             size >> 3
         };
-        let ty = rust_type(&member.ty, true);
+        let ty = rust_type(&member.ty, true, offset);
         member_values.push(quote! {
             #name: None
         });
@@ -847,7 +850,7 @@ fn control_parameters(
                 match ast.get_user_defined_type(typename) {
                     Some(_udt) => {
                         let name = format_ident!("{}", arg.name);
-                        let ty = rust_type(&arg.ty, false);
+                        let ty = rust_type(&arg.ty, false, 0);
                         let lifetime = type_lifetime(ast, &arg.ty);
                         match &arg.direction {
                             Direction::Out | Direction::InOut => {
@@ -873,7 +876,7 @@ fn control_parameters(
             }
             _ => {
                 let name = format_ident!("{}", arg.name);
-                let ty = rust_type(&arg.ty, false);
+                let ty = rust_type(&arg.ty, false, 0);
                 params.push(quote! { #name: &#ty });
             }
         }
@@ -897,7 +900,7 @@ fn generate_control_action(
             match ast.get_user_defined_type(typename) {
                 Some(_) => {
                     let name = format_ident!("{}", arg.name);
-                    let ty = rust_type(&arg.ty, false);
+                    let ty = rust_type(&arg.ty, false, 0);
                     params.push(quote! { #name: #ty });
                 }
                 None => {
@@ -911,7 +914,7 @@ fn generate_control_action(
             }
         } else {
             let name = format_ident!("{}", arg.name);
-            let ty = rust_type(&arg.ty, false);
+            let ty = rust_type(&arg.ty, false, 0);
             params.push(quote! { #name: #ty });
         }
     }
@@ -955,7 +958,7 @@ fn generate_control_table(
                     ) {
                         Ok(ty) => {
                             key_types.push(ty[0].clone());
-                            key_type_tokens.push(rust_type(&ty[0], false));
+                            key_type_tokens.push(rust_type(&ty[0], false, 0));
                         }
                         Err(_) => {
                             // diagnostics have been added to context so just
@@ -1072,7 +1075,7 @@ fn generate_control_table(
         for (i, expr) in entry.action.parameters.iter().enumerate() {
             match expr.as_ref() {
                 Expression::IntegerLit(v) => {
-                    let tytk = rust_type(&action.parameters[i].ty, false);
+                    let tytk = rust_type(&action.parameters[i].ty, false, 0);
                     match &action.parameters[i].ty {
                         Type::Bit(n) => {
                             if *n <= 8 {
@@ -1217,13 +1220,14 @@ fn generate_control_action_body(
 /// a P4 type such as `bit<N>` may be one of two types. If it's in a header,
 /// then it's a reference type like `bit_slice`. If it's not in a header than
 /// it's a value type like `bit`.
-fn rust_type(ty: &Type, header_member: bool) -> TokenStream {
+fn rust_type(ty: &Type, header_member: bool, offset: usize) -> TokenStream {
     match ty {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
         Type::Bit(size) => {
+            let off = offset % 8;
             if header_member {
-                quote! { bit_slice::<'a, #size> }
+                quote! { bit_slice::<'a, #size, #off> }
             } else {
                 quote! { bit::<#size> }
             }
