@@ -259,6 +259,15 @@ impl Control {
         }
     }
 
+    pub fn get_parameter(&self, name: &str) -> Option<&ControlParameter> {
+        for p in &self.parameters {
+            if p.name == name {
+                return Some(p);
+            }
+        }
+        None
+    }
+
     pub fn get_action(&self, name: &str) -> Option<&Action> {
         for a in &self.actions {
             if a.name == name {
@@ -358,7 +367,7 @@ pub struct Table {
     pub name: String,
     pub actions: Vec<String>,
     pub default_action: String,
-    pub key: BTreeMap<Lvalue, MatchKind>,
+    pub key: Vec<(Lvalue, MatchKind)>,
     pub const_entries: Vec<ConstTableEntry>,
     pub size: usize,
 }
@@ -369,7 +378,7 @@ impl Table {
             name,
             actions: Vec::new(),
             default_action: String::new(),
-            key: BTreeMap::new(),
+            key: Vec::new(),
             const_entries: Vec::new(),
             size: 0,
         }
@@ -383,7 +392,13 @@ pub struct ConstTableEntry {
 }
 
 #[derive(Debug, Clone)]
-pub enum KeySetElement {
+pub struct KeySetElement {
+    pub value: KeySetElementValue,
+    pub token: Token,
+}
+
+#[derive(Debug, Clone)]
+pub enum KeySetElementValue {
     Expression(Box<Expression>),
     Default,
     DontCare,

@@ -7,8 +7,8 @@ use quote::{format_ident, quote};
 
 use p4::ast::{
     Action, ActionParameter, Control, ControlParameter, Direction, Expression,
-    Header, KeySetElement, Lvalue, Parser, State, Statement, Struct, Table,
-    Transition, Type, AST, BinOp,
+    Header, KeySetElement, KeySetElementValue, Lvalue, Parser, State, Statement,
+    Struct, Table, Transition, Type, AST, BinOp, MatchKind
 };
 use p4::check::{Diagnostic, Diagnostics, Level};
 
@@ -260,7 +260,7 @@ fn check_lvalue_chain(
     ty: &Type,
     ast: &AST,
     ctx: &mut Context,
-) -> Result<Type, ()> {
+) -> Result<Vec<Type>, ()> {
     match ty {
         Type::Bool => {
             if parts.len() > 0 {
@@ -274,7 +274,7 @@ fn check_lvalue_chain(
                 });
                 return Err(());
             }
-            return Ok(ty.clone());
+            return Ok(vec![ty.clone()]);
         }
         Type::Error => {
             if parts.len() > 0 {
@@ -288,7 +288,7 @@ fn check_lvalue_chain(
                 });
                 return Err(());
             }
-            return Ok(ty.clone());
+            return Ok(vec![ty.clone()]);
         }
         Type::Bit(size) => {
             if parts.len() > 0 {
@@ -302,7 +302,7 @@ fn check_lvalue_chain(
                 });
                 return Err(());
             }
-            return Ok(ty.clone());
+            return Ok(vec![ty.clone()]);
         }
         Type::Varbit(size) => {
             if parts.len() > 0 {
@@ -316,7 +316,7 @@ fn check_lvalue_chain(
                 });
                 return Err(());
             }
-            return Ok(ty.clone());
+            return Ok(vec![ty.clone()]);
         }
         Type::Int(size) => {
             if parts.len() > 0 {
@@ -330,7 +330,7 @@ fn check_lvalue_chain(
                 });
                 return Err(());
             }
-            return Ok(ty.clone());
+            return Ok(vec![ty.clone()]);
         }
         Type::String => {
             if parts.len() > 0 {
@@ -344,7 +344,7 @@ fn check_lvalue_chain(
                 });
                 return Err(());
             }
-            return Ok(ty.clone());
+            return Ok(vec![ty.clone()]);
         }
         Type::UserDefined(name) => {
             // get the parent type definition from the AST and check for the
@@ -353,15 +353,17 @@ fn check_lvalue_chain(
                 for member in &parent.members {
                     if member.name == parts[0] {
                         if parts.len() > 1 {
-                            return check_lvalue_chain(
+                            let mut types = check_lvalue_chain(
                                 lval,
                                 &parts[1..],
                                 &member.ty,
                                 ast,
                                 ctx,
-                            );
+                            )?;
+                            types.push(member.ty.clone());
+                            return Ok(types);
                         } else {
-                            return Ok(member.ty.clone());
+                            return Ok(vec![member.ty.clone()]);
                         }
                     }
                 }
@@ -369,15 +371,17 @@ fn check_lvalue_chain(
                 for member in &parent.members {
                     if member.name == parts[0] {
                         if parts.len() > 1 {
-                            return check_lvalue_chain(
+                            let mut types = check_lvalue_chain(
                                 lval,
                                 &parts[1..],
                                 &member.ty,
                                 ast,
                                 ctx,
-                            );
+                            )?;
+                            types.push(member.ty.clone());
+                            return Ok(types);
                         } else {
-                            return Ok(member.ty.clone());
+                            return Ok(vec![member.ty.clone()]);
                         }
                     }
                 }
@@ -394,7 +398,7 @@ fn check_lvalue_chain(
                             });
                             return Err(());
                         } else {
-                            return Ok(ty.clone()); //TODO function/method type?
+                            return Ok(vec![ty.clone()]); //TODO function/method type?
                         }
                     }
                 }
@@ -687,7 +691,7 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
     }
 }
 fn generate_control_apply_body(
-    _ast: &AST,
+    ast: &AST,
     control: &Control,
     ctx: &mut Context,
 ) -> TokenStream {
@@ -747,7 +751,9 @@ fn generate_control_apply_body(
                     action_args.push(quote! { #name });
                 }
 
-                for (lval, _match_kind) in &table.key {
+                let mut selector_components = Vec::new();
+                for (lval, match_kind) in &table.key {
+
                     //TODO check lvalue ref here, should already be checked at
                     //this point?
                     let lvref: Vec<TokenStream> = lval
@@ -756,13 +762,69 @@ fn generate_control_apply_body(
                         .map(|x| format_ident!("{}", x))
                         .map(|x| quote! { #x })
                         .collect();
-                    tokens.extend(quote! {
-                        match #(#table_name).*.get(&#(#lvref).*) {
-                            Some(action) => action(#(#action_args),*),
-                            None => {},
+
+                    // determine if this lvalue references a header or a struct,
+                    // if it's a header there's a bit of extra unsrapping we
+                    // need to do to match the selector against the value.
+
+                    let parts: Vec<&str> = lval.name.split(".").collect();
+                    //should already be checked?
+                    let param = control.get_parameter(parts[0]).unwrap();
+
+                    let ty = match check_lvalue_chain(
+                        lval,
+                        &parts[1..],
+                        &param.ty,
+                        ast,
+                        ctx,
+                    ) {
+                        Ok(ty) => {
+                            ty
                         }
-                    })
+                        Err(_) => {
+                            // diagnostics have been added to context so just
+                            // bail with an empty result
+                            return quote! { };
+                        }
+                    };
+                    let is_header = {
+                        if ty.len() < 2 {
+                            false
+                        } else {
+                            match &ty[1] {
+                                Type::UserDefined(name) => {
+                                    println!("looking for header {}", name);
+                                    match ast.get_header(&name) {
+                                        Some(_) => true,
+                                        None => {
+                                            println!("no such header");
+                                            false
+                                        }
+                                    }
+                                },
+                                _ => false,
+                            }
+                        }
+                    };
+
+                    if is_header {
+                        //TODO: to_owned is bad here, copying on data path
+                        selector_components.push(quote!{
+                            #(#lvref).*.as_ref().unwrap().to_owned().into() 
+                        });
+                    } else {
+                        selector_components.push(quote!{
+                            #(#lvref).*.into() 
+                        });
+                    }
+
                 }
+                tokens.extend(quote! {
+                    let matches = #(#table_name).*.match_selector(&[#(#selector_components),*]);
+                    if matches.len() > 0 { 
+                        (matches[0].action)(#(#action_args),*)
+                    }
+                })
             }
             x => todo!("control apply statement {:?}", x),
         }
@@ -876,7 +938,7 @@ fn generate_control_table(
 ) -> (TokenStream, TokenStream) {
     let mut key_type_tokens: Vec<TokenStream> = Vec::new();
     let mut key_types: Vec<Type> = Vec::new();
-    for k in table.key.keys() {
+    for (k, _) in &table.key {
         let parts: Vec<&str> = k.name.split(".").collect();
         let root = parts[0];
 
@@ -893,8 +955,8 @@ fn generate_control_table(
                         ctx,
                     ) {
                         Ok(ty) => {
-                            key_types.push(ty.clone());
-                            key_type_tokens.push(rust_type(&ty, false));
+                            key_types.push(ty[0].clone());
+                            key_type_tokens.push(rust_type(&ty[0], false));
                         }
                         Err(_) => {
                             // diagnostics have been added to context so just
@@ -916,13 +978,22 @@ fn generate_control_table(
     }
 
     let table_name = format_ident!("{}_table", table.name);
+    /*
     let key_type = quote! { (#(#key_type_tokens),*) };
     let table_type = quote! {
         std::collections::HashMap::<#key_type, &'a dyn Fn(#(#control_param_types),*)>
     };
+    */
+    let n = table.key.len() as usize;
+    let table_type = quote! { p4rs::table::Table::<#n, fn(#(#control_param_types),*)> };
 
+    /*
     let mut tokens = quote! {
         let mut #table_name: #table_type = std::collections::HashMap::new();
+    };
+    */
+    let mut tokens = quote! {
+        let mut #table_name: #table_type = #table_type::new();
     };
 
     if table.const_entries.is_empty() {
@@ -930,12 +1001,50 @@ fn generate_control_table(
         return (table_type, tokens);
     }
 
+    // XXX
     for entry in &table.const_entries {
         let mut keyset = Vec::new();
         for (i, k) in entry.keyset.iter().enumerate() {
-            match k {
-                KeySetElement::Expression(e) => {
-                    keyset.push(generate_expression(e.clone(), ctx));
+            match &k.value {
+                KeySetElementValue::Expression(e) => {
+                    let xpr = generate_expression(e.clone(), ctx);
+                    let ks = match table.key[i].1 {
+                        MatchKind::Exact => {
+                            let k = format_ident!("{}", "Exact");
+                            quote!{
+                                p4rs::table::Key::#k(#xpr.into())
+                            }
+                        }
+                        MatchKind::Ternary => {
+                            let k = format_ident!("{}", "Ternary");
+                            quote!{
+                                p4rs::table::Key::#k(#xpr.into())
+                            }
+                        }
+                        MatchKind::LongestPrefixMatch => {
+                            let len = match try_extract_prefix_len(e) {
+                                Some(len) => len,
+                                None => {
+                                    ctx.diags.push(Diagnostic {
+                                        level: Level::Error,
+                                        message: format!(
+                                            "coult not determine prefix len for key",
+                                        ),
+                                        token: k.token.clone(),
+                                    });
+                                    return (quote! {}, quote! {});
+                                }
+                            };
+                            let k = format_ident!("{}", "Lpm");
+                            quote!{
+                                p4rs::table::Key::#k(p4rs::table::Prefix{
+                                    addr: (#xpr).into(),
+                                    len: #len,
+                                })
+                            }
+                        }
+                    };
+                    keyset.push(ks);
                },
                 x => todo!("key set element {:?}", x),
             }
@@ -985,11 +1094,23 @@ fn generate_control_table(
             closure_params.push(quote! { #name });
         }
 
+        /*
         tokens.extend(quote! {
             #table_name.insert((#(#keyset),*), &|#(#closure_params),*|{
                 #action_fn_name(#(#action_fn_args),*);
             });
         });
+        */
+        tokens.extend(quote! {
+            #table_name.entries.insert(p4rs::table::TableEntry::<#n, fn(#(#control_param_types),*)>{
+                key: [#(#keyset),*],
+                priority: 0,
+                name: "your name here".into(),
+                action: |#(#closure_params),*| {
+                    #action_fn_name(#(#action_fn_args),*);
+                },
+            });
+        })
     }
 
     tokens.extend(quote! { #table_name });
@@ -1207,12 +1328,45 @@ fn generate_expression(
 
 }
 
+// in the case of an expression
+//
+//   a &&& b
+//
+// where b is an integer literal interpret b as a prefix mask based on the
+// number of leading ones
+fn try_extract_prefix_len(
+    expr: &Box<Expression>
+) -> Option<u8> {
+
+
+    match expr.as_ref() {
+        Expression::Binary(lhs, op, rhs) => {
+            match rhs.as_ref() {
+                Expression::IntegerLit(v) => {
+                    Some(v.leading_ones() as u8)
+                }
+                Expression::BitLit(width, v) => {
+                    Some(v.leading_ones() as u8)
+                }
+                Expression::SignedLit(width, v) => {
+                    Some(v.leading_ones() as u8)
+                }
+                _ => { None }
+            }
+        }
+        _ => { None }
+    }
+
+}
+
 fn generate_bit_literal(
     width: u16,
     value: u128,
 ) -> TokenStream {
 
     assert!(width <= 128);
+
+    let width = width as usize;
 
     if width <= 8 {
         let v = value as u8;

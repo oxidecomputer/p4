@@ -72,7 +72,7 @@ control ingress(
 
     table router {
         key = {
-            hdrr.ipv6.dst: lpm;
+            hdr.ipv6.dst: lpm;
         }
         actions = {
             drop;
@@ -82,8 +82,9 @@ control ingress(
         const entries = {
 
             // fd00:1000::/24
-            128w0xfd001000000000000000000000000000 &&& 128w0xffffff00000000000000000000000000 : forward(1);
-            //128w0xfd001000000000000000000000000000 : forward(1);
+            128w0xfd001000000000000000000000000000 &&&
+            128w0xffffff00000000000000000000000000 :
+            forward(1);
 
         }
     }

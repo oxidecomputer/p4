@@ -37,16 +37,16 @@ pub struct Prefix {
     pub len: u8,
 }
 
-pub struct Table<const D: usize> {
-    pub entries: HashSet<TableEntry<D>>,
+pub struct Table<const D: usize, A: Clone> {
+    pub entries: HashSet<TableEntry<D, A>>,
 }
 
-impl<const D: usize> Table<D> {
+impl<const D: usize, A: Clone> Table<D, A> {
     pub fn new() -> Self {
         Self{ entries: HashSet::new() }
     }
 
-    pub fn match_selector(&self, keyset: &[BigUint; D]) -> Vec<TableEntry<D>> {
+    pub fn match_selector(&self, keyset: &[BigUint; D]) -> Vec<TableEntry<D, A>> {
         let mut result = Vec::new();
         for entry in &self.entries {
             if keyset_matches(keyset, &entry.key) {
@@ -58,9 +58,9 @@ impl<const D: usize> Table<D> {
     }
 }
 
-pub fn sort_entries<const D: usize>(
-    mut entries: Vec<TableEntry<D>>
-) -> Vec<TableEntry<D>> {
+pub fn sort_entries<const D: usize, A: Clone>(
+    mut entries: Vec<TableEntry<D, A>>
+) -> Vec<TableEntry<D, A>> {
 
     if entries.is_empty() {
         return entries;
@@ -102,10 +102,10 @@ pub fn sort_entries<const D: usize>(
 // to move around until we nail down the, tbh, rather undefined (in terms of p4
 // spec)semantics of what the relative priorities between match types in a
 // common keyset are.
-pub fn prune_entries_by_lpm<const D: usize>(
+pub fn prune_entries_by_lpm<const D: usize, A: Clone>(
     d: usize,
-    entries: &Vec<TableEntry<D>>,
-) -> Vec<TableEntry<D>> {
+    entries: &Vec<TableEntry<D, A>>,
+) -> Vec<TableEntry<D, A>> {
 
     let mut longest_prefix = 0u8;
 
@@ -136,7 +136,9 @@ pub fn prune_entries_by_lpm<const D: usize>(
 
 }
 
-pub fn sort_entries_by_priority<const D: usize>(entries: &mut Vec<TableEntry<D>>) {
+pub fn sort_entries_by_priority<const D: usize, A: Clone>(
+    entries: &mut Vec<TableEntry<D, A>>,
+) {
 
     entries.sort_by(|a, b| -> std::cmp::Ordering {
         b.priority.cmp(&a.priority)
@@ -197,13 +199,37 @@ pub fn keyset_matches<const D: usize>(selector: &[BigUint; D], key: &[Key; D]) -
     true
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct TableEntry<const D: usize> {
+#[derive(Clone)]
+pub struct TableEntry<const D: usize, A: Clone> {
     pub key: [Key; D],
-    //pub action: fn(),
+    pub action: A,
     pub priority: u32,
     pub name: String,
 }
+
+impl<const D: usize, A: Clone> std::hash::Hash for TableEntry<D, A> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key.hash(state);
+    }
+}
+
+impl<const D: usize, A: Clone> std::cmp::PartialEq for TableEntry<D, A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl<const D: usize, A: Clone> std::fmt::Debug for TableEntry<D, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(&format!("TableEntry<{}>", D))
+            .field("key", &self.key)
+            .field("priority", &self.priority)
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
+impl<const D: usize, A: Clone> std::cmp::Eq for TableEntry<D, A> { }
 
 #[cfg(test)]
 mod tests {
@@ -211,13 +237,37 @@ mod tests {
     use super::*;
     use std::net::Ipv6Addr;
 
-    fn contains_entry<const D: usize>(entries: &Vec<TableEntry<D>>, name: &str) -> bool {
+    fn contains_entry<const D: usize, A: Clone>(
+        entries: &Vec<TableEntry<D, A>>,
+        name: &str
+    ) -> bool {
         for e in entries {
             if e.name.as_str() == name {
                 return true;
             }
         }
         false
+    }
+
+
+    fn tk(
+        name: &str,
+        addr: Ternary,
+        ingress: Ternary,
+        icmp: Ternary,
+        priority: u32
+    ) ->
+    TableEntry::<3, ()> {
+        TableEntry::<3, ()>{
+            key: [
+                Key::Ternary(addr),
+                Key::Ternary(ingress),
+                Key::Ternary(icmp),
+            ],
+            priority,
+            name: name.into(),
+            action: (),
+        }
     }
 
     #[test]
@@ -237,79 +287,58 @@ mod tests {
     /// +--------+-------------+--------------+---------+
     fn match_ternary_1() {
 
-        let mut table = Table::<3>::new();
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::Value(BigUint::from(1u8))),
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(1u8))),
-            ],
-            priority: 10,
-            name: "a0".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::Value(BigUint::from(1u8))),
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(0u8))),
-            ],
-            priority: 1,
-            name: "a1".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(2u8))),
-                Key::Ternary(Ternary::DontCare),
-            ],
-            priority: 1,
-            name: "a2".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(4u8))),
-                Key::Ternary(Ternary::DontCare),
-            ],
-            priority: 1,
-            name: "a3".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(7u8))),
-                Key::Ternary(Ternary::DontCare),
-            ],
-            priority: 1,
-            name: "a4".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(19u8))),
-                Key::Ternary(Ternary::DontCare),
-            ],
-            priority: 1,
-            name: "a5".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(33u8))),
-                Key::Ternary(Ternary::DontCare),
-            ],
-            priority: 1,
-            name: "a6".into(),
-        });
-        table.entries.insert(TableEntry::<3>{
-            key: [
-                Key::Ternary(Ternary::DontCare),
-                Key::Ternary(Ternary::Value(BigUint::from(47u8))),
-                Key::Ternary(Ternary::DontCare),
-            ],
-            priority: 1,
-            name: "a7".into(),
-        });
+        let table = Table::<3, ()>{
+            entries: HashSet::from([
+                 tk("a0",
+                    Ternary::Value(1u8.into()),
+                    Ternary::DontCare,
+                    Ternary::Value(1u8.into()),
+                    10,
+                 ),
+                 tk("a1",
+                    Ternary::Value(1u8.into()),
+                    Ternary::DontCare,
+                    Ternary::Value(0u8.into()),
+                    1,
+                 ),
+                 tk("a2",
+                    Ternary::DontCare,
+                    Ternary::Value(2u8.into()),
+                    Ternary::DontCare,
+                    1,
+                 ),
+                 tk("a3",
+                    Ternary::DontCare,
+                    Ternary::Value(4u8.into()),
+                    Ternary::DontCare,
+                    1,
+                 ),
+                 tk("a4",
+                    Ternary::DontCare,
+                    Ternary::Value(7u8.into()),
+                    Ternary::DontCare,
+                    1,
+                 ),
+                 tk("a5",
+                    Ternary::DontCare,
+                    Ternary::Value(19u8.into()),
+                    Ternary::DontCare,
+                    1,
+                 ),
+                 tk("a6",
+                    Ternary::DontCare,
+                    Ternary::Value(33u8.into()),
+                    Ternary::DontCare,
+                    1,
+                 ),
+                 tk("a7",
+                    Ternary::DontCare,
+                    Ternary::Value(47u8.into()),
+                    Ternary::DontCare,
+                    1,
+                 ),
+            ])
+        };
 
         //println!("M1 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         let selector = [BigUint::from(1u8), BigUint::from(99u16), BigUint::from(1u8)];
@@ -330,11 +359,12 @@ mod tests {
 
     }
 
-    fn lpm(name: &str, addr: &str, len: u8) -> TableEntry::<1> {
-        TableEntry::<1>{
+    fn lpm(name: &str, addr: &str, len: u8) -> TableEntry::<1, ()> {
+        TableEntry::<1, ()>{
             key: [ Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }) ],
             priority: 1,
             name: name.into(),
+            action: (),
         }
     }
 
@@ -363,7 +393,7 @@ mod tests {
     /// +--------+----------------+---------+
     fn match_lpm_1() {
 
-        let mut table = Table::<1>::new();
+        let mut table = Table::<1, ()>::new();
         table.entries.insert(lpm("a0", "fd00:4700::", 24));
         table.entries.insert(lpm("a1", "fd00:4701::", 32));
         table.entries.insert(lpm("a2", "fd00:4702::", 32));
@@ -411,21 +441,22 @@ mod tests {
         len: u8,
         zone: Ternary,
         priority: u32,
-    ) -> TableEntry::<2> {
-        TableEntry::<2>{
+    ) -> TableEntry::<2, ()> {
+        TableEntry::<2, ()>{
             key: [
                 Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }),
                 Key::Ternary(zone),
             ],
             priority,
             name: name.into(),
+            action: (),
         }
     }
 
     #[test]
     fn match_lpm_ternary_1() {
 
-        let table = Table::<2>{
+        let table = Table::<2, ()>{
             entries: HashSet::from([
                  tlpm("a0", "fd00:1::", 64, Ternary::DontCare, 1),
                  tlpm("a1", "fd00:1::", 64, Ternary::Value(1u16.into()), 10),
@@ -458,8 +489,8 @@ mod tests {
         range: (u32, u32),
         tag: u64,
         priority: u32,
-    ) -> TableEntry::<4> {
-        TableEntry::<4>{
+    ) -> TableEntry::<4, ()> {
+        TableEntry::<4, ()>{
             key: [
                 Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }),
                 Key::Ternary(zone),
@@ -468,12 +499,17 @@ mod tests {
             ],
             priority,
             name: name.into(),
+            action: (),
         }
+    }
+
+    struct ActionData {
+        value: u64,
     }
 
     #[test]
     fn match_lpm_ternary_range() {
-        let table = Table::<4>{
+        let table = Table::<4, ()>{
             entries: HashSet::from([
                  lpre("a0", "fd00:1::", 64, Ternary::DontCare, (80, 80), 100, 1),
                  lpre("a1", "fd00:1::", 64, Ternary::DontCare, (443, 443), 100, 1),
@@ -526,6 +562,45 @@ mod tests {
         ];
         let matches = table.match_selector(&selector);
         println!("m4: {:#?}", matches);
+    }
+
+    #[test]
+    fn match_with_action() {
+
+        let mut data = ActionData{
+            value: 47,
+        };
+
+        let table = Table::<1, fn(&mut ActionData)> {
+            entries: HashSet::from([
+
+                 TableEntry::<1, fn(&mut ActionData)>{
+                     key: [ Key::Exact(1u8.into()) ],
+                     priority: 0,
+                     name: "a0".into(),
+                     action: |a: &mut ActionData| {
+                         a.value += 10;
+                     },
+                 },
+
+                 TableEntry::<1, fn(&mut ActionData)>{
+                     key: [ Key::Exact(2u8.into()) ],
+                     priority: 0,
+                     name: "a1".into(),
+                     action: |a: &mut ActionData| {
+                         a.value -= 10;
+                     },
+                 }
+
+            ])
+        };
+
+        let selector = [BigUint::from(1u8)];
+        let matches = table.match_selector(&selector);
+        println!("m4: {:#?}", matches);
+        assert_eq!(matches.len(), 1);
+        (matches[0].action)(&mut data);
+        assert_eq!(data.value, 57);
     }
 
 }

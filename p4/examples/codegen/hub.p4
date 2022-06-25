@@ -51,8 +51,8 @@ control ingress(
         }
         default_action = drop;
         const entries = {
-            1 : forward(2);
-            2 : forward(1);
+            8w1 : forward(2);
+            8w2 : forward(1);
         }
     }
 

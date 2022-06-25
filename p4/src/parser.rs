@@ -1,10 +1,10 @@
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
     Constant, Control, ControlParameter, Direction, Expression, Extern,
-    ExternMethod, Header, HeaderMember, KeySetElement, Lvalue, MatchKind,
-    Package, PackageInstance, PackageParameter, Select, SelectElement, State,
-    Statement, StatementBlock, Struct, StructMember, Table, Transition, Type,
-    Typedef, Variable, AST,
+    ExternMethod, Header, HeaderMember, KeySetElement, KeySetElementValue,
+    Lvalue, MatchKind, Package, PackageInstance, PackageParameter, Select,
+    SelectElement, State, Statement, StatementBlock, Struct, StructMember,
+    Table, Transition, Type, Typedef, Variable, AST,
 };
 use crate::error::{Error, ParserError};
 /// This is a recurisve descent parser for the P4 language.
@@ -248,13 +248,19 @@ impl<'a> Parser<'a> {
                 // handle tuple set below
             }
             lexer::Kind::Underscore => {
-                return Ok(vec![KeySetElement::DontCare]);
+                return Ok(vec![KeySetElement{
+                    value: KeySetElementValue::DontCare,
+                    token: token.clone(),
+                }]);
             }
             _ => {
-                self.backlog.push(token);
+                self.backlog.push(token.clone());
                 let mut ep = ExpressionParser::new(self);
                 let expr = ep.run()?;
-                return Ok(vec![KeySetElement::Expression(expr)]);
+                return Ok(vec![KeySetElement{
+                    value: KeySetElementValue::Expression(expr),
+                    token: token.clone(),
+                }]);
             }
         }
 
@@ -265,7 +271,10 @@ impl<'a> Parser<'a> {
             // handle dont-care special case
             match token.kind {
                 lexer::Kind::Underscore => {
-                    elements.push(KeySetElement::DontCare);
+                    elements.push(KeySetElement{
+                        value: KeySetElementValue::DontCare,
+                        token: token.clone(),
+                    });
                     let token = self.next_token()?;
                     match token.kind {
                         lexer::Kind::Comma => continue,
@@ -294,17 +303,26 @@ impl<'a> Parser<'a> {
             let token = self.next_token()?;
             match token.kind {
                 lexer::Kind::Comma => {
-                    elements.push(KeySetElement::Expression(expr));
+                    elements.push(KeySetElement{
+                        value: KeySetElementValue::Expression(expr),
+                        token: token.clone(),
+                    });
                     continue;
                 }
                 lexer::Kind::ParenClose => {
-                    elements.push(KeySetElement::Expression(expr));
+                    elements.push(KeySetElement{
+                        value: KeySetElementValue::Expression(expr),
+                        token: token.clone(),
+                    });
                     return Ok(elements);
                 }
                 lexer::Kind::Mask => {
                     let mut ep = ExpressionParser::new(self);
                     let mask_expr = ep.run()?;
-                    elements.push(KeySetElement::Masked(expr, mask_expr));
+                    elements.push(KeySetElement{
+                        value: KeySetElementValue::Masked(expr, mask_expr),
+                        token: token.clone(),
+                    });
                     let token = self.next_token()?;
                     match token.kind {
                         lexer::Kind::Comma => continue,
@@ -1122,7 +1140,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
             let match_kind = self.parse_match_kind()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            table.key.insert(key, match_kind);
+            table.key.push((key, match_kind));
         }
 
         Ok(())
