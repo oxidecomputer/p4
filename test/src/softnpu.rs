@@ -77,26 +77,16 @@ impl<const R: usize, const N: usize, const F: usize> Phy<R, N, F> {
 pub fn run<'a, const R: usize, const N: usize, const F: usize>(
     ingress: &[RingConsumer<R, N, F>],
     egress: &[RingProducer<R, N, F>],
-    tbl: HashMap<
-        bit<8usize>,
-        &'a dyn Fn(
-            &mut headers_t<'a>,
-            &mut IngressMetadata,
-            &mut EgressMetadata,
-        ),
+    tbl: p4rs::table::Table<1,
+        fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata)
     >,
     parse: fn(pkt: &mut packet_in<'a>, headers: &mut headers_t<'a>) -> bool,
     control: fn(
         hdr: &mut headers_t<'a>,
         ingress: &mut IngressMetadata,
         egress: &mut EgressMetadata,
-        tbl: &std::collections::HashMap<
-            bit<8usize>,
-            &'a dyn Fn(
-                &mut headers_t<'a>,
-                &mut IngressMetadata,
-                &mut EgressMetadata,
-            ),
+        tbl: &p4rs::table::Table<1,
+            fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata)
         >,
     ),
 ) {
