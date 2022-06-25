@@ -623,13 +623,14 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         member_values.push(quote! {
             #name: None
         });
+        let off = offset >> 3;
         set_statements.push(quote! {
             self.#name = Some( unsafe {
                 #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.add(#offset), #required_bytes))?
+                    buf.add(#off), #required_bytes))?
             } )
         });
-        offset += required_bytes;
+        offset += size;
     }
 
     generated.extend(quote! {
@@ -793,11 +794,9 @@ fn generate_control_apply_body(
                         } else {
                             match &ty[1] {
                                 Type::UserDefined(name) => {
-                                    println!("looking for header {}", name);
                                     match ast.get_header(&name) {
                                         Some(_) => true,
                                         None => {
-                                            println!("no such header");
                                             false
                                         }
                                     }
