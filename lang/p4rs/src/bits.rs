@@ -15,7 +15,7 @@ pub(crate) use bytes;
 #[derive(Debug)]
 pub struct bit_slice<'a, const N: usize, const O: usize = 0>(&'a mut [u8]);
 
-impl<'a, const N: usize> bit_slice<'a, N> {
+impl<'a, const N: usize, const O: usize> bit_slice<'a, N, O> {
     pub fn new(data: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
         if data.len() < bytes!(N) {
             return Err(TryFromSliceError(bytes!(N)));
