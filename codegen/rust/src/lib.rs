@@ -7,7 +7,7 @@ use quote::{format_ident, quote};
 
 use p4::ast::{
     Action, ActionParameter, Control, ControlParameter, Direction, Expression,
-    Header, KeySetElement, KeySetElementValue, Lvalue, Parser, State, Statement,
+    Header, KeySetElementValue, Lvalue, Parser, State, Statement,
     Struct, Table, Transition, Type, AST, BinOp, MatchKind
 };
 use p4::check::{Diagnostic, Diagnostics, Level};
@@ -42,7 +42,7 @@ pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
             let mut out = tempfile::Builder::new()
                 .suffix(".rs")
                 .tempfile()?;
-            out.write_all(tokens.to_string().as_bytes());
+            out.write_all(tokens.to_string().as_bytes())?;
             println!("Wrote generated code to {}", out.path().display());
             out.keep()?;
             return Err(
@@ -617,7 +617,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     for member in &h.members {
         let name = format_ident!("{}", member.name);
         let size = type_size(&member.ty);
-        let required_bytes = if size & 7 > 0 {
+        let required_bytes = if (size + offset) & 7 > 0 {
             (size >> 3) + 1
         } else {
             size >> 3
@@ -756,7 +756,7 @@ fn generate_control_apply_body(
                 }
 
                 let mut selector_components = Vec::new();
-                for (lval, match_kind) in &table.key {
+                for (lval, _match_kind) in &table.key {
 
                     //TODO check lvalue ref here, should already be checked at
                     //this point?
@@ -1314,10 +1314,10 @@ fn generate_expression(
         Expression::BitLit(width, v) => {
             generate_bit_literal(*width, *v)
         }
-        Expression::SignedLit(width, v) => {
+        Expression::SignedLit(_width, _v) => {
             todo!("generate expression signed lit");
         }
-        Expression::Lvalue(v) => {
+        Expression::Lvalue(_v) => {
             todo!("generate expression lvalue");
         }
         Expression::Binary(lhs, op, rhs) => {
@@ -1343,15 +1343,15 @@ fn try_extract_prefix_len(
 
 
     match expr.as_ref() {
-        Expression::Binary(lhs, op, rhs) => {
+        Expression::Binary(_lhs, _op, rhs) => {
             match rhs.as_ref() {
                 Expression::IntegerLit(v) => {
                     Some(v.leading_ones() as u8)
                 }
-                Expression::BitLit(width, v) => {
+                Expression::BitLit(_width, v) => {
                     Some(v.leading_ones() as u8)
                 }
-                Expression::SignedLit(width, v) => {
+                Expression::SignedLit(_width, v) => {
                     Some(v.leading_ones() as u8)
                 }
                 _ => { None }
@@ -1394,7 +1394,7 @@ fn generate_bit_literal(
 
 fn generate_binop(
     op: BinOp,
-    ctx: &mut Context,
+    _ctx: &mut Context,
 ) -> TokenStream {
 
     match op {

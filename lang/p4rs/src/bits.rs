@@ -13,23 +13,24 @@ macro_rules! bytes {
 pub(crate) use bytes;
 
 #[derive(Debug)]
+/// A slice of N bits starting at bit offset O.
 pub struct bit_slice<'a, const N: usize, const O: usize = 0>(&'a mut [u8]);
 
 impl<'a, const N: usize, const O: usize> bit_slice<'a, N, O> {
     pub fn new(data: &'a mut [u8]) -> Result<Self, TryFromSliceError> {
-        if data.len() < bytes!(N) {
-            return Err(TryFromSliceError(bytes!(N)));
+        if data.len() < bytes!(N+O) {
+            return Err(TryFromSliceError(bytes!(N+O)));
         }
-        Ok(Self(&mut data[..bytes!(N)]))
+        Ok(Self(&mut data[..bytes!(N+O)]))
     }
 
     // WARNING: Don't do this on the data path. It copies the contents.
-    pub fn to_owned(&self) -> bit<N>
+    pub fn to_owned(&self) -> bit<N, O>
     where
-        [u8; bytes!(N)]: Sized,
+        [u8; bytes!(N+O)]: Sized,
     {
-        let mut result = bit::<N>::new();
-        for i in 0..bit::<N>::BYTES {
+        let mut result = bit::<N, O>::new();
+        for i in 0..bit::<N,O>::BYTES {
             result.0[i] = self.0[i];
         }
         result
@@ -51,28 +52,29 @@ where
 */
 
 #[derive(Debug, Clone, Copy)]
-pub struct bit<const N: usize>([u8; bytes!(N)])
+/// An array of N bits starting at bit offset O.
+pub struct bit<const N: usize, const O: usize = 0>([u8; bytes!(N+O)])
 where
-    [u8; bytes!(N)]: Sized;
+    [u8; bytes!(N+O)]: Sized;
 
-impl<const N: usize> bit<N>
+impl<const N: usize, const O: usize> bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
-    const BYTES: usize = bytes!(N);
-    pub const ZERO: Self = Self([u8::MIN; bytes!(N)]);
+    const BYTES: usize = bytes!(N+O);
+    pub const ZERO: Self = Self([u8::MIN; bytes!(N+O)]);
 
     pub fn new() -> Self {
-        Self([0u8; bytes!(N)])
+        Self([0u8; bytes!(N+O)])
     }
 
     // TODO: it would be nice if these could be made compile time constants, but
     // my rust-fu is failing me for implementing max as a constant
     pub fn min() -> Self {
-        Self([u8::MIN; bytes!(N)])
+        Self([u8::MIN; bytes!(N+O)])
     }
     pub fn max() -> Self {
-        let mut s = Self([u8::MAX; bytes!(N)]);
+        let mut s = Self([u8::MAX; bytes!(N+O)]);
 
         // if N is not on a byte boundary, set the highest order bit to the
         // maximum possible value within N
@@ -131,12 +133,62 @@ impl Into<usize> for bit<8> {
     }
 }
 
-impl<const N: usize> Into<BigUint> for bit<N> 
+impl<const N: usize, const O: usize> Into<BigUint> for bit<N, O> 
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     fn into(self) -> BigUint {
-        BigUint::from_bytes_be(&self.0)
+
+        /*
+        // mlsr: mask left shift right
+
+        let mut s = self;
+        let m = (N+O) % 8;
+        if m != 0 {
+            let mask = ((1u8 << m) - 1) << (8-m);
+            println!("mask  = {:08b}", mask);
+            //println!("value = {:08b}", s.0[bytes!(N+O)-1]);
+            println!("value = {:?}", s.0.map(|x| format!("{:08b}", x)));
+            //s.0[bytes!(N+O)-1] &= mask;
+            //s.0[bytes!(N+O)-1] >>= m;
+            s.0[0] &= mask;
+            s.0[0] >>= m;
+        }
+        let mut v = BigUint::from_bytes_be(&s.0);
+        v >>= O;
+        v
+        */
+
+        let mut v = BigUint::from_bytes_be(&self.0);
+        println!("{:016b}", v);
+
+        let ugh: Vec::<String> =
+            v.to_bytes_be().iter().map(|x| format!("{:08b}", x)).collect();
+        println!("v = {:?}", ugh);
+
+        v <<= O;
+        println!("{:016b}", v);
+
+        let ugh: Vec::<String> =
+            v.to_bytes_be().iter().map(|x| format!("{:08b}", x)).collect();
+        println!("v = {:?}", ugh);
+
+        let m = bytes!(N+O)*8 - O - (N+O)%8;
+        if m > 0 {
+            let mask = (1usize << m) - 1;
+            v &= BigUint::from(mask);
+
+            println!("mask  = {:016b}", mask);
+            println!("value = {:?}", self.0.map(|x| format!("{:08b}", x)));
+        }
+
+        println!("V= {:b}", v);
+
+        v
+
+
+        
+
     }
 }
 
@@ -173,38 +225,41 @@ impl std::cmp::Eq for bit<8> {}
 
 // ordinals -------------------------------------------------------------------
 
-impl<const N: usize> std::cmp::PartialEq for bit::<N> 
+impl<const N: usize, const O: usize> std::cmp::PartialEq for bit::<N, O> 
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl<const N: usize> std::cmp::PartialEq<bit_slice<'_, N>> for bit::<N> 
+impl<const N: usize, const O: usize> 
+std::cmp::PartialEq<bit_slice<'_, N, O>> for bit::<N, O> 
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
-    fn eq(&self, other: &bit_slice<N>) -> bool {
+    fn eq(&self, other: &bit_slice<N, O>) -> bool {
         self.0.as_slice() == other.0
     }
 }
 
-impl<const N: usize> std::cmp::PartialOrd for bit::<N> 
+impl<const N: usize, const O: usize>
+std::cmp::PartialOrd for bit::<N, O> 
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.0.cmp(&other.0))
     }
 }
 
-impl<const N: usize> std::cmp::PartialOrd<bit_slice<'_, N>> for bit::<N> 
+impl<const N: usize, const O: usize>
+std::cmp::PartialOrd<bit_slice<'_, N, O>> for bit::<N, O> 
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
-    fn partial_cmp(&self, other: &bit_slice<N>) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &bit_slice<N, O>) -> Option<std::cmp::Ordering> {
         Some(self.0.as_slice().cmp(&other.0))
     }
 }
@@ -215,9 +270,9 @@ where
 // specific sizes like impl std::ops::Sub for bit<1> in terms of u8 ....
 // bit<100> interms of u128 ... etc
 
-impl<const N: usize> std::ops::Sub for bit<N>
+impl<const N: usize, const O: usize> std::ops::Sub for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -231,9 +286,9 @@ where
     }
 }
 
-impl<const N: usize> std::ops::Sub<u8> for bit<N>
+impl<const N: usize, const O: usize> std::ops::Sub<u8> for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -247,9 +302,9 @@ where
     }
 }
 
-impl<const N: usize> std::ops::Add<u8> for bit<N>
+impl<const N: usize, const O: usize> std::ops::Add<u8> for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -263,9 +318,9 @@ where
     }
 }
 
-impl<const N: usize> std::ops::Add for bit<N>
+impl<const N: usize, const O: usize> std::ops::Add for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -279,9 +334,9 @@ where
     }
 }
 
-impl<const N: usize> std::ops::Div for bit<N>
+impl<const N: usize, const O: usize> std::ops::Div for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -295,9 +350,9 @@ where
     }
 }
 
-impl<const N: usize> std::ops::Mul for bit<N>
+impl<const N: usize, const O: usize> std::ops::Mul for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -311,9 +366,9 @@ where
     }
 }
 
-impl<const N: usize> std::ops::Shr<usize> for bit<N>
+impl<const N: usize, const O: usize> std::ops::Shr<usize> for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
@@ -326,9 +381,9 @@ where
     }
 }
 
-impl <const N: usize> std::ops::BitAnd for bit<N>
+impl <const N: usize, const O: usize> std::ops::BitAnd for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized
+    [u8; bytes!(N+O)]: Sized
 {
 
     type Output = Self;
@@ -343,12 +398,12 @@ where
 
 }
 
-impl<const N: usize> IntoIterator for bit<N>
+impl<const N: usize, const O: usize> IntoIterator for bit<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
-    type Item = bit<N>;
-    type IntoIter = BitIntoIterator<N>;
+    type Item = bit<N, O>;
+    type IntoIter = BitIntoIterator<N, O>;
 
     fn into_iter(self) -> Self::IntoIter {
         Self::IntoIter {
@@ -357,24 +412,47 @@ where
     }
 }
 
-pub struct BitIntoIterator<const N: usize>
+pub struct BitIntoIterator<const N: usize, const O: usize>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
-    bit: bit<N>,
+    bit: bit<N, O>,
 }
 
-impl<const N: usize> Iterator for BitIntoIterator<N>
+impl<const N: usize, const O: usize> Iterator for BitIntoIterator<N, O>
 where
-    [u8; bytes!(N)]: Sized,
+    [u8; bytes!(N+O)]: Sized,
 {
-    type Item = bit<N>;
+    type Item = bit<N, O>;
     fn next(&mut self) -> Option<Self::Item> {
         self.bit  = self.bit + 1;
         Some(self.bit)
     }
 }
 
+
+
+// TODO more of these for other sizes
+impl<'a> Into<u16> for bit_slice<'a, 16> {
+    fn into(self) -> u16 {
+        u16::from_be_bytes([self.0[0], self.0[1]])
+    }
+}
+
+// TODO more of these for other sizes
+impl<'a> std::hash::Hash for bit_slice<'a, 8> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0[0].hash(state);
+    }
+}
+
+impl<'a> std::cmp::PartialEq for bit_slice<'a, 8> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0[0] == other.0[0]
+    }
+}
+
+impl<'a> std::cmp::Eq for bit_slice<'a, 8> {}
 
 #[cfg(test)]
 mod tests {
@@ -434,27 +512,96 @@ mod tests {
 
         let x = bit::<19>::max();
         assert_eq!(x.0, [0b11111111u8, 0b11111111u8, 0b111u8]);
-    }
-}
 
-// TODO more of these for other sizes
-impl<'a> Into<u16> for bit_slice<'a, 16> {
-    fn into(self) -> u16 {
-        u16::from_be_bytes([self.0[0], self.0[1]])
     }
-}
 
-// TODO more of these for other sizes
-impl<'a> std::hash::Hash for bit_slice<'a, 8> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0[0].hash(state);
+    #[test]
+    fn sub_byte() {
+
+        // The following field is a byte that straddles byte boundaries
+        //
+        //   bit<8,4>
+        //
+        // A byte because N=8. The offset O=4 means that the byte starts in the
+        // fourth bit of the first byte in memory. Labeling the bits of this
+        // field as a-h, the layout in byte-addressable memory looks like the
+        // following.
+        //
+        //   |....abcd|efgh....|
+        //
+        // In this case we only have 1 byte, so byte order does not matter. But
+        // in general what direction we shift the bits in due to an offset
+        // depends on the byte ordering. In networking big endian, sometimes
+        // called network byte order, is most often (always?) used. With big
+        // endian byte order, the first byte of a multibyte integer is the most
+        // significant byte.
+        //
+        // Consider standard programming language hexadecimal notation
+        //
+        //   0xff0f
+        //
+        // Most programming languages use little-endian notation for integer
+        // literals in hexadecimal notation. This is because most processor
+        // instruction sets operate over little endian encoded integers.
+        //
+        // In big endian notation we would write this number as
+        //
+        //   0x0fff
+        //
+        // Now consider this number in binary, in big endian layout. Note that
+        // the bits within a byte are always little endian in nature, they start
+        // with the least significant bit. When we say "start" in written
+        // notation that means the rightmost bit. This comes from how we write
+        // decimal numbers is base ten. In the number 123, pronounced one
+        // hundred twenty three, the 3 is the least significant digit.
+        //
+        //   |00001111|11111111|
+        //
+        // Getting back to our example of a field one byte in length that spans
+        // byte boundaries. Let's consider the value
+        //
+        //   |....1111|1010....|
+        //
+        // To read this value as a byte we need to shift the contents into a
+        // single byte. For this example it does not matter if we shift left or
+        // right, as it's just one byte so byte order does not matter. Let's
+        // shift right by 4 bytes. Now we have
+        //
+        //   |........|11111010|
+        //
+        // Now the first byte has the value 0xfa. Assuming for the moment that
+        // the dots are zeros, reading this as a 16-bit value in hex notation we
+        // have the value 0x00fa. The big endian interpretation of this would be
+        // the decimal value 64000 where the little endian value is 250.
+        //
+        // It's clear that the big endian interpretation is not what we want
+        // here, as the dotted values have nothing to do with the byte
+        // straddling byte we are whittling down to. It's also true that if the
+        // values in the dotted bit positions are not zeros, then the little
+        // endian representation is not correct either. In this situation we
+        // could just truncate the second byte and all these problems go away.
+        // This is possible because our shift has landed us on a clean byte
+        // boundary, but this is not always the case.
+        //
+        // So in general, what we need to do is two things
+        // 
+        // 1. Shift in the proper direction according to the byte order.
+        // 2. Mask out any bits that are not a part of the value of interest.
+        //
+        // In the above example this ammounts to shifting left instead of right
+        // and masking out the leading bits, resulting in the following
+        //
+        //   |11111010|........|
+        //
+
+
+        //let mut data: [u8;2] = [ 0b0110_1111, 0b1110_1010 ];
+        let mut data: [u8;2] = [ 0b0000_1111, 0b1110_0000 ];
+        let x = bit_slice::<8,4>::new(&mut data).unwrap();
+
+        let mut y: BigUint = x.to_owned().into();
+        println!("{}", y);
+        assert_eq!(y, BigUint::from(0b11111010u8));
     }
-}
 
-impl<'a> std::cmp::PartialEq for bit_slice<'a, 8> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0[0] == other.0[0]
-    }
 }
-
-impl<'a> std::cmp::Eq for bit_slice<'a, 8> {}

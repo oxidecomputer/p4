@@ -376,6 +376,7 @@ name = "p4-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "num",
  "p4-macro",
  "p4rs",
  "xfr",
