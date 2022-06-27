@@ -159,6 +159,7 @@ where
         v
         */
 
+        /*
         let mut v = BigUint::from_bytes_be(&self.0);
         println!("{:016b}", v);
 
@@ -175,19 +176,24 @@ where
 
         let m = bytes!(N+O)*8 - O - (N+O)%8;
         if m > 0 {
-            let mask = (1usize << m) - 1;
+            let mut mask = (1usize << m) - 1;
+            mask <<= m;
+            println!("value = {:016b}", v);
             v &= BigUint::from(mask);
-
             println!("mask  = {:016b}", mask);
-            println!("value = {:?}", self.0.map(|x| format!("{:08b}", x)));
+            println!("value = {:016b}", v);
         }
 
         println!("V= {:b}", v);
 
         v
+        */
 
+        // first sift bits to the left by O
+        let v = self << 4;
 
-        
+        BigUint::from_bytes_be(&v.0)
+
 
     }
 }
@@ -366,6 +372,7 @@ where
     }
 }
 
+// XXX create native shr
 impl<const N: usize, const O: usize> std::ops::Shr<usize> for bit<N, O>
 where
     [u8; bytes!(N+O)]: Sized,
@@ -378,6 +385,39 @@ where
         let mut result = Self::new();
         result.0.copy_from_slice(b.to_bytes_be().as_slice());
         result
+    }
+}
+
+impl<const N: usize, const O: usize> std::ops::Shl<usize> for bit<N, O>
+where
+    [u8; bytes!(N+O)]: Sized,
+{
+    /*
+     *
+     * x = |........|11111111|
+     *             1        0
+     *
+     * x'[i=0] = x[i] << N
+     * x'[i=1] = x[i] << N | x[i-1] >> (i*8 - N)
+     *
+     */
+    type Output = Self;
+
+    // TODO: i can hear henry s. warren jr. laughing at me ....
+    fn shl(self, n: usize) -> Self::Output {
+        let mut o = self;
+        for _ in 0..n {
+            let mut carry = false;
+            for i in 0..self.0.len() {
+                let c =  (o.0[i] & 0b10000000) != 0;
+                o.0[i] <<= 1;
+                if carry {
+                    o.0[i] |= 0b00000001
+                }
+                carry = c;
+            }
+        }
+        o
     }
 }
 
@@ -516,6 +556,43 @@ mod tests {
     }
 
     #[test]
+    fn shl() {
+
+        let mut data: [u8;2] = [ 0b11111111, 0b00000000 ];
+        let x = bit_slice::<16,0>::new(&mut data).unwrap().to_owned();
+        let y = x << 1;
+        println!("{:?}", y);
+        assert_eq!(y.0[0], 0b11111110);
+        assert_eq!(y.0[1], 0b00000001);
+
+        let mut data: [u8;2] = [ 0b11111111, 0b00000000 ];
+        let x = bit_slice::<16,0>::new(&mut data).unwrap().to_owned();
+        let y = x << 4;
+        println!("{:?}", y);
+        assert_eq!(y.0[0], 0b11110000);
+        assert_eq!(y.0[1], 0b00001111);
+        
+        // |........|........|........|11111111|
+        // |....1111|1111....|........|........|
+        //         3        2        1        0
+        //        24       16        8
+        let mut data: [u8;4] = [
+            0b11111111,
+            0b00000000,
+            0b00000000,
+            0b00000000,
+        ];
+        let x = bit_slice::<32,0>::new(&mut data).unwrap().to_owned();
+        let y = x << 20;
+        println!("{:?}", y);
+        assert_eq!(y.0[0], 0b00000000);
+        assert_eq!(y.0[1], 0b00000000);
+        assert_eq!(y.0[2], 0b11110000);
+        assert_eq!(y.0[3], 0b00001111);
+
+    }
+
+    #[test]
     fn sub_byte() {
 
         // The following field is a byte that straddles byte boundaries
@@ -528,6 +605,7 @@ mod tests {
         // following.
         //
         //   |....abcd|efgh....|
+        //           1        0
         //
         // In this case we only have 1 byte, so byte order does not matter. But
         // in general what direction we shift the bits in due to an offset
@@ -556,11 +634,13 @@ mod tests {
         // hundred twenty three, the 3 is the least significant digit.
         //
         //   |00001111|11111111|
+        //           1        0
         //
         // Getting back to our example of a field one byte in length that spans
         // byte boundaries. Let's consider the value
         //
         //   |....1111|1010....|
+        //           1        0
         //
         // To read this value as a byte we need to shift the contents into a
         // single byte. For this example it does not matter if we shift left or
@@ -568,6 +648,7 @@ mod tests {
         // shift right by 4 bytes. Now we have
         //
         //   |........|11111010|
+        //           1        0
         //
         // Now the first byte has the value 0xfa. Assuming for the moment that
         // the dots are zeros, reading this as a 16-bit value in hex notation we
@@ -592,11 +673,15 @@ mod tests {
         // and masking out the leading bits, resulting in the following
         //
         //   |11111010|........|
+        //           1        0
         //
 
 
         //let mut data: [u8;2] = [ 0b0110_1111, 0b1110_1010 ];
-        let mut data: [u8;2] = [ 0b0000_1111, 0b1110_0000 ];
+        let mut data: [u8;2] = [ 
+            0b1010_0000,
+            0b0000_1111, 
+        ];
         let x = bit_slice::<8,4>::new(&mut data).unwrap();
 
         let mut y: BigUint = x.to_owned().into();
