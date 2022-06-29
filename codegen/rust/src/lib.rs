@@ -74,7 +74,7 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
     //
 
     // start with use statements
-    let mut tokens = quote! { use p4rs::*; };
+    let mut tokens = quote! { use p4rs::*; use bitvec::prelude::*; };
 
     // structs
     for s in ctx.structs.values() {
@@ -556,7 +556,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                 }
             }
             Type::Bit(size) => {
-                members.push(quote! { pub #name: bit::<#size> });
+                members.push(quote! { pub #name: BitVec::<u8, Lsb0> });
             }
             x => {
                 todo!("struct member {}", x)
@@ -595,7 +595,7 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         let size = type_size(&member.ty);
         let name = format_ident!("{}", member.name);
         let ty = rust_type(&member.ty, true, offset);
-        members.push(quote! { pub #name: Option::<#ty> });
+        members.push(quote! { pub #name: Option::<&'a mut #ty> });
         offset += size;
     }
 
@@ -617,21 +617,26 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     for member in &h.members {
         let name = format_ident!("{}", member.name);
         let size = type_size(&member.ty);
-        let required_bytes = if (size + offset) & 7 > 0 {
+        /*
+        let required_bytes = if (size + offset) & 7 > 0 || size & 7 > 0 {
             (size >> 3) + 1
         } else {
             size >> 3
         };
+        */
         let ty = rust_type(&member.ty, true, offset);
         member_values.push(quote! {
             #name: None
         });
-        let off = offset >> 3;
+        //let off = offset >> 3;
+        let end = offset+size;
         set_statements.push(quote! {
-            self.#name = Some( unsafe {
-                #ty::new(&mut*std::ptr::slice_from_raw_parts_mut(
-                    buf.add(#off), #required_bytes))?
-            } )
+            self.#name = Some(
+                &mut (*std::ptr::slice_from_raw_parts_mut(
+                    buf.as_mut_ptr(),
+                    buf.len(),
+                )).view_bits_mut::<Lsb0>()[#offset..#end]
+            )
         });
         offset += size;
     }
@@ -644,8 +649,9 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
                 }
             }
             fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
-                let buf = buf.as_mut_ptr();
-                #(#set_statements);*;
+                unsafe {
+                    #(#set_statements);*;
+                }
                 Ok(())
             }
             fn size() -> usize {
@@ -810,19 +816,23 @@ fn generate_control_apply_body(
                     };
 
                     if is_header {
-                        //TODO: to_owned is bad here, copying on data path
+                        //TODO: to_bitvec is bad here, copying on data path
                         selector_components.push(quote!{
-                            #(#lvref).*.as_ref().unwrap().to_owned().into() 
+                            p4rs::bitvec_to_bigint(
+                                #(#lvref).*.as_ref().unwrap().to_bitvec()
+                            )
                         });
                     } else {
                         selector_components.push(quote!{
-                            #(#lvref).*.into() 
+                            p4rs::bitvec_to_biguint(&#(#lvref).*)
                         });
                     }
 
                 }
                 tokens.extend(quote! {
-                    let matches = #(#table_name).*.match_selector(&[#(#selector_components),*]);
+                    let matches = #(#table_name).*.match_selector(
+                        &[#(#selector_components),*]
+                    );
                     if matches.len() > 0 { 
                         (matches[0].action)(#(#action_args),*)
                     }
@@ -1003,7 +1013,6 @@ fn generate_control_table(
         return (table_type, tokens);
     }
 
-    // XXX
     for entry in &table.const_entries {
         let mut keyset = Vec::new();
         for (i, k) in entry.keyset.iter().enumerate() {
@@ -1014,13 +1023,13 @@ fn generate_control_table(
                         MatchKind::Exact => {
                             let k = format_ident!("{}", "Exact");
                             quote!{
-                                p4rs::table::Key::#k(#xpr.into())
+                                p4rs::table::Key::#k(p4rs::bitvec_to_biguint(&#xpr))
                             }
                         }
                         MatchKind::Ternary => {
                             let k = format_ident!("{}", "Ternary");
                             quote!{
-                                p4rs::table::Key::#k(#xpr.into())
+                                p4rs::table::Key::#k(p4rs::bitvec_to_biguint(&#xpr))
                             }
                         }
                         MatchKind::LongestPrefixMatch => {
@@ -1080,7 +1089,10 @@ fn generate_control_table(
                         Type::Bit(n) => {
                             if *n <= 8 {
                                 let v = *v as u8;
-                                action_fn_args.push(quote! { #tytk::from(#v) });
+                                //action_fn_args.push(quote! { #tytk::from(#v) });
+                                action_fn_args.push(quote!{
+                                    #v.view_bits::<Lsb0>().to_bitvec()
+                                });
                             }
                         }
                         x => todo!("action praam expression type {:?}", x),
@@ -1227,9 +1239,11 @@ fn rust_type(ty: &Type, header_member: bool, offset: usize) -> TokenStream {
         Type::Bit(size) => {
             let off = offset % 8;
             if header_member {
-                quote! { bit_slice::<'a, #size, #off> }
+                //quote! { bit_slice::<'a, #size, #off> }
+                quote!{ BitSlice<u8, Lsb0> }
             } else {
-                quote! { bit::<#size> }
+                quote!{ BitVec<u8, Lsb0> }
+                //quote! { bit::<#size> }
             }
         }
         Type::Int(_size) => todo!("generate int type"),
@@ -1373,22 +1387,22 @@ fn generate_bit_literal(
 
     if width <= 8 {
         let v = value as u8;
-        return quote! { bit::<#width>::from(#v) }
+        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
     }
     else if width <= 16 {
         let v = value as u16;
-        return quote! { bit::<#width>::from(#v) }
+        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
     }
     else if width <= 32 {
         let v = value as u32;
-        return quote! { bit::<#width>::from(#v) }
+        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
     }
     else if width <= 64 {
         let v = value as u64;
-        return quote! { bit::<#width>::from(#v) }
+        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
     }
     else {
-        return quote! { bit::<#width>::from(#value) }
+        todo!("bit<x> where x > 64");
     }
 }
 

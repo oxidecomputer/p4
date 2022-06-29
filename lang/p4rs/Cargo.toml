@@ -9,3 +9,4 @@ slog = { version = "2.7", features = ["max_level_trace"] }
 slog-term = "2.9"
 slog-async = "2.7"
 slog-envlogger = "2.2"
+bitvec = "1.0"

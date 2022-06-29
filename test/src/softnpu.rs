@@ -3,6 +3,7 @@ use p4rs::{bit, packet_in, Header};
 use std::collections::HashMap;
 use std::thread::spawn;
 use xfr::{RingConsumer, RingProducer};
+use bitvec::prelude::*;
 
 /*
 mod p4 {
@@ -134,12 +135,13 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
 
                 // assumes phys are ordered starting from 1
                 let mut ingress_metadata = IngressMetadata {
-                    port: bit::<8>::from(i as u8 + 1),
+                    //TODO more than u8::MAX ports
+                    port: ((i+1) as u8).view_bits::<Lsb0>().to_bitvec(),
                 };
 
                 // to be filled in by pipeline
                 let mut egress_metadata = EgressMetadata {
-                    port: bit::<8>::from(0u8),
+                    port: 0u8.view_bits::<Lsb0>().to_bitvec(),
                 };
 
                 // run the parser block
@@ -158,7 +160,7 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                 );
 
                 // write to egress port
-                let port: usize = egress_metadata.port.into();
+                let port: usize = egress_metadata.port.as_raw_slice()[0] as usize;
                 let eg = &egress[port - 1];
                 let mut fps = eg.reserve(1).unwrap();
                 eg.write(fps.next().unwrap(), content);

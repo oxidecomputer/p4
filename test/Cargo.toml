@@ -9,6 +9,7 @@ p4-macro = { path = "../lang/p4-macro" }
 p4rs = { path = "../lang/p4rs" }
 xfr = { git = "https://github.com/oxidecomputer/xfr" }
 #xfr = { path = "/Users/ry/src/xfr" }
+bitvec = "1.0"
 
 [dev-dependencies]
 anyhow = "1"

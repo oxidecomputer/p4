@@ -10,6 +10,8 @@ pub use bits::bit;
 pub use bits::bit_slice;
 pub use error::TryFromSliceError;
 
+use bitvec::prelude::*;
+
 pub mod bits;
 pub mod error;
 //pub mod hicuts;
@@ -215,4 +217,9 @@ impl<'a> packet_in<'a> {
         x.set(shared_mut)?;
         Ok(x)
     }
+}
+
+//XXX: remove once classifier defined in terms of bitvecs
+pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> num::BigUint{
+    num::BigUint::from_bytes_be(bv.as_raw_slice())
 }

@@ -12,6 +12,8 @@ fn main() {
 
     println!("dst: {:x?}", eth.dst_addr);
     println!("src: {:x?}", eth.src_addr);
-    let ethertype: u16 = eth.ether_type.unwrap().into();
+    let ethertype = u16::from_be_bytes(
+        eth.ether_type.unwrap().to_bitvec().as_raw_slice().try_into().unwrap()
+    );
     println!("ethertype: {:x?}", ethertype);
 }

@@ -189,10 +189,27 @@ where
         v
         */
 
-        // first sift bits to the left by O
-        let v = self << 4;
+        // first shift bits to the right by O
+        println!("V= {:02x?}", self);
+        println!(">>{}", O);
+        let v = self >> O;
+        println!("V= {:02x?}", v);
 
-        BigUint::from_bytes_be(&v.0)
+        // then mask out any of the trailing bits not in use
+
+        let mut mask = Self::new();
+        //mask.0[Self::BYTES-1] = 1;
+        mask.0[0] = 1;
+        println!("M= {:02x?}", mask);
+        let mask = mask << N;
+        println!("M= {:02x?}", mask);
+        let mask = mask - 1;
+        println!("M= {:02x?}", mask);
+
+        let result = v & mask;
+        println!("V= {:02x?}", result);
+
+        BigUint::from_bytes_be(&result.0)
 
 
     }
@@ -283,12 +300,20 @@ where
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
+        /*
         let a = num::bigint::BigUint::from_bytes_be(&self.0);
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a - b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..bytes!(N+O)]);
         result
+        */
+
+        let mut c = Self::new();
+        for i in 0..self.0.len() {
+            c.0[i] = self.0[i] - other.0[i];
+        }
+        c
     }
 }
 
@@ -303,7 +328,13 @@ where
         let b = num::bigint::BigUint::from_bytes_be(&[other]);
         let c = a - b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        let bs = c.to_bytes_be();
+        let n = if bs.len() < bytes!(N+O) {
+            bs.len()
+        } else {
+            bytes!(N+O)
+        };
+        result.0[0..n].copy_from_slice(&bs[0..n]);
         result
     }
 }
@@ -319,7 +350,7 @@ where
         let b = num::bigint::BigUint::from_bytes_be(&[other]);
         let c = a + b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..bytes!(N+O)]);
         result
     }
 }
@@ -335,7 +366,7 @@ where
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a + b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..bytes!(N+O)]);
         result
     }
 }
@@ -351,7 +382,7 @@ where
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a / b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..bytes!(N+O)]);
         result
     }
 }
@@ -367,24 +398,32 @@ where
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a * b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..bytes!(N+O)]);
         result
     }
 }
 
-// XXX create native shr
 impl<const N: usize, const O: usize> std::ops::Shr<usize> for bit<N, O>
 where
     [u8; bytes!(N+O)]: Sized,
 {
     type Output = Self;
 
-    fn shr(self, rhs: usize) -> Self::Output {
-        let mut b = num::bigint::BigUint::from_bytes_be(&self.0);
-        b >>= rhs;
-        let mut result = Self::new();
-        result.0.copy_from_slice(b.to_bytes_be().as_slice());
-        result
+    // TODO: i can hear henry s. warren jr. laughing at me ....
+    fn shr(self, n: usize) -> Self::Output {
+        let mut o = self;
+        for _ in 0..n {
+            let mut carry = false;
+            for i in (0..self.0.len()).rev() {
+                let c =  (o.0[i] & 0b00000001) != 0;
+                o.0[i] >>= 1;
+                if carry {
+                    o.0[i] |= 0b10000000
+                }
+                carry = c;
+            }
+        }
+        o
     }
 }
 
@@ -432,7 +471,13 @@ where
         let b = num::bigint::BigUint::from_bytes_be(&other.0);
         let c = a & b;
         let mut result = Self::new();
-        result.0.copy_from_slice(&c.to_bytes_be().as_slice()[0..N]);
+        let bs = c.to_bytes_be();
+        let n = if bs.len() < bytes!(N+O) {
+            bs.len()
+        } else {
+            bytes!(N+O)
+        };
+        result.0[0..n].copy_from_slice(&bs[0..n]);
         result
     }
 
