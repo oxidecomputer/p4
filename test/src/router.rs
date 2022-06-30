@@ -60,26 +60,24 @@ fn router() -> Result<(), anyhow::Error> {
 
     let ip2: Ipv6Addr = "fd00:2000::1".parse().unwrap();
     let mac2 = [0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
-    let et = 0x86ed;
 
-    let mut data = [0u8; 256];
     let payload = b"do you know the muffin man?";
-    write(&phy1, 99, 0x1701d, payload.len(), payload, 47, 23, ip1, ip2, mac1, mac2);
+    write(&phy1, 99, 1701, payload.len(), payload, 47, 23, ip1, ip2, mac1, mac2);
 
 
     let payload = b"the muffin man?";
-    write(&phy2, 101, 0x1701c, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
+    write(&phy2, 101, 1701, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
 
 
     let payload = b"the muffin man!";
-    write(&phy1, 99, 0x1701d, payload.len(), payload, 47, 23, ip1, ip2, mac1, mac2);
+    write(&phy1, 99, 1701, payload.len(), payload, 47, 23, ip1, ip2, mac1, mac2);
 
     let payload = b"why yes";
-    write(&phy2, 101, 0x1701c, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
+    write(&phy2, 101, 1701, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
     let payload = b"i know the muffin man";
-    write(&phy2, 101, 0x1701c, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
+    write(&phy2, 101, 1701, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
     let payload = b"the muffin man is me!!!";
-    write(&phy2, 101, 0x1701c, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
+    write(&phy2, 101, 1701, payload.len(), payload, 74, 32, ip2, ip1, mac2, mac1);
 
     sleep(Duration::from_secs(2));
 
@@ -103,6 +101,7 @@ fn write(
     let mut data = [0u8; 256];
     let et = 0x86ed;
     let mut pkt = pnet::packet::ipv6::MutableIpv6Packet::new(&mut data).unwrap();
+    pkt.set_version(6);
     pkt.set_traffic_class(traffic_class);
     pkt.set_flow_label(flow_label);
     pkt.set_payload_length(payload_length as u16);
@@ -111,16 +110,20 @@ fn write(
     pkt.set_hop_limit(hop_limit);
     pkt.set_source(src);
     pkt.set_destination(dst);
-    println!("SEND {:x?}", data);
+    //println!("SEND {:x?}", data);
     phy.write(&[Frame::new(smac, dmac, et, &data)]).expect("phy write");
 }
 
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
+    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
+    println!("{:#?}", pkt);
     println!("phy 1 !!! {}", String::from_utf8_lossy(&frame[54..]));
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
+    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
+    println!("{:#?}", pkt);
     println!("phy 2 !!! {}", String::from_utf8_lossy(&frame[54..]));
 }

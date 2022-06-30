@@ -175,9 +175,9 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                     let selector_v6 = selector.to_u128().unwrap();
                     //let selector_v6 = selector_v6.to_be();
                     let result = selector_v6 & mask == key & mask;
-                    println!("{:x} & {:x} =?= {:x} & {:x}", selector_v6, mask, key, mask);
-                    println!("{:x} =?= {:x}", selector_v6 & mask, key & mask);
-                    println!("{}", result);
+                    //println!("{:x} & {:x} =?= {:x} & {:x}", selector_v6, mask, key, mask);
+                    //println!("{:x} =?= {:x}", selector_v6 & mask, key & mask);
+                    //println!("{}", result);
                     result
                 }
                 IpAddr::V4(addr) => {

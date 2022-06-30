@@ -229,7 +229,7 @@ impl<'a> packet_in<'a> {
 //XXX: remove once classifier defined in terms of bitvecs
 pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> num::BigUint {
     let u = num::BigUint::from_bytes_be(bv.as_raw_slice());
-    println!("{:x?} -> {:x}", bv.as_raw_slice(), u);
+    //println!("{:x?} -> {:x}", bv.as_raw_slice(), u);
     u
 }
 

@@ -555,7 +555,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                     });
                 }
             }
-            Type::Bit(size) => {
+            Type::Bit(_size) => {
                 members.push(quote! { pub #name: BitVec::<u8, Lsb0> });
             }
             x => {
@@ -623,8 +623,8 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
         } else {
             size >> 3
         };
-        */
         let ty = rust_type(&member.ty, true, offset);
+        */
         member_values.push(quote! {
             #name: None
         });
@@ -1084,12 +1084,12 @@ fn generate_control_table(
         for (i, expr) in entry.action.parameters.iter().enumerate() {
             match expr.as_ref() {
                 Expression::IntegerLit(v) => {
-                    let tytk = rust_type(&action.parameters[i].ty, false, 0);
+                    //XXX let tytk = rust_type(&action.parameters[i].ty, false, 0);
                     match &action.parameters[i].ty {
                         Type::Bit(n) => {
                             if *n <= 8 {
                                 let v = *v as u8;
-                                //action_fn_args.push(quote! { #tytk::from(#v) });
+                                //XXX action_fn_args.push(quote! { #tytk::from(#v) });
                                 action_fn_args.push(quote!{
                                     #v.view_bits::<Lsb0>().to_bitvec()
                                 });
@@ -1232,18 +1232,18 @@ fn generate_control_action_body(
 /// a P4 type such as `bit<N>` may be one of two types. If it's in a header,
 /// then it's a reference type like `bit_slice`. If it's not in a header than
 /// it's a value type like `bit`.
-fn rust_type(ty: &Type, header_member: bool, offset: usize) -> TokenStream {
+fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
     match ty {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
-        Type::Bit(size) => {
-            let off = offset % 8;
+        Type::Bit(_size) => {
+            //XXX let off = offset % 8;
             if header_member {
-                //quote! { bit_slice::<'a, #size, #off> }
+                //XXX quote! { bit_slice::<'a, #size, #off> }
                 quote!{ BitSlice<u8, Lsb0> }
             } else {
                 quote!{ BitVec<u8, Lsb0> }
-                //quote! { bit::<#size> }
+                //XXX quote! { bit::<#size> }
             }
         }
         Type::Int(_size) => todo!("generate int type"),
