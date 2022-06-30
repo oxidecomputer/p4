@@ -1,4 +1,6 @@
-use crate::hub::{ethernet_t, headers_t, EgressMetadata, IngressMetadata};
+//TODO abstract away generated code from here
+//use crate::hub::{ethernet_t, headers_t, EgressMetadata, IngressMetadata};
+use crate::router::{ipv6_t, ethernet_t, headers_t, EgressMetadata, IngressMetadata};
 use p4rs::{bit, packet_in, Header};
 use std::collections::HashMap;
 use std::thread::spawn;
@@ -131,6 +133,7 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                 // should not be here, need more abstraction.
                 let mut header = headers_t {
                     ethernet: ethernet_t::new(),
+                    ipv6: ipv6_t::new(),
                 };
 
                 // assumes phys are ordered starting from 1
@@ -161,6 +164,10 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
 
                 // write to egress port
                 let port: usize = egress_metadata.port.as_raw_slice()[0] as usize;
+                if port == 0 {
+                    // indicates no table match
+                    continue
+                }
                 let eg = &egress[port - 1];
                 let mut fps = eg.reserve(1).unwrap();
                 eg.write(fps.next().unwrap(), content);

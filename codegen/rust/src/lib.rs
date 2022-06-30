@@ -164,7 +164,7 @@ fn generate_parser_state_statements(
     state: &State,
     ctx: &mut Context,
 ) -> TokenStream {
-    let tokens = TokenStream::new();
+    let mut tokens = TokenStream::new();
 
     for stmt in &state.statements {
         match stmt {
@@ -216,9 +216,9 @@ fn generate_parser_state_statements(
                                 x => todo!("extern arg {:?}", x),
                             }
                         }
-                        return quote! {
+                        tokens.extend(quote! {
                             #(#lval).* ( #(#args),* );
-                        };
+                        });
                     }
                     Err(_) => return tokens, //error added to diagnostics
                 }
@@ -818,8 +818,8 @@ fn generate_control_apply_body(
                     if is_header {
                         //TODO: to_bitvec is bad here, copying on data path
                         selector_components.push(quote!{
-                            p4rs::bitvec_to_bigint(
-                                #(#lvref).*.as_ref().unwrap().to_bitvec()
+                            p4rs::bitvec_to_biguint(
+                                &#(#lvref).*.as_ref().unwrap().to_bitvec()
                             )
                         });
                     } else {
@@ -1049,7 +1049,7 @@ fn generate_control_table(
                             let k = format_ident!("{}", "Lpm");
                             quote!{
                                 p4rs::table::Key::#k(p4rs::table::Prefix{
-                                    addr: (#xpr).into(),
+                                    addr: bitvec_to_ip6addr(&(#xpr)),
                                     len: #len,
                                 })
                             }
@@ -1401,8 +1401,18 @@ fn generate_bit_literal(
         let v = value as u64;
         return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
     }
+    else if width <= 128 {
+        let v = value as u128;
+        return quote! { 
+            {
+                let mut x = bitvec![mut u8, Lsb0; 0; 128];
+                x.store(#v);
+                x
+            }
+        }
+    }
     else {
-        todo!("bit<x> where x > 64");
+        todo!("bit<x> where x > 128");
     }
 }
 

@@ -10,6 +10,7 @@ p4rs = { path = "../lang/p4rs" }
 xfr = { git = "https://github.com/oxidecomputer/xfr" }
 #xfr = { path = "/Users/ry/src/xfr" }
 bitvec = "1.0"
+pnet = "0.31"
 
 [dev-dependencies]
 anyhow = "1"

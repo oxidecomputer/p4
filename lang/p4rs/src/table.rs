@@ -158,7 +158,7 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
             match t {
                 Ternary::DontCare => true,
                 Ternary::Value(x) => selector == x,
-                Ternary::Masked(x, m) => selector & m == x & m
+                Ternary::Masked(x, m) => selector & m == x & m,
             }
         }
         Key::Lpm(p) => {
@@ -166,13 +166,19 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 IpAddr::V6(addr) => {
                     assert!(p.len <= 128);
                     let key: u128 = addr.into();
+                    let key = key.to_be();
                     let mask = if p.len == 128 {
                         u128::MAX
                     } else {
                         ((1u128 << p.len) - 1) << (128 - p.len)
                     };
                     let selector_v6 = selector.to_u128().unwrap();
-                    selector_v6 & mask == key & mask
+                    //let selector_v6 = selector_v6.to_be();
+                    let result = selector_v6 & mask == key & mask;
+                    println!("{:x} & {:x} =?= {:x} & {:x}", selector_v6, mask, key, mask);
+                    println!("{:x} =?= {:x}", selector_v6 & mask, key & mask);
+                    println!("{}", result);
+                    result
                 }
                 IpAddr::V4(addr) => {
                     assert!(p.len <= 32);

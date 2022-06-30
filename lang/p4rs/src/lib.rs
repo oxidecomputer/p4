@@ -172,11 +172,18 @@ impl<'a> packet_in<'a> {
         // retaining `[H::size()..]` ourselves. Anything before `self.index` has
         // already been given out to some other `H` instance.
         //
+
+        //TODO what if a header does not end on a byte boundary?
         let n = H::size();
         let shared_mut = unsafe {
+            let start = if self.index > 0 {
+                self.index >> 3
+            } else {
+                0
+            };
             &mut *std::ptr::slice_from_raw_parts_mut(
-                self.data.as_mut_ptr(),
-                self.index + n,
+                self.data.as_mut_ptr().add(start),
+                self.index + (n >> 3),
             )
         };
         match h.set(shared_mut) {
@@ -220,6 +227,19 @@ impl<'a> packet_in<'a> {
 }
 
 //XXX: remove once classifier defined in terms of bitvecs
-pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> num::BigUint{
-    num::BigUint::from_bytes_be(bv.as_raw_slice())
+pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> num::BigUint {
+    let u = num::BigUint::from_bytes_be(bv.as_raw_slice());
+    println!("{:x?} -> {:x}", bv.as_raw_slice(), u);
+    u
 }
+
+pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
+    let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
+    std::net::IpAddr::V6(
+        std::net::Ipv6Addr::from(arr),
+    )
+
+}
+
+#[repr(C, align(16))]
+pub struct AlignedU128(pub u128);
