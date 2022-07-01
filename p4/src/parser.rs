@@ -1,10 +1,10 @@
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
-    Constant, Control, ControlParameter, Direction, Expression, Extern,
-    ExternMethod, Header, HeaderMember, KeySetElement, KeySetElementValue,
-    Lvalue, MatchKind, Package, PackageInstance, PackageParameter, Select,
-    SelectElement, State, Statement, StatementBlock, Struct, StructMember,
-    Table, Transition, Type, Typedef, Variable, AST,
+    Constant, Control, ControlParameter, Direction, ElseIfBlock, Expression,
+    Extern, ExternMethod, Header, HeaderMember, IfBlock, KeySetElement,
+    KeySetElementValue, Lvalue, MatchKind, Package, PackageInstance,
+    PackageParameter, Select, SelectElement, State, Statement, StatementBlock,
+    Struct, StructMember, Table, Transition, Type, Typedef, Variable, AST,
 };
 use crate::error::{Error, ParserError};
 /// This is a recurisve descent parser for the P4 language.
@@ -445,7 +445,7 @@ impl<'a> Parser<'a> {
                     result.constants.push(c);
                 }
 
-                lexer::Kind::Identifier(_) => {
+                lexer::Kind::Identifier(_) | lexer::Kind::If => {
                     // push the identifier token into the backlog and run the
                     // statement parser
                     self.backlog.push(token);
@@ -1230,6 +1230,13 @@ impl<'a, 'b> TableParser<'a, 'b> {
         match token.kind {
             lexer::Kind::Semicolon => Ok(actionref),
             lexer::Kind::ParenOpen => {
+
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::ParenClose {
+                    return Ok(actionref);
+                } else {
+                    self.parser.backlog.push(token);
+                }
                 let mut args = Vec::new();
                 loop {
                     let mut ep = ExpressionParser::new(self.parser);
@@ -1284,6 +1291,15 @@ impl<'a, 'b> StatementParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Statement, Error> {
+
+        let token = self.parser.next_token()?;
+        if token.kind == lexer::Kind::If {
+            let mut iep = IfElseParser::new(self.parser);
+            return iep.run();
+        } else {
+            self.parser.backlog.push(token);
+        }
+
         // wrap the identifier as an lvalue, consuming any dot
         // concatenated references
         let lval = self.parser.parse_lvalue()?;
@@ -1335,6 +1351,60 @@ impl<'a, 'b> StatementParser<'a, 'b> {
     }
 }
 
+pub struct IfElseParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl<'a, 'b> IfElseParser<'a, 'b> {
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self { parser }
+    }
+
+    pub fn run(&mut self) -> Result<Statement, Error> {
+        let predicate = self.parse_predicate()?;
+        let block = self.parser.parse_statement_block()?;
+        let mut blk = IfBlock{
+            predicate, 
+            block,
+            else_ifs: Vec::new(),
+            else_block: None,
+        };
+
+        // check for else / else if
+        loop {
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::Else {
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::If {
+                    // else if
+                    let predicate = self.parse_predicate()?;
+                    let block = self.parser.parse_statement_block()?;
+                    blk.else_ifs.push(ElseIfBlock{ predicate, block });
+                } else {
+                    // else
+                    self.parser.backlog.push(token);
+                    let block = self.parser.parse_statement_block()?;
+                    blk.else_block = Some(block);
+                    break;
+                }
+            } else {
+                self.parser.backlog.push(token);
+                break;
+            }
+        }
+
+        Ok(Statement::If(blk))
+    }
+
+    fn parse_predicate(&mut self) -> Result<Box<Expression>, Error> {
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+        let mut ep = ExpressionParser::new(self.parser);
+        let xpr = ep.run()?;
+        self.parser.expect_token(lexer::Kind::ParenClose)?;
+        Ok(xpr)
+    }
+}
+
 pub struct ExpressionParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
@@ -1357,7 +1427,31 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
             lexer::Kind::Identifier(_) => {
                 self.parser.backlog.push(token);
                 let lval = self.parser.parse_lvalue()?;
-                Expression::Lvalue(lval)
+
+                // check for index
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::SquareOpen {
+                    let mut xp = ExpressionParser::new(self.parser);
+                    let xpr = xp.run()?;
+                    // check for slice
+                    let token = self.parser.next_token()?;
+                    if token.kind == lexer::Kind::Colon {
+                        let mut xp = ExpressionParser::new(self.parser);
+                        let slice_xpr = xp.run()?;
+                        self.parser.expect_token(lexer::Kind::SquareClose)?;
+                        Expression::Index(
+                            lval,
+                            Box::new(Expression::Slice(xpr, slice_xpr))
+                        )
+                    } else {
+                        self.parser.backlog.push(token);
+                        self.parser.expect_token(lexer::Kind::SquareClose)?;
+                        Expression::Index(lval, xpr)
+                    }
+                } else {
+                    self.parser.backlog.push(token);
+                    Expression::Lvalue(lval)
+                }
             }
             _ => {
                 return Err(ParserError {
@@ -1415,7 +1509,10 @@ impl<'a, 'b> ParserParser<'a, 'b> {
 
         let token = self.parser.next_token()?;
         match token.kind {
-            lexer::Kind::Semicolon => return Ok(parser),
+            lexer::Kind::Semicolon => {
+                parser.decl_only = true;
+                return Ok(parser);
+            }
             _ => {
                 self.parser.backlog.push(token);
             }

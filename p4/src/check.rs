@@ -56,7 +56,9 @@ impl ParserChecker {
     pub fn check(p: &Parser) -> Diagnostics {
         let mut diags = Vec::new();
 
-        Self::start_state(p, &mut diags);
+        if !p.decl_only {
+            Self::start_state(p, &mut diags);
+        }
 
         Diagnostics(diags)
     }

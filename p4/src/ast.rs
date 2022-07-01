@@ -182,6 +182,8 @@ pub enum Expression {
     SignedLit(u16, i128),
     Lvalue(Lvalue),
     Binary(Box<Expression>, BinOp, Box<Expression>),
+    Index(Lvalue, Box<Expression>),
+    Slice(Box<Expression>, Box<Expression>),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -284,6 +286,15 @@ impl Control {
         }
         None
     }
+
+    pub fn is_type_parameter(&self, name: &str) -> bool {
+        for t in &self.type_parameters {
+            if t == name {
+                return true
+            }
+        }
+        return false;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -292,6 +303,7 @@ pub struct Parser {
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
     pub states: Vec<State>,
+    pub decl_only: bool,
 
     /// The first token of this parser, used for error reporting.
     pub token: Token,
@@ -304,8 +316,18 @@ impl Parser {
             type_parameters: Vec::new(),
             parameters: Vec::new(),
             states: Vec::new(),
+            decl_only: false,
             token,
         }
+    }
+
+    pub fn is_type_parameter(&self, name: &str) -> bool {
+        for t in &self.type_parameters {
+            if t == name {
+                return true
+            }
+        }
+        return false;
     }
 }
 
@@ -435,7 +457,23 @@ pub enum Statement {
     Empty,
     Assignment(Lvalue, Box<Expression>),
     Call(Call),
+    If(IfBlock),
+
     // TODO ...
+}
+
+#[derive(Debug, Clone)]
+pub struct IfBlock {
+    pub predicate: Box<Expression>,
+    pub block: StatementBlock,
+    pub else_ifs: Vec<ElseIfBlock>,
+    pub else_block: Option<StatementBlock>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ElseIfBlock {
+    pub predicate: Box<Expression>,
+    pub block: StatementBlock,
 }
 
 /// A function or method call

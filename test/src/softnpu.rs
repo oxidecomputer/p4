@@ -1,6 +1,9 @@
+
 //TODO abstract away generated code from here
 //use crate::hub::{ethernet_t, headers_t, EgressMetadata, IngressMetadata};
 use crate::router::{ipv6_t, ethernet_t, headers_t, EgressMetadata, IngressMetadata};
+//use crate::router::{ipv6_t, ethernet_t, headers_t};
+
 use p4rs::{bit, packet_in, Header};
 use std::collections::HashMap;
 use std::thread::spawn;
@@ -12,6 +15,8 @@ mod p4 {
     p4_macro::use_p4!("/Users/ry/src/p4/p4/examples/codegen/hub.p4");
 }
 */
+
+//p4_macro::use_p4!("p4/examples/codegen/softnpu.p4");
 
 pub struct Phy<const R: usize, const N: usize, const F: usize> {
     index: usize,

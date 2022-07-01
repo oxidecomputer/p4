@@ -223,6 +223,7 @@ fn generate_parser_state_statements(
                     Err(_) => return tokens, //error added to diagnostics
                 }
             }
+            x => todo!("codegen: statement {:?}", x),
         }
     }
 
@@ -506,6 +507,10 @@ fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
             if let Type::UserDefined(ref typename) = parameter.ty {
                 if let Some(_decl) = ast.get_struct(typename) {
                 } else {
+                    // if this is a generic type, skip for now
+                    if parser.is_type_parameter(typename) {
+                        continue;
+                    }
                     // semantic error undefined type
                     ctx.diags.push(Diagnostic {
                         level: Level::Error,
@@ -875,6 +880,10 @@ fn control_parameters(
                         }
                     }
                     None => {
+                        // if this is a generic type, skip for now
+                        if control.is_type_parameter(typename) {
+                            continue;
+                        }
                         ctx.diags.push(Diagnostic {
                             level: Level::Error,
                             message: format!("Undefined type {}", typename),
@@ -1222,6 +1231,7 @@ fn generate_control_action_body(
             Statement::Call(_) => {
                 todo!("handle control action function/method calls");
             }
+            x => todo!("codegen: statement {:?}", x),
         }
     }
 
@@ -1341,6 +1351,7 @@ fn generate_expression(
             ts.extend(generate_expression(rhs.clone(), ctx));
             ts
         }
+        x => todo!("generate {:?}", x),
     }
 
 }
