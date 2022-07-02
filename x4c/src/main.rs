@@ -20,8 +20,12 @@ struct Opts {
     filename: String,
 
     /// What target to generate code for
-    #[clap(arg_enum)]
+    #[clap(arg_enum, default_value_t = Target::Rust)]
     target: Target,
+
+    /// Just check code, do not compile.
+    #[clap(long)]
+    check: bool
 }
 
 #[derive(clap::ArgEnum, Clone)]
@@ -56,6 +60,10 @@ fn main() -> Result<()> {
 
     let static_diags = check::all(&ast);
     check(&lines, &static_diags)?;
+
+    if opts.check {
+        return Ok(())
+    }
 
     match opts.target {
         Target::Rust => {

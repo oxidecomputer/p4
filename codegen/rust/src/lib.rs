@@ -159,10 +159,10 @@ fn generate_parser_state_function_body(
 }
 
 fn generate_parser_state_statements(
-    ast: &AST,
+    _ast: &AST,
     parser: &Parser,
     state: &State,
-    ctx: &mut Context,
+    _ctx: &mut Context,
 ) -> TokenStream {
     let mut tokens = TokenStream::new();
 
@@ -173,55 +173,50 @@ fn generate_parser_state_statements(
                 todo!("parser state assignment statement");
             }
             Statement::Call(call) => {
-                match check_parser_state_lvalue(ast, parser, &call.lval, ctx) {
-                    Ok(_) => {
-                        let lval: Vec<TokenStream> = call
-                            .lval
-                            .name
-                            .split(".")
-                            .map(|x| format_ident!("{}", x))
-                            .map(|x| quote! { #x })
-                            .collect();
+                let lval: Vec<TokenStream> = call
+                    .lval
+                    .name
+                    .split(".")
+                    .map(|x| format_ident!("{}", x))
+                    .map(|x| quote! { #x })
+                    .collect();
 
-                        let mut args = Vec::new();
-                        for a in &call.args {
-                            match a.as_ref() {
-                                Expression::Lvalue(lvarg) => {
-                                    let parts: Vec<&str> =
-                                        lvarg.name.split(".").collect();
-                                    let root = parts[0];
-                                    let mut mut_arg = false;
-                                    for parg in &parser.parameters {
-                                        if parg.name == root {
-                                            match parg.direction {
-                                                Direction::Out
-                                                | Direction::InOut => {
-                                                    mut_arg = true;
-                                                }
-                                                _ => {}
+                let mut args = Vec::new();
+                for a in &call.args {
+                    match a.as_ref() {
+                        Expression::Lvalue(lvarg) => {
+                            let parts: Vec<&str> =
+                                lvarg.name.split(".").collect();
+                            let root = parts[0];
+                            let mut mut_arg = false;
+                            for parg in &parser.parameters {
+                                if parg.name == root {
+                                    match parg.direction {
+                                        Direction::Out
+                                            | Direction::InOut => {
+                                                mut_arg = true;
                                             }
-                                        }
-                                    }
-                                    let lvref: Vec<TokenStream> = parts
-                                        .iter()
-                                        .map(|x| format_ident!("{}", x))
-                                        .map(|x| quote! { #x })
-                                        .collect();
-                                    if mut_arg {
-                                        args.push(quote! { &mut #(#lvref).* });
-                                    } else {
-                                        args.push(quote! { #(#lvref).* });
+                                        _ => {}
                                     }
                                 }
-                                x => todo!("extern arg {:?}", x),
+                            }
+                            let lvref: Vec<TokenStream> = parts
+                                .iter()
+                                .map(|x| format_ident!("{}", x))
+                                .map(|x| quote! { #x })
+                                .collect();
+                            if mut_arg {
+                                args.push(quote! { &mut #(#lvref).* });
+                            } else {
+                                args.push(quote! { #(#lvref).* });
                             }
                         }
-                        tokens.extend(quote! {
-                            #(#lval).* ( #(#args),* );
-                        });
+                        x => todo!("extern arg {:?}", x),
                     }
-                    Err(_) => return tokens, //error added to diagnostics
                 }
+                tokens.extend(quote! {
+                    #(#lval).* ( #(#args),* );
+                });
             }
             x => todo!("codegen: statement {:?}", x),
         }
@@ -230,200 +225,7 @@ fn generate_parser_state_statements(
     tokens
 }
 
-fn check_parser_state_lvalue(
-    ast: &AST,
-    parser: &Parser,
-    lval: &Lvalue,
-    ctx: &mut Context,
-) -> Result<(), ()> {
-    // an lvalue can be dot separated e.g. foo.bar.baz, start by getting the
-    // root of the lvalue and resolving that.
-    let parts: Vec<&str> = lval.name.split(".").collect();
-    let root = parts[0];
-
-    // first look in parser parameters for the root of the lvalue
-    let ty = match get_parser_arg(parser, root) {
-        Some(param) => &param.ty,
-        None => {
-            // TODO next look in variables for this parser state
-            todo!();
-        }
-    };
-
-    check_lvalue_chain(lval, &parts[1..], ty, ast, ctx)?;
-
-    Ok(())
-}
-
-fn check_lvalue_chain(
-    lval: &Lvalue,
-    parts: &[&str],
-    ty: &Type,
-    ast: &AST,
-    ctx: &mut Context,
-) -> Result<Vec<Type>, ()> {
-    match ty {
-        Type::Bool => {
-            if parts.len() > 0 {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "type bool does not have a member {}",
-                        parts[0]
-                    ),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            return Ok(vec![ty.clone()]);
-        }
-        Type::Error => {
-            if parts.len() > 0 {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "type error does not have a member {}",
-                        parts[1]
-                    ),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            return Ok(vec![ty.clone()]);
-        }
-        Type::Bit(size) => {
-            if parts.len() > 0 {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "type bit<{}> does not have a member {}",
-                        size, parts[0]
-                    ),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            return Ok(vec![ty.clone()]);
-        }
-        Type::Varbit(size) => {
-            if parts.len() > 0 {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "type varbit<{}> does not have a member {}",
-                        size, parts[0]
-                    ),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            return Ok(vec![ty.clone()]);
-        }
-        Type::Int(size) => {
-            if parts.len() > 0 {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "type int<{}> does not have a member {}",
-                        size, parts[0]
-                    ),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            return Ok(vec![ty.clone()]);
-        }
-        Type::String => {
-            if parts.len() > 0 {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "type string does not have a member {}",
-                        parts[0]
-                    ),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            return Ok(vec![ty.clone()]);
-        }
-        Type::UserDefined(name) => {
-            // get the parent type definition from the AST and check for the
-            // referenced member
-            if let Some(parent) = ast.get_struct(name) {
-                for member in &parent.members {
-                    if member.name == parts[0] {
-                        if parts.len() > 1 {
-                            let mut types = check_lvalue_chain(
-                                lval,
-                                &parts[1..],
-                                &member.ty,
-                                ast,
-                                ctx,
-                            )?;
-                            types.push(member.ty.clone());
-                            return Ok(types);
-                        } else {
-                            return Ok(vec![member.ty.clone()]);
-                        }
-                    }
-                }
-            } else if let Some(parent) = ast.get_header(name) {
-                for member in &parent.members {
-                    if member.name == parts[0] {
-                        if parts.len() > 1 {
-                            let mut types = check_lvalue_chain(
-                                lval,
-                                &parts[1..],
-                                &member.ty,
-                                ast,
-                                ctx,
-                            )?;
-                            types.push(member.ty.clone());
-                            return Ok(types);
-                        } else {
-                            return Ok(vec![member.ty.clone()]);
-                        }
-                    }
-                }
-            } else if let Some(parent) = ast.get_extern(name) {
-                for method in &parent.methods {
-                    if method.name == parts[0] {
-                        if parts.len() > 1 {
-                            ctx.diags.push(Diagnostic {
-                                level: Level::Error,
-                                message: format!(
-                                    "extern methods do not have members"
-                                ),
-                                token: lval.token.clone(),
-                            });
-                            return Err(());
-                        } else {
-                            return Ok(vec![ty.clone()]); //TODO function/method type?
-                        }
-                    }
-                }
-            } else {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!("type {} is not defined", name),
-                    token: lval.token.clone(),
-                });
-                return Err(());
-            }
-            ctx.diags.push(Diagnostic {
-                level: Level::Error,
-                message: format!(
-                    "type {} does not have a member {}",
-                    name, parts[0]
-                ),
-                token: lval.token.clone(),
-            });
-            return Err(());
-        }
-    };
-}
-
+#[allow(dead_code)]
 fn get_parser_arg<'a>(
     parser: &'a Parser,
     arg_name: &str,
@@ -780,45 +582,7 @@ fn generate_control_apply_body_call(
         // if it's a header there's a bit of extra unsrapping we
         // need to do to match the selector against the value.
 
-        let parts: Vec<&str> = lval.name.split(".").collect();
-        //should already be checked?
-        let param = control.get_parameter(parts[0]).unwrap();
-
-        let ty = match check_lvalue_chain(
-            lval,
-            &parts[1..],
-            &param.ty,
-            ast,
-            ctx,
-        ) {
-            Ok(ty) => {
-                ty
-            }
-            Err(_) => {
-                // diagnostics have been added to context so just
-                // bail with an empty result
-                return;
-            }
-        };
-        let is_header = {
-            if ty.len() < 2 {
-                false
-            } else {
-                match &ty[1] {
-                    Type::UserDefined(name) => {
-                        match ast.get_header(&name) {
-                            Some(_) => true,
-                            None => {
-                                false
-                            }
-                        }
-                    },
-                    _ => false,
-                }
-            }
-        };
-
-        if is_header {
+        if is_header(lval, ast) {
             //TODO: to_bitvec is bad here, copying on data path
             selector_components.push(quote!{
                 p4rs::bitvec_to_biguint(
@@ -1023,8 +787,10 @@ fn generate_control_table(
     control_param_types: &Vec<TokenStream>,
     ctx: &mut Context,
 ) -> (TokenStream, TokenStream) {
+
     let mut key_type_tokens: Vec<TokenStream> = Vec::new();
     let mut key_types: Vec<Type> = Vec::new();
+
     for (k, _) in &table.key {
         let parts: Vec<&str> = k.name.split(".").collect();
         let root = parts[0];
@@ -1032,34 +798,16 @@ fn generate_control_table(
         // try to find the root of the key as an argument to the control block.
         // TODO: are there other places to look for this?
         match get_control_arg(control, root) {
-            Some(param) => {
+            Some(_param) => {
                 if parts.len() > 1 {
-                    match check_lvalue_chain(
-                        &k,
-                        &parts[1..],
-                        &param.ty,
-                        ast,
-                        ctx,
-                    ) {
-                        Ok(ty) => {
-                            key_types.push(ty[0].clone());
-                            key_type_tokens.push(rust_type(&ty[0], false, 0));
-                        }
-                        Err(_) => {
-                            // diagnostics have been added to context so just
-                            // bail with an empty result
-                            return (quote! {}, quote! {});
-                        }
-                    }
+                    let tm = control.names();
+                    let ty = lvalue_type(&k, ast, &tm);
+                    key_types.push(ty.clone());
+                    key_type_tokens.push(rust_type(&ty, false, 0));
                 }
             }
             None => {
-                ctx.diags.push(Diagnostic{
-                    level: Level::Error,
-                    message: format!("Table key '{}' undefined", root),
-                    token: k.token.clone(),
-                });
-                return (quote! {}, quote! {});
+                panic!("bug: control arg undefined {:#?}", root)
             }
         }
     }
@@ -1208,7 +956,7 @@ fn generate_control_table(
 }
 
 fn generate_control_action_body(
-    ast: &AST,
+    _ast: &AST,
     control: &Control,
     action: &Action,
     ctx: &mut Context,
@@ -1221,58 +969,19 @@ fn generate_control_action_body(
                 continue;
             }
             Statement::Assignment(lval, expr) => {
-                // check the lhs
-                let parts: Vec<&str> = lval.name.split(".").collect();
-                let root = parts[0];
-                match get_control_arg(control, root) {
-                    Some(param) => {
-                        if parts.len() > 1 {
-                            match check_lvalue_chain(
-                                &lval,
-                                &parts[1..],
-                                &param.ty,
-                                ast,
-                                ctx,
-                            ) {
-                                Ok(_) => {}
-                                Err(_) => return quote! {},
-                            }
-                        }
-                    }
-                    None => match get_action_arg(action, root) {
-                        Some(_param) => {}
-                        None => {
-                            todo!();
-                        }
-                    },
-                };
-                let lhs: Vec<TokenStream> = parts
+                let lhs: Vec<TokenStream> = lval.parts()
                     .iter()
                     .map(|x| format_ident!("{}", x))
                     .map(|x| quote! { #x })
                     .collect();
 
-                // check the rhs
                 let rhs = match expr.as_ref() {
-                    // break out lval to check
                     Expression::Lvalue(rhs_lval) => {
                         let parts: Vec<&str> =
                             rhs_lval.name.split(".").collect();
                         let root = parts[0];
                         match get_control_arg(control, root) {
-                            Some(param) => {
-                                if parts.len() > 1 {
-                                    match check_lvalue_chain(
-                                        &lval,
-                                        &parts[1..],
-                                        &param.ty,
-                                        ast,
-                                        ctx,
-                                    ) {
-                                        Ok(_) => {}
-                                        Err(_) => return quote! {},
-                                    }
-                                }
+                            Some(_param) => {
                                 let rhs: Vec<TokenStream> = rhs_lval.name
                                     .split(".")
                                     .map(|x| format_ident!("{}", x))
@@ -1344,6 +1053,7 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
             let typename = format_ident!("{}", name);
             quote! { #typename }
         }
+        Type::ExternFunction => { todo!("rust type for extern function"); }
     }
 }
 
@@ -1356,6 +1066,7 @@ fn type_size(ty: &Type) -> usize {
         Type::Varbit(size) => *size,
         Type::String => todo!("generate string size"),
         Type::UserDefined(_name) => todo!("generate user defined type size"),
+        Type::ExternFunction => { todo!("type size for extern function"); }
     }
 }
 
@@ -1404,6 +1115,7 @@ fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
             }
             return false;
         }
+        Type::ExternFunction => { todo!("lifetime for extern function"); }
     }
 }
 
@@ -1548,4 +1260,76 @@ fn generate_binop(
         BinOp::Mask => quote! { & },
     }
 
+}
+
+fn is_header(
+    lval: &Lvalue,
+    ast: &AST,
+) -> bool {
+    let parts = lval.parts();
+    if parts.len() < 2 {
+        return false;
+    }
+    match ast.get_header(parts[parts.len()-2]) {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+fn lvalue_type(
+    lval: &Lvalue,
+    ast: &AST,
+    names: &HashMap::<String, Type>,
+) -> Type {
+    let root_type = match names.get(lval.root()) {
+        Some(ty) => ty,
+        None => panic!("checker bug: unresolved lval {:#?}", lval),
+    };
+    match root_type {
+        Type::Bool => root_type.clone(),
+        Type::Error => root_type.clone(),
+        Type::Bit(_) => root_type.clone(),
+        Type::Varbit(_) => root_type.clone(),
+        Type::Int(_) => root_type.clone(),
+        Type::String => root_type.clone(),
+        Type::ExternFunction => root_type.clone(),
+        Type::UserDefined(name) => {
+            if let Some(parent) = ast.get_struct(name) {
+                let mut tm = parent.names();
+                for m in &parent.members {
+                    tm.insert(m.name.clone(), m.ty.clone());
+                }
+                lvalue_type(
+                    &lval.pop_left(),
+                    ast,
+                    &tm,
+                )
+            }
+            else if let Some(parent) = ast.get_header(name) {
+                let mut tm = parent.names();
+                for m in &parent.members {
+                    tm.insert(m.name.clone(), m.ty.clone());
+                }
+                lvalue_type(
+                    &lval.pop_left(),
+                    ast,
+                    &tm,
+                )
+            }
+            else if let Some(parent) = ast.get_extern(name) {
+                let mut tm = parent.names();
+                for m in &parent.methods {
+                    tm.insert(m.name.clone(), Type::ExternFunction);
+                }
+                lvalue_type(
+                    &lval.pop_left(),
+                    ast,
+                    &tm,
+                )
+            }
+            else {
+                panic!("codegen: User defined name '{}' does not exist", name)
+            }
+        }
+    }
 }

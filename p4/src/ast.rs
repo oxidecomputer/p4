@@ -1,4 +1,5 @@
 use std::fmt;
+use std::collections::HashMap;
 
 use crate::lexer::Token;
 
@@ -77,6 +78,14 @@ impl AST {
         }
         None
     }
+    
+    pub fn type_map(&self) -> HashMap<String, Type> {
+        let mut tm = HashMap::new();
+        for x in &self.structs {
+            tm.insert(x.name.clone(), Type::UserDefined(x.name.clone()));
+        }
+        tm
+    }
 }
 
 #[derive(Debug)]
@@ -139,6 +148,7 @@ pub enum Type {
     Int(usize),
     String,
     UserDefined(String),
+    ExternFunction, //TODO actual signature
 }
 
 impl fmt::Display for Type {
@@ -151,6 +161,7 @@ impl fmt::Display for Type {
             Type::Int(size) => write!(f, "int<{}>", size),
             Type::String => write!(f, "string"),
             Type::UserDefined(name) => write!(f, "{}", name),
+            Type::ExternFunction => write!(f, "Extern Function"),
         }
     }
 }
@@ -209,6 +220,13 @@ impl Header {
             members: Vec::new(),
         }
     }
+    pub fn names(&self) -> HashMap::<String, Type> {
+        let mut names = HashMap::new();
+        for p in &self.members {
+            names.insert(p.name.clone(), p.ty.clone());
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -229,6 +247,14 @@ impl Struct {
             name,
             members: Vec::new(),
         }
+    }
+
+    pub fn names(&self) -> HashMap::<String, Type> {
+        let mut names = HashMap::new();
+        for p in &self.members {
+            names.insert(p.name.clone(), p.ty.clone());
+        }
+        names
     }
 }
 
@@ -295,6 +321,14 @@ impl Control {
             }
         }
         return false;
+    }
+    
+    pub fn names(&self) -> HashMap::<String, Type> {
+        let mut names = HashMap::new();
+        for p in &self.parameters {
+            names.insert(p.name.clone(), p.ty.clone());
+        }
+        names
     }
 }
 
@@ -490,6 +524,26 @@ pub struct Lvalue {
     pub token: Token,
 }
 
+impl Lvalue {
+    pub fn parts(&self) -> Vec<&str> {
+        self.name.split(".").collect()
+    }
+    pub fn root(&self) -> &str {
+        self.parts()[0]
+    }
+    pub fn pop_left(&self) -> Self {
+        let parts = self.parts();
+        Lvalue{
+            name: parts[1..].join("."),
+            token: Token{
+                kind: self.token.kind.clone(),
+                line: self.token.line,
+                col: self.token.col + parts[0].len() + 1,
+            }
+        }
+    }
+}
+
 impl std::hash::Hash for Lvalue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
@@ -559,6 +613,16 @@ pub struct Extern {
     pub name: String,
     pub methods: Vec<ExternMethod>,
     pub token: Token,
+}
+
+impl Extern {
+    pub fn names(&self) -> HashMap::<String, Type> {
+        let mut names = HashMap::new();
+        for p in &self.methods{
+            names.insert(p.name.clone(), Type::ExternFunction);
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone)]
