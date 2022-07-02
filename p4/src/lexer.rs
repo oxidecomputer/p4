@@ -617,6 +617,16 @@ impl<'a> Lexer<'a> {
             None => {}
         }
 
+        match self.match_token("true", Kind::TrueLiteral) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("false", Kind::FalseLiteral) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
         match self.match_integer() {
             Some(t) => return Ok(t),
             None => {}

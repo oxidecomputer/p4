@@ -177,6 +177,7 @@ pub struct Variable {
 
 #[derive(Debug, Clone)]
 pub enum Expression {
+    BoolLit(bool),
     IntegerLit(i128),
     BitLit(u16, u128),
     SignedLit(u16, i128),

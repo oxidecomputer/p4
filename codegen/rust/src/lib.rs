@@ -6,9 +6,9 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    Action, ActionParameter, Control, ControlParameter, Direction, Expression,
-    Header, KeySetElementValue, Lvalue, Parser, State, Statement,
-    Struct, Table, Transition, Type, AST, BinOp, MatchKind
+    Action, AST, ActionParameter, BinOp, Call, Control, ControlParameter,
+    Direction, Expression, Header, IfBlock, KeySetElementValue, Lvalue,
+    MatchKind, Parser, State, Statement, Struct, Table, Transition, Type
 };
 use p4::check::{Diagnostic, Diagnostics, Level};
 
@@ -705,6 +705,203 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
         );
     }
 }
+
+fn generate_control_apply_body_call(
+    ast: &AST,
+    control: &Control,
+    ctx: &mut Context,
+    c: &Call,
+    tokens: &mut TokenStream,
+) {
+    // TODO only supporting tably apply calls for now
+    
+    //
+    // get the referenced table
+    //
+    let parts: Vec<&str> = c.lval.name.split(".").collect();
+    if parts.len() != 2 || parts[1] != "apply" {
+        ctx.diags.push(Diagnostic {
+            level: Level::Error,
+            message: format!(
+                "Only <tablename>.apply() calls are
+                            supported in apply blocks right now"
+            ),
+            token: c.lval.token.clone(),
+        });
+        return;
+    }
+    let table = match control.get_table(parts[0]) {
+        Some(table) => table,
+        None => {
+            ctx.diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "Table {} not found in control {}",
+                    parts[0], control.name,
+                ),
+                token: c.lval.token.clone(),
+            });
+            return;
+        }
+    };
+
+    //
+    // match an action based on the key material
+    //
+
+    // TODO only supporting direct matches right now and implicitly
+    // assuming all match kinds are direct
+    let table_name: Vec<TokenStream> = table
+        .name
+        .split(".")
+        .map(|x| format_ident!("{}", x))
+        .map(|x| quote! { #x })
+        .collect();
+
+    let mut action_args = Vec::new();
+    for p in &control.parameters {
+        let name = format_ident!("{}", p.name);
+        action_args.push(quote! { #name });
+    }
+
+    let mut selector_components = Vec::new();
+    for (lval, _match_kind) in &table.key {
+
+        //TODO check lvalue ref here, should already be checked at
+        //this point?
+        let lvref: Vec<TokenStream> = lval
+            .name
+            .split(".")
+            .map(|x| format_ident!("{}", x))
+            .map(|x| quote! { #x })
+            .collect();
+
+        // determine if this lvalue references a header or a struct,
+        // if it's a header there's a bit of extra unsrapping we
+        // need to do to match the selector against the value.
+
+        let parts: Vec<&str> = lval.name.split(".").collect();
+        //should already be checked?
+        let param = control.get_parameter(parts[0]).unwrap();
+
+        let ty = match check_lvalue_chain(
+            lval,
+            &parts[1..],
+            &param.ty,
+            ast,
+            ctx,
+        ) {
+            Ok(ty) => {
+                ty
+            }
+            Err(_) => {
+                // diagnostics have been added to context so just
+                // bail with an empty result
+                return;
+            }
+        };
+        let is_header = {
+            if ty.len() < 2 {
+                false
+            } else {
+                match &ty[1] {
+                    Type::UserDefined(name) => {
+                        match ast.get_header(&name) {
+                            Some(_) => true,
+                            None => {
+                                false
+                            }
+                        }
+                    },
+                    _ => false,
+                }
+            }
+        };
+
+        if is_header {
+            //TODO: to_bitvec is bad here, copying on data path
+            selector_components.push(quote!{
+                p4rs::bitvec_to_biguint(
+                    &#(#lvref).*.as_ref().unwrap().to_bitvec()
+                )
+            });
+        } else {
+            selector_components.push(quote!{
+                p4rs::bitvec_to_biguint(&#(#lvref).*)
+            });
+        }
+
+    }
+    tokens.extend(quote! {
+        let matches = #(#table_name).*.match_selector(
+            &[#(#selector_components),*]
+        );
+        if matches.len() > 0 { 
+            (matches[0].action)(#(#action_args),*)
+        }
+    });
+}
+
+fn generate_control_apply_body_if_block(
+    ast: &AST,
+    control: &Control,
+    ctx: &mut Context,
+    if_block: &IfBlock,
+    tokens: &mut TokenStream,
+) {
+
+    let xpr = generate_expression(if_block.predicate.clone(), ctx);
+
+    let mut stmt_tokens = TokenStream::new();
+    for s in &if_block.block.statements {
+        generate_control_apply_stmt(ast, control, ctx, s, &mut stmt_tokens)
+    };
+
+    // TODO statement block variables
+
+    tokens.extend(quote! {
+        if #xpr {
+            #stmt_tokens
+        }
+    });
+
+}
+
+fn generate_control_apply_stmt(
+    ast: &AST,
+    control: &Control,
+    ctx: &mut Context,
+    stmt: &Statement,
+    tokens: &mut TokenStream,
+) {
+    match stmt {
+        Statement::Call(c) => {
+            generate_control_apply_body_call(
+                ast,
+                control,
+                ctx,
+                c,
+                tokens
+            );
+        }
+        Statement::If(if_block) => {
+            generate_control_apply_body_if_block(
+                ast,
+                control,
+                ctx,
+                if_block,
+                tokens
+            );
+        }
+        Statement::Assignment(lval, xpr) => {
+            let lhs = generate_lvalue(lval);
+            let rhs = generate_expression(xpr.clone(), ctx);
+            tokens.extend(quote!{ #lhs = #rhs; });
+        }
+        x => todo!("control apply statement {:?}", x),
+    }
+}
+
 fn generate_control_apply_body(
     ast: &AST,
     control: &Control,
@@ -713,138 +910,7 @@ fn generate_control_apply_body(
     let mut tokens = TokenStream::new();
 
     for stmt in &control.apply.statements {
-        match stmt {
-            Statement::Call(c) => {
-                // TODO only supporting tably apply calls for now
-
-                //
-                // get the referenced table
-                //
-                let parts: Vec<&str> = c.lval.name.split(".").collect();
-                if parts.len() != 2 || parts[1] != "apply" {
-                    ctx.diags.push(Diagnostic {
-                        level: Level::Error,
-                        message: format!(
-                            "Only <tablename>.apply() calls are
-                            supported in apply blocks right now"
-                        ),
-                        token: c.lval.token.clone(),
-                    });
-                    return tokens;
-                }
-                let table = match control.get_table(parts[0]) {
-                    Some(table) => table,
-                    None => {
-                        ctx.diags.push(Diagnostic {
-                            level: Level::Error,
-                            message: format!(
-                                "Table {} not found in control {}",
-                                parts[0], control.name,
-                            ),
-                            token: c.lval.token.clone(),
-                        });
-                        return tokens;
-                    }
-                };
-
-                //
-                // match an action based on the key material
-                //
-
-                // TODO only supporting direct matches right now and implicitly
-                // assuming all match kinds are direct
-                let table_name: Vec<TokenStream> = table
-                    .name
-                    .split(".")
-                    .map(|x| format_ident!("{}", x))
-                    .map(|x| quote! { #x })
-                    .collect();
-
-                let mut action_args = Vec::new();
-                for p in &control.parameters {
-                    let name = format_ident!("{}", p.name);
-                    action_args.push(quote! { #name });
-                }
-
-                let mut selector_components = Vec::new();
-                for (lval, _match_kind) in &table.key {
-
-                    //TODO check lvalue ref here, should already be checked at
-                    //this point?
-                    let lvref: Vec<TokenStream> = lval
-                        .name
-                        .split(".")
-                        .map(|x| format_ident!("{}", x))
-                        .map(|x| quote! { #x })
-                        .collect();
-
-                    // determine if this lvalue references a header or a struct,
-                    // if it's a header there's a bit of extra unsrapping we
-                    // need to do to match the selector against the value.
-
-                    let parts: Vec<&str> = lval.name.split(".").collect();
-                    //should already be checked?
-                    let param = control.get_parameter(parts[0]).unwrap();
-
-                    let ty = match check_lvalue_chain(
-                        lval,
-                        &parts[1..],
-                        &param.ty,
-                        ast,
-                        ctx,
-                    ) {
-                        Ok(ty) => {
-                            ty
-                        }
-                        Err(_) => {
-                            // diagnostics have been added to context so just
-                            // bail with an empty result
-                            return quote! { };
-                        }
-                    };
-                    let is_header = {
-                        if ty.len() < 2 {
-                            false
-                        } else {
-                            match &ty[1] {
-                                Type::UserDefined(name) => {
-                                    match ast.get_header(&name) {
-                                        Some(_) => true,
-                                        None => {
-                                            false
-                                        }
-                                    }
-                                },
-                                _ => false,
-                            }
-                        }
-                    };
-
-                    if is_header {
-                        //TODO: to_bitvec is bad here, copying on data path
-                        selector_components.push(quote!{
-                            p4rs::bitvec_to_biguint(
-                                &#(#lvref).*.as_ref().unwrap().to_bitvec()
-                            )
-                        });
-                    } else {
-                        selector_components.push(quote!{
-                            p4rs::bitvec_to_biguint(&#(#lvref).*)
-                        });
-                    }
-
-                }
-                tokens.extend(quote! {
-                    let matches = #(#table_name).*.match_selector(
-                        &[#(#selector_components),*]
-                    );
-                    if matches.len() > 0 { 
-                        (matches[0].action)(#(#action_args),*)
-                    }
-                })
-            }
-            x => todo!("control apply statement {:?}", x),
-        }
+        generate_control_apply_stmt(ast, control, ctx, stmt, &mut tokens);
     }
 
     tokens
@@ -1188,6 +1254,7 @@ fn generate_control_action_body(
 
                 // check the rhs
                 let rhs = match expr.as_ref() {
+                    // break out lval to check
                     Expression::Lvalue(rhs_lval) => {
                         let parts: Vec<&str> =
                             rhs_lval.name.split(".").collect();
@@ -1206,27 +1273,41 @@ fn generate_control_action_body(
                                         Err(_) => return quote! {},
                                     }
                                 }
-                                &rhs_lval.name
+                                let rhs: Vec<TokenStream> = rhs_lval.name
+                                    .split(".")
+                                    .map(|x| format_ident!("{}", x))
+                                    .map(|x| quote! { #x })
+                                    .collect();
+                                quote!{ #(#rhs ).* }
                             }
                             None => match get_action_arg(action, root) {
-                                Some(_) => &rhs_lval.name,
+                                Some(_) => {
+                                    let rhs: Vec<TokenStream> = rhs_lval.name
+                                        .split(".")
+                                        .map(|x| format_ident!("{}", x))
+                                        .map(|x| quote! { #x })
+                                        .collect();
+                                    quote!{ #(#rhs ).* }
+                                }
                                 None => {
-                                    todo!();
+                                    ctx.diags.push(Diagnostic {
+                                        level: Level::Error,
+                                        message: format!("{} not found", root),
+                                        token: rhs_lval.token.clone(),
+                                    });
+                                    return quote! {};
                                 }
                             },
                         }
                     }
+                    // otherwise just run the expression generator
                     x => {
-                        todo!("action assignment rhs {:?}", x);
+                        //todo!("action assignment rhs {:?}", x);
+                       generate_expression(Box::new(x.clone()), ctx)
                     }
                 };
-                let rhs: Vec<TokenStream> = rhs
-                    .split(".")
-                    .map(|x| format_ident!("{}", x))
-                    .map(|x| quote! { #x })
-                    .collect();
 
-                ts.extend(quote! { #(#lhs).* = #(#rhs ).* });
+                ts.extend(quote! { #(#lhs).* = #rhs });
             }
             Statement::Call(_) => {
                 todo!("handle control action function/method calls");
@@ -1332,6 +1413,9 @@ fn generate_expression(
 ) -> TokenStream {
 
     match expr.as_ref() {
+        Expression::BoolLit(v) => {
+            quote!{ #v.into() }
+        }
         Expression::IntegerLit(v) => {
             quote!{ #v.into() }
         }
@@ -1341,8 +1425,8 @@ fn generate_expression(
         Expression::SignedLit(_width, _v) => {
             todo!("generate expression signed lit");
         }
-        Expression::Lvalue(_v) => {
-            todo!("generate expression lvalue");
+        Expression::Lvalue(v) => {
+            generate_lvalue(v)
         }
         Expression::Binary(lhs, op, rhs) => {
             let mut ts = TokenStream::new();
@@ -1351,7 +1435,18 @@ fn generate_expression(
             ts.extend(generate_expression(rhs.clone(), ctx));
             ts
         }
-        x => todo!("generate {:?}", x),
+        Expression::Index(lval, xpr) => {
+            let mut ts = generate_lvalue(lval);
+            ts.extend(generate_expression(xpr.clone(), ctx));
+            ts
+        }
+        Expression::Slice(begin, end) => {
+            let lhs = generate_expression(begin.clone(), ctx);
+            let rhs = generate_expression(end.clone(), ctx);
+            quote!{
+                [#lhs..#rhs]
+            }
+        }
     }
 
 }
@@ -1365,7 +1460,6 @@ fn generate_expression(
 fn try_extract_prefix_len(
     expr: &Box<Expression>
 ) -> Option<u8> {
-
 
     match expr.as_ref() {
         Expression::Binary(_lhs, _op, rhs) => {
@@ -1384,6 +1478,20 @@ fn try_extract_prefix_len(
         }
         _ => { None }
     }
+
+}
+
+fn generate_lvalue(lval: &Lvalue) -> TokenStream {
+
+    //let lv = format_ident!("{}", lval.name);
+    let lv: Vec<TokenStream> = lval
+        .name
+        .split(".")
+        .map(|x| format_ident!("{}", x))
+        .map(|x| quote! { #x })
+        .collect();
+
+    return quote!{ #(#lv).* };
 
 }
 

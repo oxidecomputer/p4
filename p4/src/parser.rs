@@ -1417,6 +1417,8 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
     pub fn run(&mut self) -> Result<Box<Expression>, Error> {
         let token = self.parser.next_token()?;
         let lhs = match token.kind {
+            lexer::Kind::TrueLiteral => Expression::BoolLit(true),
+            lexer::Kind::FalseLiteral => Expression::BoolLit(false),
             lexer::Kind::IntLiteral(value) => Expression::IntegerLit(value),
             lexer::Kind::BitLiteral(width, value) => {
                 Expression::BitLit(width, value)
