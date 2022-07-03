@@ -6,7 +6,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    AST, BinOp, ControlParameter, Expression, Lvalue, Parser, Type
+    AST, ControlParameter, Expression, Lvalue, Parser, Type
 };
 
 use header::HeaderGenerator;
@@ -18,6 +18,8 @@ mod header;
 mod p4struct;
 mod parser;
 mod control;
+mod statement;
+mod expression;
 
 /// An object for keeping track of state as we generate code.
 #[derive(Default)]
@@ -216,50 +218,6 @@ fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
     }
 }
 
-fn generate_expression(
-    expr: Box<Expression>,
-    ctx: &mut Context,
-) -> TokenStream {
-
-    match expr.as_ref() {
-        Expression::BoolLit(v) => {
-            quote!{ #v.into() }
-        }
-        Expression::IntegerLit(v) => {
-            quote!{ #v.into() }
-        }
-        Expression::BitLit(width, v) => {
-            generate_bit_literal(*width, *v)
-        }
-        Expression::SignedLit(_width, _v) => {
-            todo!("generate expression signed lit");
-        }
-        Expression::Lvalue(v) => {
-            generate_lvalue(v)
-        }
-        Expression::Binary(lhs, op, rhs) => {
-            let mut ts = TokenStream::new();
-            ts.extend(generate_expression(lhs.clone(), ctx));
-            ts.extend(generate_binop(*op, ctx));
-            ts.extend(generate_expression(rhs.clone(), ctx));
-            ts
-        }
-        Expression::Index(lval, xpr) => {
-            let mut ts = generate_lvalue(lval);
-            ts.extend(generate_expression(xpr.clone(), ctx));
-            ts
-        }
-        Expression::Slice(begin, end) => {
-            let lhs = generate_expression(begin.clone(), ctx);
-            let rhs = generate_expression(end.clone(), ctx);
-            quote!{
-                [#lhs..#rhs]
-            }
-        }
-    }
-
-}
-
 // in the case of an expression
 //
 //   a &&& b
@@ -286,74 +244,6 @@ fn try_extract_prefix_len(
             }
         }
         _ => { None }
-    }
-
-}
-
-fn generate_lvalue(lval: &Lvalue) -> TokenStream {
-
-    let lv: Vec<TokenStream> = lval
-        .name
-        .split(".")
-        .map(|x| format_ident!("{}", x))
-        .map(|x| quote! { #x })
-        .collect();
-
-    return quote!{ #(#lv).* };
-
-}
-
-fn generate_bit_literal(
-    width: u16,
-    value: u128,
-) -> TokenStream {
-
-    assert!(width <= 128);
-
-    let width = width as usize;
-
-    if width <= 8 {
-        let v = value as u8;
-        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
-    }
-    else if width <= 16 {
-        let v = value as u16;
-        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
-    }
-    else if width <= 32 {
-        let v = value as u32;
-        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
-    }
-    else if width <= 64 {
-        let v = value as u64;
-        return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
-    }
-    else if width <= 128 {
-        let v = value as u128;
-        return quote! { 
-            {
-                let mut x = bitvec![mut u8, Lsb0; 0; 128];
-                x.store(#v);
-                x
-            }
-        }
-    }
-    else {
-        todo!("bit<x> where x > 128");
-    }
-}
-
-fn generate_binop(
-    op: BinOp,
-    _ctx: &mut Context,
-) -> TokenStream {
-
-    match op {
-        BinOp::Add => quote! { + },
-        BinOp::Subtract=> quote! { - },
-        BinOp::Geq => quote! { >= },
-        BinOp::Eq => quote! { == },
-        BinOp::Mask => quote! { & },
     }
 
 }

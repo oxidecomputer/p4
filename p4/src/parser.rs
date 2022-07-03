@@ -211,16 +211,18 @@ impl<'a> Parser<'a> {
     pub fn parse_variable(&mut self) -> Result<Variable, Error> {
         let (ty, _) = self.parse_type()?;
         let (name, _) = self.parse_identifier()?;
-        self.expect_token(lexer::Kind::Equals)?;
-        loop {
-            //TODO for now just skipping to initializer terminating semicolon,
-            //need to parse initializer.
-            let token = self.next_token()?;
-            if token.kind == lexer::Kind::Semicolon {
-                break;
-            }
+
+        // check for initializer
+        let token = self.next_token()?;
+        if token.kind == lexer::Kind::Equals {
+            let initializer = self.parse_expression()?;
+            self.expect_token(lexer::Kind::Semicolon)?;
+            Ok(Variable { ty, name, initializer: Some(initializer) })
+        } else {
+            self.backlog.push(token);
+            self.expect_token(lexer::Kind::Semicolon)?;
+            Ok(Variable { ty, name, initializer: None })
         }
-        Ok(Variable { ty, name })
     }
 
     pub fn parse_constant(&mut self) -> Result<Constant, Error> {
@@ -436,13 +438,14 @@ impl<'a> Parser<'a> {
                 | lexer::Kind::String => {
                     self.backlog.push(token);
                     let var = self.parse_variable()?;
-                    result.variables.push(var);
+                    result.statements.push(Statement::Variable(var));
                 }
 
                 // constant declaration / initialization
                 lexer::Kind::Const => {
                     let c = self.parse_constant()?;
-                    result.constants.push(c);
+                    //result.constants.push(c);
+                    result.statements.push(Statement::Constant(c));
                 }
 
                 lexer::Kind::Identifier(_) | lexer::Kind::If => {

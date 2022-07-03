@@ -183,7 +183,7 @@ pub struct Constant {
 pub struct Variable {
     pub ty: Type,
     pub name: String,
-    //TODO initializer: Expression,
+    pub initializer: Option<Box<Expression>>,
 }
 
 #[derive(Debug, Clone)]
@@ -387,8 +387,6 @@ pub enum Direction {
 
 #[derive(Debug, Clone, Default)]
 pub struct StatementBlock {
-    pub variables: Vec<Variable>,
-    pub constants: Vec<Constant>,
     pub statements: Vec<Statement>,
 }
 
@@ -493,6 +491,8 @@ pub enum Statement {
     Assignment(Lvalue, Box<Expression>),
     Call(Call),
     If(IfBlock),
+    Variable(Variable),
+    Constant(Constant),
 
     // TODO ...
 }

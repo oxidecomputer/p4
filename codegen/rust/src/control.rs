@@ -2,15 +2,15 @@ use crate::{
     Context,
     rust_type,
     type_lifetime,
-    generate_expression,
     lvalue_type,
     try_extract_prefix_len,
-    generate_lvalue,
     is_header,
+    statement::StatementGenerator,
+    expression::ExpressionGenerator,
 };
 use p4::ast::{
     Action, ActionParameter, AST, Call, Control, ControlParameter, Direction,
-    Expression, IfBlock, KeySetElementValue, MatchKind, Statement, Table, Type
+    Expression, KeySetElementValue, MatchKind, Statement, Table, Type
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -206,7 +206,8 @@ impl<'a> ControlGenerator<'a> {
             for (i, k) in entry.keyset.iter().enumerate() {
                 match &k.value {
                     KeySetElementValue::Expression(e) => {
-                        let xpr = generate_expression(e.clone(), self.ctx);
+                        let xpr =
+                            ExpressionGenerator::generate_expression(e.as_ref());
                         let ks = match table.key[i].1 {
                             MatchKind::Exact => {
                                 let k = format_ident!("{}", "Exact");
@@ -361,7 +362,7 @@ impl<'a> ControlGenerator<'a> {
                         }
                         // otherwise just run the expression generator
                         x => {
-                            generate_expression(Box::new(x.clone()), self.ctx)
+                            ExpressionGenerator::generate_expression(x)
                         }
                     };
 
@@ -429,8 +430,6 @@ impl<'a> ControlGenerator<'a> {
         let mut selector_components = Vec::new();
         for (lval, _match_kind) in &table.key {
 
-            //TODO check lvalue ref here, should already be checked at
-            //this point?
             let lvref: Vec<TokenStream> = lval
                 .name
                 .split(".")
@@ -469,30 +468,6 @@ impl<'a> ControlGenerator<'a> {
         });
     }
 
-    fn generate_control_apply_body_if_block(
-        &mut self,
-        control: &Control,
-        if_block: &IfBlock,
-        tokens: &mut TokenStream,
-    ) {
-
-        let xpr = generate_expression(if_block.predicate.clone(), self.ctx);
-
-        let mut stmt_tokens = TokenStream::new();
-        for s in &if_block.block.statements {
-            self.generate_control_apply_stmt(control, s, &mut stmt_tokens)
-        };
-
-        // TODO statement block variables
-
-        tokens.extend(quote! {
-            if #xpr {
-                #stmt_tokens
-            }
-        });
-
-    }
-
     fn generate_control_apply_stmt(
         &mut self,
         control: &Control,
@@ -507,19 +482,9 @@ impl<'a> ControlGenerator<'a> {
                     tokens
                 );
             }
-            Statement::If(if_block) => {
-                self.generate_control_apply_body_if_block(
-                    control,
-                    if_block,
-                    tokens
-                );
+            _ => {
+                tokens.extend(StatementGenerator::generate_block(&control.apply));
             }
-            Statement::Assignment(lval, xpr) => {
-                let lhs = generate_lvalue(lval);
-                let rhs = generate_expression(xpr.clone(), self.ctx);
-                tokens.extend(quote!{ #lhs = #rhs; });
-            }
-            x => todo!("control apply statement {:?}", x),
         }
     }
 
@@ -528,11 +493,9 @@ impl<'a> ControlGenerator<'a> {
         control: &Control,
     ) -> TokenStream {
         let mut tokens = TokenStream::new();
-
         for stmt in &control.apply.statements {
             self.generate_control_apply_stmt(control, stmt, &mut tokens);
         }
-
         tokens
     }
 

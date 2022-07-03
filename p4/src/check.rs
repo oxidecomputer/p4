@@ -101,14 +101,18 @@ impl ParserChecker {
 
     /// Check lvalue references
     pub fn lvalues(parser: &Parser, ast: &AST, diags: &mut Diagnostics) {
-        let names = Self::name_context(parser);
         for state in &parser.states {
+            // create a name context for each parser state to pick up any
+            // variables that may get created within parser states to reference
+            // locally.
+            let mut names = Self::name_context(parser);
             let mut state_names = names.clone();
             for v in &state.variables {
                 state_names.insert(v.name.clone(), v.ty.clone());
             }
+            // TODO use a StatementBlock here?
             for stmt in &state.statements {
-                diags.extend(&check_statement_lvalues(stmt, ast, &names));
+                diags.extend(&check_statement_lvalues(stmt, ast, &mut names));
             }
         }
     }
@@ -142,11 +146,29 @@ fn check_name(
 fn check_statement_lvalues(
     stmt: &Statement,
     ast: &AST,
-    names: &HashMap::<String, Type>
+    names: &mut HashMap::<String, Type>
 ) -> Diagnostics {
     let mut diags = Diagnostics::new();
     match stmt {
         Statement::Empty => {}, 
+        Statement::Variable(v) => {
+            match &v.initializer {
+                Some(expr) => {
+                    diags.extend(&check_expression_lvalues(
+                        expr.as_ref(),
+                        ast,
+                        &names
+                    ));
+                }
+                None => {}
+            };
+            names.insert(v.name.clone(), v.ty.clone());
+        }
+        Statement::Constant(c) => {
+            diags.extend(
+                &check_expression_lvalues(c.initializer.as_ref(), ast, &names)
+            );
+        }
         Statement::Assignment(lval, expr) => {
             diags.extend(&check_lvalue(lval, ast, &names, None));
             diags.extend(
@@ -207,14 +229,11 @@ fn check_statement_block_lvalues(
 ) -> Diagnostics {
     let mut diags = Diagnostics::new();
     let mut block_names = names.clone();
-    for var in &block.variables {
-        block_names.insert(var.name.clone(), var.ty.clone());
-    }
     for stmt in &block.statements {
         diags.extend(&check_statement_lvalues(
             stmt,
             ast,
-            &block_names
+            &mut block_names
         ));
     }
     diags
