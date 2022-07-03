@@ -7,25 +7,32 @@ use std::fs;
 #[derive(Parser)]
 #[clap(version = "0.1")]
 struct Opts {
+    /// Show parsed lexical tokens.
     #[clap(long)]
     show_tokens: bool,
 
+    /// Show parsed abstract syntax tree.
     #[clap(long)]
     show_ast: bool,
 
+    /// Show parsed preprocessor info.
     #[clap(long)]
     show_pre: bool,
 
-    /// File to compile
+    /// File to compile.
     filename: String,
 
-    /// What target to generate code for
+    /// What target to generate code for.
     #[clap(arg_enum, default_value_t = Target::Rust)]
     target: Target,
 
     /// Just check code, do not compile.
     #[clap(long)]
-    check: bool
+    check: bool,
+
+    /// Filename to write generated code to.
+    #[clap(short, long, default_value = "out.rs")]
+    out: String,
 }
 
 #[derive(clap::ArgEnum, Clone)]
@@ -67,7 +74,7 @@ fn main() -> Result<()> {
 
     match opts.target {
         Target::Rust => {
-            p4_rust::emit(&ast)?;
+            p4_rust::emit(&ast, &opts.out)?;
         }
         Target::RedHawk => {
             todo!("RedHawk code generator");

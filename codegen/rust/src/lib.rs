@@ -21,7 +21,7 @@ struct Context {
     functions: HashMap<String, TokenStream>,
 }
 
-pub fn emit(ast: &AST) -> io::Result<()> {
+pub fn emit(ast: &AST, filename: &str) -> io::Result<()> {
     let tokens = emit_tokens(ast);
 
     //
@@ -30,20 +30,29 @@ pub fn emit(ast: &AST) -> io::Result<()> {
     let f: syn::File = match syn::parse2(tokens.clone()) {
         Ok(f) => f,
         Err(e) => {
-            println!("Failed to parse generated code: {:?}", e);
-            let mut out = tempfile::Builder::new()
-                .suffix(".rs")
-                .tempfile()?;
-            out.write_all(tokens.to_string().as_bytes())?;
-            println!("Wrote generated code to {}", out.path().display());
-            out.keep()?;
+            // On failure write generated code to a tempfile
+            println!("Code generation produced unparsable code");
+            write_to_tempfile(&tokens)?;
             return Err(
-                io::Error::new(io::ErrorKind::Other, format!("{:?}", e))
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to parse generated code: {:?}", e),
+                )
             );
         }
     };
-    fs::write("out.rs", prettyplease::unparse(&f))?;
+    fs::write(filename, prettyplease::unparse(&f))?;
 
+    Ok(())
+}
+
+fn write_to_tempfile(tokens: &TokenStream) -> io::Result<()> {
+    let mut out = tempfile::Builder::new()
+        .suffix(".rs")
+        .tempfile()?;
+    out.write_all(tokens.to_string().as_bytes())?;
+    println!("Wrote generated code to {}", out.path().display());
+    out.keep()?;
     Ok(())
 }
 
@@ -66,7 +75,10 @@ pub fn emit_tokens(ast: &AST) -> TokenStream {
     //
 
     // start with use statements
-    let mut tokens = quote! { use p4rs::*; use bitvec::prelude::*; };
+    let mut tokens = quote! {
+        use p4rs::*;
+        use bitvec::prelude::*;
+    };
 
     // structs
     for s in ctx.structs.values() {
@@ -94,12 +106,6 @@ fn handle_structs(ast: &AST, ctx: &mut Context) {
 }
 
 fn handle_parsers(ast: &AST, ctx: &mut Context) {
-    // parsers
-    handle_parser_out_parameters(ast, ctx);
-    handle_parser_states(ast, ctx);
-}
-
-fn handle_parser_states(ast: &AST, ctx: &mut Context) {
     for parser in &ast.parsers {
         for state in &parser.states {
             generate_parser_state_function(ast, parser, state, ctx);
@@ -282,40 +288,6 @@ fn generate_parser_state_transition(
     }
 }
 
-fn handle_parser_out_parameters(ast: &AST, _ctx: &mut Context) {
-    // - iterate through parsers and look at headers
-    // - generate a Struct object for each struct
-    // - generate a Header object for each header
-
-    //
-    // iterate through the parsers, looking for out parameters and generating
-    // Struct and Header object for the ones we find.
-    //
-    for parser in &ast.parsers {
-        for parameter in &parser.parameters {
-            // ignore parameters not in an out direction, we're just generating
-            // supporting data structures right now.
-            if parameter.direction != Direction::Out {
-                continue;
-            }
-            if let Type::UserDefined(ref typename) = parameter.ty {
-                if let Some(_decl) = ast.get_struct(typename) {
-                } else {
-                    // if this is a generic type, skip for now
-                    if parser.is_type_parameter(typename) {
-                        continue;
-                    }
-                    panic!(
-                        "codegen: undefined type {} for parameter {:#?}", 
-                        parameter.ty,
-                        parameter,
-                    );
-                }
-            } 
-        }
-    }
-}
-
 fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
     let mut members = Vec::new();
 
@@ -400,18 +372,9 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
     for member in &h.members {
         let name = format_ident!("{}", member.name);
         let size = type_size(&member.ty);
-        /*
-        let required_bytes = if (size + offset) & 7 > 0 || size & 7 > 0 {
-            (size >> 3) + 1
-        } else {
-            size >> 3
-        };
-        let ty = rust_type(&member.ty, true, offset);
-        */
         member_values.push(quote! {
             #name: None
         });
-        //let off = offset >> 3;
         let end = offset+size;
         set_statements.push(quote! {
             self.#name = Some(
@@ -431,7 +394,10 @@ fn generate_header(_ast: &AST, h: &Header, ctx: &mut Context) {
                     #(#member_values),*
                 }
             }
-            fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
+            fn set(
+                &mut self,
+                buf: &'a mut [u8]
+            ) -> Result<(), TryFromSliceError> {
                 unsafe {
                     #(#set_statements);*;
                 }
@@ -775,20 +741,11 @@ fn generate_control_table(
     }
 
     let table_name = format_ident!("{}_table", table.name);
-    /*
-    let key_type = quote! { (#(#key_type_tokens),*) };
-    let table_type = quote! {
-        std::collections::HashMap::<#key_type, &'a dyn Fn(#(#control_param_types),*)>
-    };
-    */
     let n = table.key.len() as usize;
-    let table_type = quote! { p4rs::table::Table::<#n, fn(#(#control_param_types),*)> };
-
-    /*
-    let mut tokens = quote! {
-        let mut #table_name: #table_type = std::collections::HashMap::new();
+    let table_type = quote! {
+        p4rs::table::Table::<#n, fn(#(#control_param_types),*)> 
     };
-    */
+
     let mut tokens = quote! {
         let mut #table_name: #table_type = #table_type::new();
     };
@@ -808,13 +765,15 @@ fn generate_control_table(
                         MatchKind::Exact => {
                             let k = format_ident!("{}", "Exact");
                             quote!{
-                                p4rs::table::Key::#k(p4rs::bitvec_to_biguint(&#xpr))
+                                p4rs::table::Key::#k(
+                                    p4rs::bitvec_to_biguint(&#xpr))
                             }
                         }
                         MatchKind::Ternary => {
                             let k = format_ident!("{}", "Ternary");
                             quote!{
-                                p4rs::table::Key::#k(p4rs::bitvec_to_biguint(&#xpr))
+                                p4rs::table::Key::#k(
+                                    p4rs::bitvec_to_biguint(&#xpr))
                             }
                         }
                         MatchKind::LongestPrefixMatch => {
@@ -822,8 +781,8 @@ fn generate_control_table(
                                 Some(len) => len,
                                 None => {
                                     panic!(
-                                        "codegen: coult not determine prefix len 
-                                        for key {:#?}",
+                                        "codegen: coult not determine prefix 
+                                        len for key {:#?}",
                                         table.key[i].1,
                                     );
                                 }
@@ -861,12 +820,10 @@ fn generate_control_table(
         for (i, expr) in entry.action.parameters.iter().enumerate() {
             match expr.as_ref() {
                 Expression::IntegerLit(v) => {
-                    //XXX let tytk = rust_type(&action.parameters[i].ty, false, 0);
                     match &action.parameters[i].ty {
                         Type::Bit(n) => {
                             if *n <= 8 {
                                 let v = *v as u8;
-                                //XXX action_fn_args.push(quote! { #tytk::from(#v) });
                                 action_fn_args.push(quote!{
                                     #v.view_bits::<Lsb0>().to_bitvec()
                                 });
@@ -885,21 +842,15 @@ fn generate_control_table(
             closure_params.push(quote! { #name });
         }
 
-        /*
         tokens.extend(quote! {
-            #table_name.insert((#(#keyset),*), &|#(#closure_params),*|{
-                #action_fn_name(#(#action_fn_args),*);
-            });
-        });
-        */
-        tokens.extend(quote! {
-            #table_name.entries.insert(p4rs::table::TableEntry::<#n, fn(#(#control_param_types),*)>{
-                key: [#(#keyset),*],
-                priority: 0,
-                name: "your name here".into(),
-                action: |#(#closure_params),*| {
-                    #action_fn_name(#(#action_fn_args),*);
-                },
+            #table_name.entries.insert(
+                p4rs::table::TableEntry::<#n, fn(#(#control_param_types),*)>{
+                    key: [#(#keyset),*],
+                    priority: 0,
+                    name: "your name here".into(),
+                    action: |#(#closure_params),*| {
+                        #action_fn_name(#(#action_fn_args),*);
+                    },
             });
         })
     }
@@ -965,7 +916,6 @@ fn generate_control_action_body(
                     }
                     // otherwise just run the expression generator
                     x => {
-                        //todo!("action assignment rhs {:?}", x);
                        generate_expression(Box::new(x.clone()), ctx)
                     }
                 };
@@ -991,13 +941,10 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
         Type::Bit(_size) => {
-            //XXX let off = offset % 8;
             if header_member {
-                //XXX quote! { bit_slice::<'a, #size, #off> }
                 quote!{ BitSlice<u8, Lsb0> }
             } else {
                 quote!{ BitVec<u8, Lsb0> }
-                //XXX quote! { bit::<#size> }
             }
         }
         Type::Int(_size) => todo!("generate int type"),
@@ -1149,7 +1096,6 @@ fn try_extract_prefix_len(
 
 fn generate_lvalue(lval: &Lvalue) -> TokenStream {
 
-    //let lv = format_ident!("{}", lval.name);
     let lv: Vec<TokenStream> = lval
         .name
         .split(".")

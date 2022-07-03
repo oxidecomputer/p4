@@ -35,8 +35,7 @@ fn generate_rs(filename: String) -> Result<TokenStream, syn::Error> {
     let ast = psr.run().unwrap();
     let static_diags = check::all(&ast);
     check(&lines, &static_diags);
-    let (tokens, diags) = p4_rust::emit_tokens(&ast);
-    check(&lines, &diags);
+    let tokens = p4_rust::emit_tokens(&ast);
 
     Ok(tokens.into())
 }
