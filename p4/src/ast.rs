@@ -79,7 +79,7 @@ impl AST {
         None
     }
     
-    pub fn type_map(&self) -> HashMap<String, Type> {
+    pub fn names(&self) -> HashMap<String, Type> {
         let mut tm = HashMap::new();
         for x in &self.structs {
             tm.insert(x.name.clone(), Type::UserDefined(x.name.clone()));
@@ -531,6 +531,13 @@ impl Lvalue {
     pub fn root(&self) -> &str {
         self.parts()[0]
     }
+    pub fn leaf(&self) -> &str {
+        let parts = self.parts();
+        parts[parts.len()-1]
+    }
+    pub fn degree(&self) -> usize {
+        self.parts().len()
+    }
     pub fn pop_left(&self) -> Self {
         let parts = self.parts();
         Lvalue{
@@ -539,6 +546,17 @@ impl Lvalue {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col + parts[0].len() + 1,
+            }
+        }
+    }
+    pub fn pop_right(&self) -> Self {
+        let parts = self.parts();
+        Lvalue{
+            name: parts[..parts.len()-1].join("."),
+            token: Token{
+                kind: self.token.kind.clone(),
+                line: self.token.line,
+                col: self.token.col,
             }
         }
     }
