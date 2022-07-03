@@ -67,8 +67,7 @@ fn main() -> Result<()> {
 
     match opts.target {
         Target::Rust => {
-            let diags = p4_rust::emit(&ast)?;
-            check(&lines, &diags)?;
+            p4_rust::emit(&ast)?;
         }
         Target::RedHawk => {
             todo!("RedHawk code generator");

@@ -10,7 +10,6 @@ use p4::ast::{
     Direction, Expression, Header, IfBlock, KeySetElementValue, Lvalue,
     MatchKind, Parser, State, Statement, Struct, Table, Transition, Type
 };
-use p4::check::{Diagnostic, Diagnostics, Level};
 
 /// An object for keeping track of state as we generate code.
 #[derive(Default)]
@@ -20,17 +19,10 @@ struct Context {
 
     /// Rust functions we've generated.
     functions: HashMap<String, TokenStream>,
-
-    /// Diagnositcs collected during code generation
-    diags: Diagnostics,
 }
 
-pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
-    let (tokens, diags) = emit_tokens(ast);
-
-    if !diags.errors().is_empty() {
-        return Ok(diags);
-    }
+pub fn emit(ast: &AST) -> io::Result<()> {
+    let tokens = emit_tokens(ast);
 
     //
     // format the code and write it out to a Rust source file
@@ -52,10 +44,10 @@ pub fn emit(ast: &AST) -> io::Result<Diagnostics> {
     };
     fs::write("out.rs", prettyplease::unparse(&f))?;
 
-    Ok(diags)
+    Ok(())
 }
 
-pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
+pub fn emit_tokens(ast: &AST) -> TokenStream {
     //
     // initialize a context to track state while we generate code
     //
@@ -86,7 +78,7 @@ pub fn emit_tokens(ast: &AST) -> (TokenStream, Diagnostics) {
         tokens.extend(s.clone());
     }
 
-    (tokens, ctx.diags)
+    tokens
 }
 
 fn handle_headers(ast: &AST, ctx: &mut Context) {
@@ -290,7 +282,7 @@ fn generate_parser_state_transition(
     }
 }
 
-fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
+fn handle_parser_out_parameters(ast: &AST, _ctx: &mut Context) {
     // - iterate through parsers and look at headers
     // - generate a Struct object for each struct
     // - generate a Header object for each header
@@ -313,24 +305,13 @@ fn handle_parser_out_parameters(ast: &AST, ctx: &mut Context) {
                     if parser.is_type_parameter(typename) {
                         continue;
                     }
-                    // semantic error undefined type
-                    ctx.diags.push(Diagnostic {
-                        level: Level::Error,
-                        message: format!("Undefined type {}", parameter.ty,),
-                        token: parameter.ty_token.clone(),
-                    });
-                }
-            } else {
-                // semantic error, out parameters must be structures
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "Out parameter must be a struct, found {}",
+                    panic!(
+                        "codegen: undefined type {} for parameter {:#?}", 
                         parameter.ty,
-                    ),
-                    token: parameter.ty_token.clone(),
-                });
-            }
+                        parameter,
+                    );
+                }
+            } 
         }
     }
 }
@@ -354,12 +335,7 @@ fn generate_struct(ast: &AST, s: &Struct, ctx: &mut Context) {
                     members.push(quote! { pub #name: #ty::<'a> });
                     needs_lifetime = true;
                 } else {
-                    // semantic error undefined header
-                    ctx.diags.push(Diagnostic {
-                        level: Level::Error,
-                        message: format!("Undefined header {}", member.ty,),
-                        token: member.token.clone(),
-                    });
+                    panic!("Struct member {:#?} undefined in {:#?}", member, s);
                 }
             }
             Type::Bit(_size) => {
@@ -511,7 +487,7 @@ fn handle_control_blocks(ast: &AST, ctx: &mut Context) {
 fn generate_control_apply_body_call(
     ast: &AST,
     control: &Control,
-    ctx: &mut Context,
+    _ctx: &mut Context,
     c: &Call,
     tokens: &mut TokenStream,
 ) {
@@ -522,28 +498,20 @@ fn generate_control_apply_body_call(
     //
     let parts: Vec<&str> = c.lval.name.split(".").collect();
     if parts.len() != 2 || parts[1] != "apply" {
-        ctx.diags.push(Diagnostic {
-            level: Level::Error,
-            message: format!(
-                "Only <tablename>.apply() calls are
-                            supported in apply blocks right now"
-            ),
-            token: c.lval.token.clone(),
-        });
-        return;
+        panic!(
+            "codegen: only <tablename>.apply() calls are 
+             supported in apply blocks right now: {:#?}",
+             c
+        );
     }
     let table = match control.get_table(parts[0]) {
         Some(table) => table,
         None => {
-            ctx.diags.push(Diagnostic {
-                level: Level::Error,
-                message: format!(
-                    "Table {} not found in control {}",
-                    parts[0], control.name,
-                ),
-                token: c.lval.token.clone(),
-            });
-            return;
+            panic!(
+                "codegen: table {} not found in control {}",
+                parts[0],
+                control.name,
+            );
         }
     };
 
@@ -683,7 +651,7 @@ fn generate_control_apply_body(
 fn control_parameters(
     ast: &AST,
     control: &Control,
-    ctx: &mut Context,
+    _ctx: &mut Context,
 ) -> (Vec<TokenStream>, Vec<TokenStream>) {
     let mut params = Vec::new();
     let mut types = Vec::new();
@@ -714,12 +682,7 @@ fn control_parameters(
                         if control.is_type_parameter(typename) {
                             continue;
                         }
-                        ctx.diags.push(Diagnostic {
-                            level: Level::Error,
-                            message: format!("Undefined type {}", typename),
-                            token: arg.ty_token.clone(),
-                        });
-                        return (params, types);
+                        panic!("Undefined type {}", typename);
                     }
                 }
             }
@@ -753,12 +716,11 @@ fn generate_control_action(
                     params.push(quote! { #name: #ty });
                 }
                 None => {
-                    ctx.diags.push(Diagnostic {
-                        level: Level::Error,
-                        message: format!("Undefined type {}", typename),
-                        token: arg.ty_token.clone(),
-                    });
-                    return;
+                    panic!(
+                        "codegen: undefined type {} for arg {:#?}",
+                        typename,
+                        arg,
+                    );
                 }
             }
         } else {
@@ -859,14 +821,11 @@ fn generate_control_table(
                             let len = match try_extract_prefix_len(e) {
                                 Some(len) => len,
                                 None => {
-                                    ctx.diags.push(Diagnostic {
-                                        level: Level::Error,
-                                        message: format!(
-                                            "coult not determine prefix len for key",
-                                        ),
-                                        token: k.token.clone(),
-                                    });
-                                    return (quote! {}, quote! {});
+                                    panic!(
+                                        "codegen: coult not determine prefix len 
+                                        for key {:#?}",
+                                        table.key[i].1,
+                                    );
                                 }
                             };
                             let k = format_ident!("{}", "Lpm");
@@ -887,12 +846,7 @@ fn generate_control_table(
         let action = match control.get_action(&entry.action.name) {
             Some(action) => action,
             None => {
-                ctx.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!("action {} not found", entry.action.name),
-                    token: entry.action.token.clone(),
-                });
-                return (quote! {}, quote! {});
+                panic!("codegen: action {} not found", entry.action.name);
             }
         };
 
@@ -999,12 +953,12 @@ fn generate_control_action_body(
                                     quote!{ #(#rhs ).* }
                                 }
                                 None => {
-                                    ctx.diags.push(Diagnostic {
-                                        level: Level::Error,
-                                        message: format!("{} not found", root),
-                                        token: rhs_lval.token.clone(),
-                                    });
-                                    return quote! {};
+                                    panic!(
+                                        "codegen: arg {} not found for action
+                                        {:#?}",
+                                        root,
+                                        action,
+                                    );
                                 }
                             },
                         }
