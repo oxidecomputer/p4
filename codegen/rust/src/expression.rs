@@ -11,7 +11,7 @@ impl ExpressionGenerator {
     pub(crate) fn generate_expression(xpr: &Expression) -> TokenStream {
         match xpr {
             Expression::BoolLit(v) => {
-                quote!{ #v.into() }
+                quote!{ #v }
             }
             Expression::IntegerLit(v) => {
                 quote!{ #v.into() }

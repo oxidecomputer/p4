@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::lexer::Token;
 use crate::ast::{
-    AST, Expression, Lvalue, Parser, Statement, StatementBlock, Type
+    AST, DeclarationInfo, Expression, Lvalue, NameInfo, Parser, Statement,
+    StatementBlock, Type
 };
 
 // TODO Check List
@@ -71,16 +72,6 @@ impl ParserChecker {
         diags
     }
 
-    /// Provide a mapping of names within the context of this parser to their
-    /// types.
-    pub fn name_context(p: &Parser) -> HashMap::<String, Type> {
-        let mut ctx = HashMap::new();
-        for x in &p.parameters {
-            ctx.insert(x.name.clone(), x.ty.clone());
-        }
-        ctx
-    }
-
     /// Ensure the parser has a start state
     pub fn start_state(parser: &Parser, diags: &mut Diagnostics) {
         for s in &parser.states {
@@ -105,10 +96,13 @@ impl ParserChecker {
             // create a name context for each parser state to pick up any
             // variables that may get created within parser states to reference
             // locally.
-            let mut names = Self::name_context(parser);
+            let mut names = parser.names();
             let mut state_names = names.clone();
             for v in &state.variables {
-                state_names.insert(v.name.clone(), v.ty.clone());
+                state_names.insert(v.name.clone(), NameInfo{
+                    ty: v.ty.clone(),
+                    decl: DeclarationInfo::Local,
+                });
             }
             // TODO use a StatementBlock here?
             for stmt in &state.statements {
@@ -120,14 +114,13 @@ impl ParserChecker {
 
 fn check_name(
     name: &str,
-    names: &HashMap::<String, Type>,
+    names: &HashMap::<String, NameInfo>,
     token: &Token,
     parent: Option<&str>,
 ) -> (Diagnostics, Option<Type>) {
 
-    let ty = names.get(name);
-    match ty {
-        Some(ty) => (Diagnostics::new(), Some(ty.clone())),
+    match names.get(name) {
+        Some(name_info) => (Diagnostics::new(), Some(name_info.ty.clone())),
         None => (
             Diagnostics(vec![Diagnostic {
                 level: Level::Error,
@@ -146,7 +139,7 @@ fn check_name(
 fn check_statement_lvalues(
     stmt: &Statement,
     ast: &AST,
-    names: &mut HashMap::<String, Type>
+    names: &mut HashMap::<String, NameInfo>
 ) -> Diagnostics {
     let mut diags = Diagnostics::new();
     match stmt {
@@ -162,7 +155,10 @@ fn check_statement_lvalues(
                 }
                 None => {}
             };
-            names.insert(v.name.clone(), v.ty.clone());
+            names.insert(v.name.clone(), NameInfo{
+                ty: v.ty.clone(),
+                decl: DeclarationInfo::Local,
+            });
         }
         Statement::Constant(c) => {
             diags.extend(
@@ -225,7 +221,7 @@ fn check_statement_lvalues(
 fn check_statement_block_lvalues(
     block: &StatementBlock,
     ast: &AST,
-    names: &HashMap::<String, Type>
+    names: &HashMap::<String, NameInfo>
 ) -> Diagnostics {
     let mut diags = Diagnostics::new();
     let mut block_names = names.clone();
@@ -242,7 +238,7 @@ fn check_statement_block_lvalues(
 fn check_expression_lvalues(
     xpr: &Expression,
     ast: &AST,
-    names: &HashMap::<String, Type>,
+    names: &HashMap::<String, NameInfo>,
 ) -> Diagnostics {
 
     match xpr {
@@ -275,7 +271,7 @@ fn check_expression_lvalues(
 fn check_lvalue(
     lval: &Lvalue,
     ast: &AST,
-    names: &HashMap::<String, Type>,
+    names: &HashMap::<String, NameInfo>,
     parent: Option<&str>,
 ) -> Diagnostics {
 

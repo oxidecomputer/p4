@@ -89,12 +89,9 @@ control local(
     apply {
         local.apply();
         bit<16> ll = 0xff02;
-        if(hdr.ipv6.dst_addr[127:112] == ll) {
+        if(hdr.ipv6.dst[127:112] == ll) {
             is_local = true;
         }
-        //if(hdr.ipv6.dst_addr == ll) {
-        //    is_local = true;
-        //} 
     }
     
 }

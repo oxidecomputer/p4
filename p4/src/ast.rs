@@ -78,14 +78,6 @@ impl AST {
         }
         None
     }
-    
-    pub fn names(&self) -> HashMap<String, Type> {
-        let mut tm = HashMap::new();
-        for x in &self.structs {
-            tm.insert(x.name.clone(), Type::UserDefined(x.name.clone()));
-        }
-        tm
-    }
 }
 
 #[derive(Debug)]
@@ -220,10 +212,13 @@ impl Header {
             members: Vec::new(),
         }
     }
-    pub fn names(&self) -> HashMap::<String, Type> {
+    pub fn names(&self) -> HashMap::<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.members {
-            names.insert(p.name.clone(), p.ty.clone());
+            names.insert(p.name.clone(), NameInfo{
+                ty: p.ty.clone(),
+                decl: DeclarationInfo::HeaderMember,
+            });
         }
         names
     }
@@ -249,10 +244,13 @@ impl Struct {
         }
     }
 
-    pub fn names(&self) -> HashMap::<String, Type> {
+    pub fn names(&self) -> HashMap::<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.members {
-            names.insert(p.name.clone(), p.ty.clone());
+            names.insert(p.name.clone(), NameInfo{
+                ty: p.ty.clone(),
+                decl: DeclarationInfo::StructMember,
+            });
         }
         names
     }
@@ -323,10 +321,13 @@ impl Control {
         return false;
     }
     
-    pub fn names(&self) -> HashMap::<String, Type> {
+    pub fn names(&self) -> HashMap::<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.parameters {
-            names.insert(p.name.clone(), p.ty.clone());
+            names.insert(p.name.clone(), NameInfo{
+                ty: p.ty.clone(),
+                decl: DeclarationInfo::Parameter(p.direction),
+            });
         }
         names
     }
@@ -364,6 +365,17 @@ impl Parser {
         }
         return false;
     }
+
+    pub fn names(&self) -> HashMap::<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.parameters {
+            names.insert(p.name.clone(), NameInfo{
+                ty: p.ty.clone(),
+                decl: DeclarationInfo::Parameter(p.direction),
+            });
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -377,7 +389,7 @@ pub struct ControlParameter {
     pub name_token: Token,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Direction {
     In,
     Out,
@@ -590,6 +602,7 @@ impl Ord for Lvalue {
 #[derive(Debug, Clone)]
 pub struct State {
     pub name: String,
+    //TODO the following should probably be a statement block
     pub variables: Vec<Variable>,
     pub constants: Vec<Constant>,
     pub statements: Vec<Statement>,
@@ -634,10 +647,13 @@ pub struct Extern {
 }
 
 impl Extern {
-    pub fn names(&self) -> HashMap::<String, Type> {
+    pub fn names(&self) -> HashMap::<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.methods{
-            names.insert(p.name.clone(), Type::ExternFunction);
+            names.insert(p.name.clone(), NameInfo{
+                ty: Type::ExternFunction,
+                decl: DeclarationInfo::Method,
+            });
         }
         names
     }
@@ -649,4 +665,19 @@ pub struct ExternMethod {
     pub name: String,
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DeclarationInfo {
+    Parameter(Direction),
+    Method,
+    StructMember,
+    HeaderMember,
+    Local,
+}
+
+#[derive(Debug, Clone)]
+pub struct NameInfo {
+    pub ty: Type,
+    pub decl: DeclarationInfo,
 }

@@ -6,7 +6,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    AST, ControlParameter, Expression, Lvalue, Parser, Type
+    AST, ControlParameter, DeclarationInfo, Direction, Expression, Lvalue,
+    NameInfo, Parser, Type
 };
 
 use header::HeaderGenerator;
@@ -251,7 +252,7 @@ fn try_extract_prefix_len(
 fn is_header(
     lval: &Lvalue,
     ast: &AST,
-    names: &HashMap::<String, Type>,
+    names: &HashMap::<String, NameInfo>,
 ) -> bool {
 
     let typename = match lvalue_type(lval, ast, names) {
@@ -264,13 +265,39 @@ fn is_header(
     }
 }
 
+fn is_rust_reference(
+    lval: &Lvalue,
+    names: &HashMap::<String, NameInfo>,
+) -> bool {
+
+    if lval.degree() == 1 {
+        let name_info = names
+            .get(lval.root())
+            .expect(&format!("name for lval {:#?}", lval));
+
+        match name_info.decl {
+            DeclarationInfo::Parameter(Direction::Unspecified) => false,
+            DeclarationInfo::Parameter(Direction::In) => false,
+            DeclarationInfo::Parameter(Direction::Out) => true,
+            DeclarationInfo::Parameter(Direction::InOut) => true,
+            DeclarationInfo::Local => false,
+            DeclarationInfo::Method => false,
+            DeclarationInfo::StructMember => false,
+            DeclarationInfo::HeaderMember => false,
+        }
+    } else {
+        false
+    }
+    
+}
+
 fn lvalue_type(
     lval: &Lvalue,
     ast: &AST,
-    names: &HashMap::<String, Type>,
+    names: &HashMap::<String, NameInfo>,
 ) -> Type {
     let root_type = match names.get(lval.root()) {
-        Some(ty) => ty,
+        Some(name_info) => &name_info.ty,
         None => panic!("codegen: unresolved lval {:#?}", lval),
     };
     match root_type {
@@ -286,10 +313,8 @@ fn lvalue_type(
                 Type::UserDefined(name.clone())
             }
             else if let Some(parent) = ast.get_struct(name) {
-                let mut tm = parent.names();
-                for m in &parent.members {
-                    tm.insert(m.name.clone(), m.ty.clone());
-                }
+                let mut tm = names.clone();
+                tm.extend(parent.names());
                 lvalue_type(
                     &lval.pop_left(),
                     ast,
@@ -297,10 +322,8 @@ fn lvalue_type(
                 )
             }
             else if let Some(parent) = ast.get_header(name) {
-                let mut tm = parent.names();
-                for m in &parent.members {
-                    tm.insert(m.name.clone(), m.ty.clone());
-                }
+                let mut tm = names.clone();
+                tm.extend(parent.names());
                 lvalue_type(
                     &lval.pop_left(),
                     ast,
@@ -308,10 +331,8 @@ fn lvalue_type(
                 )
             }
             else if let Some(parent) = ast.get_extern(name) {
-                let mut tm = parent.names();
-                for m in &parent.methods {
-                    tm.insert(m.name.clone(), Type::ExternFunction);
-                }
+                let mut tm = names.clone();
+                tm.extend(parent.names());
                 lvalue_type(
                     &lval.pop_left(),
                     ast,

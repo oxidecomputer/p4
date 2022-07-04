@@ -9,7 +9,7 @@ use crate::{
     expression::ExpressionGenerator,
 };
 use p4::ast::{
-    Action, ActionParameter, AST, Call, Control, ControlParameter, Direction,
+    Action, AST, Call, Control, ControlParameter, Direction,
     Expression, KeySetElementValue, MatchKind, Statement, Table, Type
 };
 use proc_macro2::TokenStream;
@@ -71,7 +71,6 @@ impl<'a> ControlGenerator<'a> {
         let mut types = Vec::new();
 
         for arg in &control.parameters {
-            // if the type is user defined, check to ensure it's defined
             match arg.ty {
                 Type::UserDefined(ref typename) => {
                     match self.ast.get_user_defined_type(typename) {
@@ -103,7 +102,16 @@ impl<'a> ControlGenerator<'a> {
                 _ => {
                     let name = format_ident!("{}", arg.name);
                     let ty = rust_type(&arg.ty, false, 0);
-                    params.push(quote! { #name: &#ty });
+                    match &arg.direction {
+                        Direction::Out | Direction::InOut => {
+                            params.push(quote! { #name: &mut #ty });
+                            types.push(quote! { &mut #ty });
+                        }
+                        _ => {
+                            params.push(quote! { #name: &#ty });
+                            types.push(quote! { &#ty });
+                        }
+                    }
                 }
             }
         }
@@ -143,7 +151,14 @@ impl<'a> ControlGenerator<'a> {
             }
         }
 
+        /*
         let body = self.generate_control_action_body(control, action);
+        */
+        let mut names = control.names();
+        let body = StatementGenerator::generate_block(
+            &action.statement_block,
+            &mut names,
+        );
 
         self.ctx.functions.insert(
             name.to_string(),
@@ -307,77 +322,6 @@ impl<'a> ControlGenerator<'a> {
         (table_type, tokens)
     }
 
-    fn generate_control_action_body(
-        &mut self,
-        control: &Control,
-        action: &Action,
-    ) -> TokenStream {
-        let mut ts = TokenStream::new();
-
-        for statement in &action.statement_block.statements {
-            match statement {
-                Statement::Empty => {
-                    continue;
-                }
-                Statement::Assignment(lval, expr) => {
-                    let lhs: Vec<TokenStream> = lval.parts()
-                        .iter()
-                        .map(|x| format_ident!("{}", x))
-                        .map(|x| quote! { #x })
-                        .collect();
-
-                    let rhs = match expr.as_ref() {
-                        Expression::Lvalue(rhs_lval) => {
-                            let parts: Vec<&str> =
-                                rhs_lval.name.split(".").collect();
-                            let root = parts[0];
-                            match Self::get_control_arg(control, root) {
-                                Some(_param) => {
-                                    let rhs: Vec<TokenStream> = rhs_lval.name
-                                        .split(".")
-                                        .map(|x| format_ident!("{}", x))
-                                        .map(|x| quote! { #x })
-                                        .collect();
-                                    quote!{ #(#rhs ).* }
-                                }
-                                None => match Self::get_action_arg(action, root) {
-                                    Some(_) => {
-                                        let rhs: Vec<TokenStream> = rhs_lval.name
-                                            .split(".")
-                                            .map(|x| format_ident!("{}", x))
-                                            .map(|x| quote! { #x })
-                                            .collect();
-                                        quote!{ #(#rhs ).* }
-                                    }
-                                    None => {
-                                        panic!(
-                                            "codegen: arg {} not found for action
-                                        {:#?}",
-                                        root,
-                                        action,
-                                        );
-                                    }
-                                },
-                            }
-                        }
-                        // otherwise just run the expression generator
-                        x => {
-                            ExpressionGenerator::generate_expression(x)
-                        }
-                    };
-
-                    ts.extend(quote! { #(#lhs).* = #rhs });
-                }
-                Statement::Call(_) => {
-                    todo!("handle control action function/method calls");
-                }
-                x => todo!("codegen: statement {:?}", x),
-            }
-        }
-
-        ts
-    }
-
     fn generate_control_apply_body_call(
         &mut self,
         control: &Control,
@@ -441,8 +385,7 @@ impl<'a> ControlGenerator<'a> {
             // if it's a header there's a bit of extra unsrapping we
             // need to do to match the selector against the value.
 
-            let mut names = self.ast.names();
-            names.extend(control.names());
+            let names = control.names();
 
             if is_header(&lval.pop_right(), self.ast, &names) {
                 //TODO: to_bitvec is bad here, copying on data path
@@ -483,7 +426,11 @@ impl<'a> ControlGenerator<'a> {
                 );
             }
             _ => {
-                tokens.extend(StatementGenerator::generate_block(&control.apply));
+                let mut names = control.names();
+                tokens.extend(StatementGenerator::generate_block(
+                    &control.apply,
+                    &mut names,
+                ));
             }
         }
     }
@@ -511,15 +458,4 @@ impl<'a> ControlGenerator<'a> {
         None
     }
 
-    fn get_action_arg<'b>(
-        action: &'b Action,
-        arg_name: &str,
-    ) -> Option<&'b ActionParameter> {
-        for arg in &action.parameters {
-            if arg.name == arg_name {
-                return Some(arg);
-            }
-        }
-        None
-    }
 }
