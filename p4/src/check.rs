@@ -58,6 +58,7 @@ pub fn all(ast: &AST) -> Diagnostics {
     }
     let mut hg = HlirGenerator::new(ast);
     hg.run();
+    println!("{:#?}", hg.hlir);
     diags.extend(&hg.diags);
     diags
 }
@@ -369,6 +370,18 @@ fn check_lvalue(
                     level: Level::Error,
                     message: format!(
                         "extern functions do not have members",
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::Table => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type table does not have a member {}",
+                        parts[1]
                     ),
                     token: lval.token.clone(),
                 });

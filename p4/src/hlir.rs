@@ -16,7 +16,7 @@ use crate::util::resolve_lvalue;
 /// The hlir maps language elements onto the corresponding type and declaration
 /// information. Langauge elements contain lexical token members which ensure
 /// hashing uniquenes.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Hlir {
     pub expression_types: HashMap::<Expression, Type>,
     pub lvalue_decls: HashMap::<Lvalue, DeclarationInfo>,
@@ -56,9 +56,11 @@ impl<'a> HlirGenerator<'a> {
     fn control(&mut self, c: &Control) {
         let mut names = c.names();
         for a in &c.actions {
-            names.extend(a.names());
-            self.statement_block(&a.statement_block, &mut names);
+            let mut local_names = names.clone();
+            local_names.extend(a.names());
+            self.statement_block(&a.statement_block, &mut local_names);
         }
+        self.statement_block(&c.apply, &mut names);
     }
 
     fn statement_block(
@@ -146,11 +148,11 @@ impl<'a> HlirGenerator<'a> {
             ExpressionKind::Index(lval, xpr) => {
                 self.index(lval, xpr, names)
             }
-            ExpressionKind::Slice(begin, _end) => {
+            ExpressionKind::Slice(end, _begin) => {
                 self.diags.push(Diagnostic{
                     level: Level::Error,
                     message: format!("slice cannot occur outside of an index"),
-                    token: begin.token.clone(),
+                    token: end.token.clone(),
                 });
                 None
             }
@@ -186,9 +188,9 @@ impl<'a> HlirGenerator<'a> {
             }
             Type::Bit(width) => {
                 match &xpr.kind {
-                    ExpressionKind::Slice(begin, end) => {
+                    ExpressionKind::Slice(end, begin) => {
                         let (begin_val, end_val) = self.slice(begin, end, width)?;
-                        let w = end_val - begin_val;
+                        let w = end_val - begin_val + 1;
                         Some(Type::Bit(w as usize))
                     }
                     _ => {
@@ -206,7 +208,7 @@ impl<'a> HlirGenerator<'a> {
                 match &xpr.kind {
                     ExpressionKind::Slice(begin, end) => {
                         let (begin_val, end_val) = self.slice(begin, end, width)?;
-                        let w = end_val - begin_val;
+                        let w = end_val - begin_val + 1;
                         Some(Type::Varbit(w as usize))
                     }
                     _ => {
@@ -224,7 +226,7 @@ impl<'a> HlirGenerator<'a> {
                 match &xpr.kind {
                     ExpressionKind::Slice(begin, end) => {
                         let (begin_val, end_val) = self.slice(begin, end, width)?;
-                        let w = end_val - begin_val;
+                        let w = end_val - begin_val + 1;
                         Some(Type::Int(w as usize))
                     }
                     _ => {
@@ -258,6 +260,14 @@ impl<'a> HlirGenerator<'a> {
                 self.diags.push(Diagnostic{
                     level: Level::Error,
                     message: format!("cannot index an external function"),
+                    token: lval.token.clone(),
+                });
+                None
+            }
+            Type::Table => {
+                self.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!("cannot index a table"),
                     token: lval.token.clone(),
                 });
                 None

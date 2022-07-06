@@ -156,6 +156,7 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
             quote! { #typename }
         }
         Type::ExternFunction => { todo!("rust type for extern function"); }
+        Type::Table => { todo!("rust type for table"); }
     }
 }
 
@@ -169,6 +170,7 @@ fn type_size(ty: &Type) -> usize {
         Type::String => todo!("generate string size"),
         Type::UserDefined(_name) => todo!("generate user defined type size"),
         Type::ExternFunction => { todo!("type size for extern function"); }
+        Type::Table => { todo!("type size for table"); }
     }
 }
 
@@ -218,6 +220,7 @@ fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
             return false;
         }
         Type::ExternFunction => { todo!("lifetime for extern function"); }
+        Type::Table => { todo!("lifetime for table"); }
     }
 }
 

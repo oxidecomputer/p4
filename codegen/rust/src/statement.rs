@@ -109,6 +109,7 @@ impl StatementGenerator {
             Type::String => todo!(),
             Type::UserDefined(_) => todo!(),
             Type::ExternFunction => todo!(),
+            Type::Table => todo!(),
         }
     }
 

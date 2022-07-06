@@ -143,6 +143,7 @@ pub enum Type {
     String,
     UserDefined(String),
     ExternFunction, //TODO actual signature
+    Table,
 }
 
 impl fmt::Display for Type {
@@ -155,7 +156,8 @@ impl fmt::Display for Type {
             Type::Int(size) => write!(f, "int<{}>", size),
             Type::String => write!(f, "string"),
             Type::UserDefined(name) => write!(f, "{}", name),
-            Type::ExternFunction => write!(f, "Extern Function"),
+            Type::ExternFunction => write!(f, "extern function"),
+            Type::Table => write!(f, "table"),
         }
     }
 }
@@ -366,6 +368,12 @@ impl Control {
             names.insert(p.name.clone(), NameInfo{
                 ty: p.ty.clone(),
                 decl: DeclarationInfo::Parameter(p.direction),
+            });
+        }
+        for t in &self.tables {
+            names.insert(t.name.clone(), NameInfo{
+                ty: Type::Table,
+                decl: DeclarationInfo::Local,
             });
         }
         names
