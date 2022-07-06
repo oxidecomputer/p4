@@ -1,7 +1,7 @@
 use crate::error::TokenError;
 use std::fmt;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Kind {
     //
     // keywords
@@ -227,7 +227,7 @@ impl fmt::Display for Kind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Token {
     /// The kind of token this is.
     pub kind: Kind,

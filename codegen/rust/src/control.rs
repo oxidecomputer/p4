@@ -2,16 +2,16 @@ use crate::{
     Context,
     rust_type,
     type_lifetime,
-    lvalue_type,
     try_extract_prefix_len,
     is_header,
     statement::StatementGenerator,
     expression::ExpressionGenerator,
 };
 use p4::ast::{
-    Action, AST, Call, Control, ControlParameter, Direction,
-    Expression, KeySetElementValue, MatchKind, Statement, Table, Type
+    Action, AST, Call, Control, ControlParameter, Direction, ExpressionKind,
+    KeySetElementValue, MatchKind, Statement, Table, Type
 };
+use p4::util::resolve_lvalue;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -190,7 +190,8 @@ impl<'a> ControlGenerator<'a> {
                 Some(_param) => {
                     if parts.len() > 1 {
                         let tm = control.names();
-                        let ty = lvalue_type(&k, self.ast, &tm);
+                        //TODO: use hlir?
+                        let ty = resolve_lvalue(&k, self.ast, &tm).unwrap().ty;
                         key_types.push(ty.clone());
                         key_type_tokens.push(rust_type(&ty, false, 0));
                     }
@@ -280,8 +281,8 @@ impl<'a> ControlGenerator<'a> {
             let action_fn_name =
                 format_ident!("{}_action_{}", control.name, entry.action.name);
             for (i, expr) in entry.action.parameters.iter().enumerate() {
-                match expr.as_ref() {
-                    Expression::IntegerLit(v) => {
+                match &expr.kind {
+                    ExpressionKind::IntegerLit(v) => {
                         match &action.parameters[i].ty {
                             Type::Bit(n) => {
                                 if *n <= 8 {
@@ -424,11 +425,12 @@ impl<'a> ControlGenerator<'a> {
                     c,
                     tokens
                 );
+                return;
             }
             _ => {
                 let mut names = control.names();
-                tokens.extend(StatementGenerator::generate_block(
-                    &control.apply,
+                tokens.extend(StatementGenerator::generate_statement(
+                    stmt,
                     &mut names,
                 ));
             }

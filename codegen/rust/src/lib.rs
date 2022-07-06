@@ -6,9 +6,11 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    AST, ControlParameter, DeclarationInfo, Direction, Expression, Lvalue,
-    NameInfo, Parser, Type
+    AST, ControlParameter, DeclarationInfo, Direction, Expression,
+    ExpressionKind, Lvalue, NameInfo, Parser, Type
 };
+
+use p4::util::resolve_lvalue;
 
 use header::HeaderGenerator;
 use p4struct::StructGenerator;
@@ -229,16 +231,16 @@ fn try_extract_prefix_len(
     expr: &Box<Expression>
 ) -> Option<u8> {
 
-    match expr.as_ref() {
-        Expression::Binary(_lhs, _op, rhs) => {
-            match rhs.as_ref() {
-                Expression::IntegerLit(v) => {
+    match &expr.kind {
+        ExpressionKind::Binary(_lhs, _op, rhs) => {
+            match &rhs.kind {
+                ExpressionKind::IntegerLit(v) => {
                     Some(v.leading_ones() as u8)
                 }
-                Expression::BitLit(_width, v) => {
+                ExpressionKind::BitLit(_width, v) => {
                     Some(v.leading_ones() as u8)
                 }
-                Expression::SignedLit(_width, v) => {
+                ExpressionKind::SignedLit(_width, v) => {
                     Some(v.leading_ones() as u8)
                 }
                 _ => { None }
@@ -255,7 +257,8 @@ fn is_header(
     names: &HashMap::<String, NameInfo>,
 ) -> bool {
 
-    let typename = match lvalue_type(lval, ast, names) {
+    //TODO: get from hlir?
+    let typename = match resolve_lvalue(lval, ast, names).unwrap().ty {
         Type::UserDefined(name) => name,
         _ => return false,
     };
@@ -289,59 +292,4 @@ fn is_rust_reference(
         false
     }
     
-}
-
-fn lvalue_type(
-    lval: &Lvalue,
-    ast: &AST,
-    names: &HashMap::<String, NameInfo>,
-) -> Type {
-    let root_type = match names.get(lval.root()) {
-        Some(name_info) => &name_info.ty,
-        None => panic!("codegen: unresolved lval {:#?}", lval),
-    };
-    match root_type {
-        Type::Bool => root_type.clone(),
-        Type::Error => root_type.clone(),
-        Type::Bit(_) => root_type.clone(),
-        Type::Varbit(_) => root_type.clone(),
-        Type::Int(_) => root_type.clone(),
-        Type::String => root_type.clone(),
-        Type::ExternFunction => root_type.clone(),
-        Type::UserDefined(name) => {
-            if lval.degree() == 1 {
-                Type::UserDefined(name.clone())
-            }
-            else if let Some(parent) = ast.get_struct(name) {
-                let mut tm = names.clone();
-                tm.extend(parent.names());
-                lvalue_type(
-                    &lval.pop_left(),
-                    ast,
-                    &tm,
-                )
-            }
-            else if let Some(parent) = ast.get_header(name) {
-                let mut tm = names.clone();
-                tm.extend(parent.names());
-                lvalue_type(
-                    &lval.pop_left(),
-                    ast,
-                    &tm,
-                )
-            }
-            else if let Some(parent) = ast.get_extern(name) {
-                let mut tm = names.clone();
-                tm.extend(parent.names());
-                lvalue_type(
-                    &lval.pop_left(),
-                    ast,
-                    &tm,
-                )
-            }
-            else {
-                panic!("codegen: User defined name '{}' does not exist", name)
-            }
-        }
-    }
 }

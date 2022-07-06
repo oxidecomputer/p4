@@ -5,7 +5,7 @@ use crate::{
     is_rust_reference,
 };
 use p4::ast::{
-    DeclarationInfo, NameInfo, Statement, StatementBlock,
+    DeclarationInfo, Expression, NameInfo, Statement, StatementBlock, Type
 };
 use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
@@ -95,6 +95,37 @@ impl StatementGenerator {
                 }
             }
         }
+    }
+
+    //XXX
+    #[allow(dead_code)]
+    fn assign(to: NameInfo, xpr: &Expression) -> TokenStream {
+        match to.ty {
+            Type::Bool => todo!(),
+            Type::Error => todo!(),
+            Type::Bit(width) => Self::assign_to_bit(width, xpr),
+            Type::Varbit(_) => todo!(),
+            Type::Int(_) => todo!(),
+            Type::String => todo!(),
+            Type::UserDefined(_) => todo!(),
+            Type::ExternFunction => todo!(),
+        }
+    }
+
+    //XXX
+    #[allow(dead_code)]
+    fn assign_to_bit(_width: usize, _xpr: &Expression) -> TokenStream {
+        /*
+        match xpr {
+            Expression::BoolLit(_v) => todo!(),
+            Expression::IntegerLit(_v) => todo!(),
+            Expression::BitLit(_width, _v) => todo!(),
+            Expression::SignedLit(_width, _v) => todo!(),
+            Expression::Lvalue(_v) => todo!(),
+            Expression::Binary(Box<Expression
+        }
+        */
+        todo!();
     }
 
 }

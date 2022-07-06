@@ -1,10 +1,11 @@
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
     Constant, Control, ControlParameter, Direction, ElseIfBlock, Expression,
-    Extern, ExternMethod, Header, HeaderMember, IfBlock, KeySetElement,
-    KeySetElementValue, Lvalue, MatchKind, Package, PackageInstance,
-    PackageParameter, Select, SelectElement, State, Statement, StatementBlock,
-    Struct, StructMember, Table, Transition, Type, Typedef, Variable, AST,
+    ExpressionKind, Extern, ExternMethod, Header, HeaderMember, IfBlock,
+    KeySetElement, KeySetElementValue, Lvalue, MatchKind, Package,
+    PackageInstance, PackageParameter, Select, SelectElement, State, Statement,
+    StatementBlock, Struct, StructMember, Table, Transition, Type, Typedef,
+    Variable, AST,
 };
 use crate::error::{Error, ParserError};
 /// This is a recurisve descent parser for the P4 language.
@@ -1005,11 +1006,16 @@ impl<'a, 'b> ActionParser<'a, 'b> {
             self.parser.backlog.push(token);
 
             // parse a parameter
+            let direction = match self.parser.parse_direction() {
+                Ok((dir, _)) => dir,
+                Err(_) => Direction::Unspecified,
+            };
             let (ty, ty_token) = self.parser.parse_type()?;
             let (name, name_token) = self.parser.parse_identifier()?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
                 action.parameters.push(ActionParameter {
+                    direction,
                     ty,
                     name,
                     ty_token,
@@ -1021,6 +1027,7 @@ impl<'a, 'b> ActionParser<'a, 'b> {
             self.parser.expect_token(lexer::Kind::Comma)?;
 
             action.parameters.push(ActionParameter {
+                direction,
                 ty,
                 name,
                 ty_token,
@@ -1420,17 +1427,23 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
     pub fn run(&mut self) -> Result<Box<Expression>, Error> {
         let token = self.parser.next_token()?;
         let lhs = match token.kind {
-            lexer::Kind::TrueLiteral => Expression::BoolLit(true),
-            lexer::Kind::FalseLiteral => Expression::BoolLit(false),
-            lexer::Kind::IntLiteral(value) => Expression::IntegerLit(value),
+            lexer::Kind::TrueLiteral => {
+                Expression::new(token.clone(), ExpressionKind::BoolLit(true))
+            }
+            lexer::Kind::FalseLiteral => {
+                Expression::new(token.clone(), ExpressionKind::BoolLit(false))
+            }
+            lexer::Kind::IntLiteral(value) => {
+                Expression::new(token.clone(), ExpressionKind::IntegerLit(value))
+            }
             lexer::Kind::BitLiteral(width, value) => {
-                Expression::BitLit(width, value)
+                Expression::new(token.clone(), ExpressionKind::BitLit(width, value))
             }
             lexer::Kind::SignedLiteral(width, value) => {
-                Expression::SignedLit(width, value)
+                Expression::new(token.clone(), ExpressionKind::SignedLit(width, value))
             }
             lexer::Kind::Identifier(_) => {
-                self.parser.backlog.push(token);
+                self.parser.backlog.push(token.clone());
                 let lval = self.parser.parse_lvalue()?;
 
                 // check for index
@@ -1439,23 +1452,29 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                     let mut xp = ExpressionParser::new(self.parser);
                     let xpr = xp.run()?;
                     // check for slice
-                    let token = self.parser.next_token()?;
-                    if token.kind == lexer::Kind::Colon {
+                    let slice_token = self.parser.next_token()?;
+                    if slice_token.kind == lexer::Kind::Colon {
                         let mut xp = ExpressionParser::new(self.parser);
                         let slice_xpr = xp.run()?;
                         self.parser.expect_token(lexer::Kind::SquareClose)?;
-                        Expression::Index(
-                            lval,
-                            Box::new(Expression::Slice(xpr, slice_xpr))
+                        Expression::new(
+                            token.clone(),
+                            ExpressionKind::Index(
+                                lval,
+                                Expression::new(
+                                    slice_token,
+                                    ExpressionKind::Slice(xpr, slice_xpr),
+                                )
+                            ),
                         )
                     } else {
-                        self.parser.backlog.push(token);
+                        self.parser.backlog.push(token.clone());
                         self.parser.expect_token(lexer::Kind::SquareClose)?;
-                        Expression::Index(lval, xpr)
+                        Expression::new(token, ExpressionKind::Index(lval, xpr))
                     }
                 } else {
-                    self.parser.backlog.push(token);
-                    Expression::Lvalue(lval)
+                    self.parser.backlog.push(token.clone());
+                    Expression::new(token, ExpressionKind::Lvalue(lval))
                 }
             }
             _ => {
@@ -1477,9 +1496,12 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 // recurse to rhs
                 let mut ep = ExpressionParser::new(self.parser);
                 let rhs = ep.run()?;
-                Ok(Box::new(Expression::Binary(Box::new(lhs), op, rhs)))
+                Ok(Expression::new(
+                    token.clone(),
+                    ExpressionKind::Binary(lhs, op, rhs)
+                ))
             }
-            None => Ok(Box::new(lhs)),
+            None => Ok(lhs),
         }
     }
 }

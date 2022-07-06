@@ -1,5 +1,5 @@
 use p4::ast::{
-    BinOp, Expression, Lvalue,
+    BinOp, Expression, ExpressionKind, Lvalue,
 };
 use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
@@ -9,35 +9,35 @@ pub(crate) struct ExpressionGenerator { }
 impl ExpressionGenerator {
 
     pub(crate) fn generate_expression(xpr: &Expression) -> TokenStream {
-        match xpr {
-            Expression::BoolLit(v) => {
+        match &xpr.kind {
+            ExpressionKind::BoolLit(v) => {
                 quote!{ #v }
             }
-            Expression::IntegerLit(v) => {
+            ExpressionKind::IntegerLit(v) => {
                 quote!{ #v.into() }
             }
-            Expression::BitLit(width, v) => {
+            ExpressionKind::BitLit(width, v) => {
                 Self::generate_bit_literal(*width, *v)
             }
-            Expression::SignedLit(_width, _v) => {
+            ExpressionKind::SignedLit(_width, _v) => {
                 todo!("generate expression signed lit");
             }
-            Expression::Lvalue(v) => {
+            ExpressionKind::Lvalue(v) => {
                 Self::generate_lvalue(v)
             }
-            Expression::Binary(lhs, op, rhs) => {
+            ExpressionKind::Binary(lhs, op, rhs) => {
                 let mut ts = TokenStream::new();
                 ts.extend(Self::generate_expression(lhs.as_ref()));
                 ts.extend(Self::generate_binop(*op));
                 ts.extend(Self::generate_expression(rhs.as_ref()));
                 ts
             }
-            Expression::Index(lval, xpr) => {
+            ExpressionKind::Index(lval, xpr) => {
                 let mut ts = Self::generate_lvalue(lval);
                 ts.extend(Self::generate_expression(xpr.as_ref()));
                 ts
             }
-            Expression::Slice(begin, end) => {
+            ExpressionKind::Slice(begin, end) => {
                 let lhs = Self::generate_expression(begin.as_ref());
                 let rhs = Self::generate_expression(end.as_ref());
                 quote!{

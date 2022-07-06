@@ -4,7 +4,8 @@ use crate::{
     type_lifetime,
 };
 use p4::ast::{
-    AST, Parser, State, Direction, Statement, Expression, Transition
+    AST, Parser, State, Direction, Statement, ExpressionKind,
+    Transition
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -92,8 +93,8 @@ impl<'a> ParserGenerator<'a> {
 
                     let mut args = Vec::new();
                     for a in &call.args {
-                        match a.as_ref() {
-                            Expression::Lvalue(lvarg) => {
+                        match &a.kind {
+                            ExpressionKind::Lvalue(lvarg) => {
                                 let parts: Vec<&str> =
                                     lvarg.name.split(".").collect();
                                 let root = parts[0];

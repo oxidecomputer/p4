@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use crate::lexer::Token;
 use crate::ast::{
-    AST, DeclarationInfo, Expression, Lvalue, NameInfo, Parser, Statement,
-    StatementBlock, Type
+    AST, DeclarationInfo, Expression, ExpressionKind, Lvalue,
+    NameInfo, Parser, Statement, StatementBlock, Type
 };
+use crate::hlir::HlirGenerator;
 
 // TODO Check List
 // This is a running list of things to check
@@ -51,11 +52,14 @@ impl Diagnostics {
 }
 
 pub fn all(ast: &AST) -> Diagnostics {
-    let mut diags = Vec::new();
+    let mut diags = Diagnostics::new();
     for parser in &ast.parsers {
-        diags.extend(ParserChecker::check(parser, ast).0);
+        diags.extend(&ParserChecker::check(parser, ast));
     }
-    Diagnostics(diags)
+    let mut hg = HlirGenerator::new(ast);
+    hg.run();
+    diags.extend(&hg.diags);
+    diags
 }
 
 pub struct ParserChecker {}
@@ -241,21 +245,21 @@ fn check_expression_lvalues(
     names: &HashMap::<String, NameInfo>,
 ) -> Diagnostics {
 
-    match xpr {
-        Expression::Lvalue(lval) => check_lvalue(lval, ast, names, None),
-        Expression::Binary(lhs, _, rhs) => {
+    match &xpr.kind {
+        ExpressionKind::Lvalue(lval) => check_lvalue(lval, ast, names, None),
+        ExpressionKind::Binary(lhs, _, rhs) => {
             let mut diags = Diagnostics::new();
             diags.extend(&check_expression_lvalues(lhs.as_ref(), ast, names));
             diags.extend(&check_expression_lvalues(rhs.as_ref(), ast, names));
             diags
         }
-        Expression::Index(lval, xpr) => {
+        ExpressionKind::Index(lval, xpr) => {
             let mut diags = Diagnostics::new();
             diags.extend(&check_lvalue(lval, ast, names, None));
             diags.extend(&check_expression_lvalues(xpr.as_ref(), ast, names));
             diags
         }
-        Expression::Slice(lhs, rhs) => {
+        ExpressionKind::Slice(lhs, rhs) => {
             let mut diags = Diagnostics::new();
             diags.extend(&check_expression_lvalues(lhs.as_ref(), ast, names));
             diags.extend(&check_expression_lvalues(rhs.as_ref(), ast, names));
@@ -438,3 +442,134 @@ fn check_lvalue(
     };
     diags
 }
+
+pub struct ExpressionTypeChecker {
+    //ast: &'a mut AST,
+    //ast: RefCell::<AST>,
+}
+
+impl ExpressionTypeChecker {
+    pub fn run(&self) -> (HashMap::<Expression, Type>, Diagnostics) {
+
+        // These iterations may seem a bit odd. The reason I'm using numeric
+        // indices here is that I cannot borrow a mutable node of the AST and
+        // the AST itself at the same time, and then pass them separately into a
+        // handler function. So instead I just pass along the mutable AST
+        // together with the index of the thing I'm going to mutate within the
+        // AST. Then in the handler function, a mutable reference to the node of
+        // interest is acquired based on the index.
+        /*
+        let mut diags = Diagnostics::new();
+        for i in 0..self.ast.constants.len() {
+            diags.extend(&self.check_constant(i));
+        }
+        for i in 0..self.ast.controls.len() {
+            diags.extend(&self.check_control(i));
+        }
+        for i in 0..self.ast.parsers.len() {
+            diags.extend(&self.check_parser(i));
+        }
+        diags
+        */
+
+        todo!();
+
+    }
+
+    pub fn check_constant(&self, _index: usize) -> Diagnostics {
+        todo!("global constant expression type check");
+    }
+
+    pub fn check_control(&self, _index: usize) -> Diagnostics {
+        /*
+        let c = &mut self.ast.controls[index];
+        let mut diags = Diagnostics::new();
+        let names = c.names();
+        for a in &mut c.actions {
+            diags.extend(
+                &self.check_statement_block(&mut a.statement_block, &names)
+            )
+        }
+        diags
+        */
+        todo!();
+    }
+
+    pub fn check_statement_block(
+        &self,
+        _sb: &mut StatementBlock,
+        _names: &HashMap::<String, NameInfo>,
+    ) -> Diagnostics {
+        todo!();
+
+        /*
+        let mut diags = Diagnostics::new();
+        for stmt in &mut sb.statements {
+            match stmt {
+                Statement::Empty => {}
+                Statement::Assignment(_, xpr) => { 
+                    diags.extend(&self.check_expression(xpr, names));
+                    todo!() 
+                }
+                Statement::Call(c) => { todo!() }
+                Statement::If(ifb) => { todo!() }
+                Statement::Variable(v) => { todo!() }
+                Statement::Constant(c) => { todo!() }
+            }
+        }
+        diags
+        */
+
+    }
+
+    pub fn check_expression(
+        &self,
+        _xpr: &mut Expression,
+        _names: &HashMap::<String, NameInfo>,
+    ) -> Diagnostics {
+
+        /*
+        let mut diags = Diagnostics::new();
+        match &mut xpr.kind {
+            ExpressionKind::BoolLit(_) => {
+                xpr.ty = Some(Type::Bool)
+            }
+            //TODO P4 spec section 8.9.1/8.9.2
+            ExpressionKind::IntegerLit(_) => {
+                xpr.ty = Some(Type::Int(128))
+            }
+            ExpressionKind::BitLit(width, _) => {
+                xpr.ty = Some(Type::Bit(*width as usize))
+            }
+            ExpressionKind::SignedLit(width, _) => {
+                xpr.ty = Some(Type::Int(*width as usize))
+            }
+            ExpressionKind::Lvalue(lval) => {
+                //let ty = lvalue_type(lval, ast, names)
+                todo!();
+            }
+            ExpressionKind::Binary(lhs, _, rhs) => {
+                todo!();
+            }
+            ExpressionKind::Index(lval, xpr) => {
+                todo!();
+            }
+            ExpressionKind::Slice(begin, end) => {
+                todo!();
+            }
+
+        }
+        diags
+        */
+        todo!();
+
+    }
+
+
+    pub fn check_parser(&self, _index: usize) -> Diagnostics {
+        todo!("parser expression type check");
+    }
+}
+
+
+

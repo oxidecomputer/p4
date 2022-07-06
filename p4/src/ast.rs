@@ -1,5 +1,7 @@
 use std::fmt;
 use std::collections::HashMap;
+use std::cmp::{Eq, PartialEq};
+use std::hash::{Hash, Hasher};
 
 use crate::lexer::Token;
 
@@ -131,7 +133,7 @@ impl PackageParameter {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Bool,
     Error,
@@ -179,7 +181,33 @@ pub struct Variable {
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression {
+pub struct Expression {
+    pub token: Token,
+    pub kind: ExpressionKind,
+}
+
+impl Expression {
+    pub fn new(token: Token, kind: ExpressionKind) -> Box<Self> {
+        Box::new(Self { token, kind })
+    }
+}
+
+impl Hash for Expression {
+    fn hash<H: Hasher> (&self, state: &mut H) {
+        self.token.hash(state);
+    }
+}
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
+}
+
+impl Eq for Expression { }
+
+#[derive(Debug, Clone)]
+pub enum ExpressionKind {
     BoolLit(bool),
     IntegerLit(i128),
     BitLit(u16, u128),
@@ -197,6 +225,17 @@ pub enum BinOp {
     Geq,
     Eq,
     Mask,
+}
+
+impl BinOp {
+    pub fn english_verb(&self) -> &str {
+        match self {
+            BinOp::Add => "add",
+            BinOp::Subtract => "subtract",
+            BinOp::Geq | BinOp::Eq => "compare",
+            BinOp::Mask => "mask",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -417,10 +456,22 @@ impl Action {
             statement_block: StatementBlock::default(),
         }
     }
+
+    pub fn names(&self) -> HashMap::<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.parameters {
+            names.insert(p.name.clone(), NameInfo{
+                ty: p.ty.clone(),
+                decl: DeclarationInfo::Parameter(p.direction),
+            });
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ActionParameter {
+    pub direction: Direction,
     pub ty: Type,
     pub name: String,
 
