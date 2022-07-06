@@ -226,8 +226,8 @@ impl<'a> ControlGenerator<'a> {
             for (i, k) in entry.keyset.iter().enumerate() {
                 match &k.value {
                     KeySetElementValue::Expression(e) => {
-                        let xpr =
-                            ExpressionGenerator::generate_expression(e.as_ref());
+                        let eg = ExpressionGenerator::new(self.hlir);
+                        let xpr = eg.generate_expression(e.as_ref());
                         let ks = match table.key[i].1 {
                             MatchKind::Exact => {
                                 let k = format_ident!("{}", "Exact");

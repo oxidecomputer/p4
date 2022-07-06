@@ -19,6 +19,7 @@ impl<'a> StatementGenerator<'a> {
     pub fn new(hlir: &'a Hlir) -> Self {
         Self{ hlir }
     }
+
     pub(crate) fn generate_block(
         &self,
         sb: &StatementBlock,
@@ -39,8 +40,9 @@ impl<'a> StatementGenerator<'a> {
         match stmt {
             Statement::Empty => { TokenStream::new() }
             Statement::Assignment(lval, xpr) => {
-                let lhs = ExpressionGenerator::generate_lvalue(lval);
-                let rhs = ExpressionGenerator::generate_expression(xpr.as_ref());
+                let eg = ExpressionGenerator::new(self.hlir);
+                let lhs = eg.generate_lvalue(lval);
+                let rhs = eg.generate_expression(xpr.as_ref());
                 if is_rust_reference(&lval, names) {
                     quote!{ *#lhs = #rhs; }
                 } else {
@@ -48,24 +50,23 @@ impl<'a> StatementGenerator<'a> {
                 }
             }
             Statement::Call(c) => {
-                let lval = ExpressionGenerator::generate_lvalue(&c.lval);
+                let eg = ExpressionGenerator::new(self.hlir);
+                let lval = eg.generate_lvalue(&c.lval);
                 let args: Vec::<TokenStream> = c.args
                     .iter()
-                    .map(|xpr| ExpressionGenerator::generate_expression(xpr.as_ref()))
+                    .map(|xpr| eg.generate_expression(xpr.as_ref()))
                     .collect();
                 quote!{ #lval(#(#args),*); }
             }
             Statement::If(ifb) => {
-                let predicate = 
-                    ExpressionGenerator::generate_expression(ifb.predicate.as_ref());
+                let eg = ExpressionGenerator::new(self.hlir);
+                let predicate = eg.generate_expression(ifb.predicate.as_ref());
                 let block = self.generate_block(&ifb.block, names);
                 let mut ts = quote! {
                     if #predicate { #block }
                 };
                 for ei in &ifb.else_ifs {
-                    let predicate = ExpressionGenerator::generate_expression(
-                        ei.predicate.as_ref()
-                    );
+                    let predicate = eg.generate_expression(ei.predicate.as_ref());
                     let block = self.generate_block(&ei.block, names);
                     ts.extend(quote!{else if #predicate { #block }})
                 }
@@ -80,7 +81,8 @@ impl<'a> StatementGenerator<'a> {
                 let ty = rust_type(&v.ty, false, 0);
                 let initializer = match &v.initializer {
                     Some(xpr) =>  {
-                        let ini = ExpressionGenerator::generate_expression(xpr.as_ref());
+                        let eg = ExpressionGenerator::new(self.hlir);
+                        let ini = eg.generate_expression(xpr.as_ref());
                         let ini_ty = self
                             .hlir
                             .expression_types
@@ -106,9 +108,8 @@ impl<'a> StatementGenerator<'a> {
             Statement::Constant(c) => {
                 let name = format_ident!("{}", c.name);
                 let ty = rust_type(&c.ty, false, 0);
-                let initializer = ExpressionGenerator::generate_expression(
-                    c.initializer.as_ref()
-                );
+                let eg = ExpressionGenerator::new(self.hlir);
+                let initializer = eg.generate_expression(c.initializer.as_ref());
                 quote!{
                     let #name: #ty = #initializer;
                 }

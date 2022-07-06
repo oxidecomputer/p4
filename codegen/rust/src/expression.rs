@@ -1,14 +1,20 @@
 use p4::ast::{
-    BinOp, Expression, ExpressionKind, Lvalue,
+    BinOp, DeclarationInfo, Expression, ExpressionKind, Lvalue,
 };
+use p4::hlir::Hlir;
 use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
 
-pub(crate) struct ExpressionGenerator { }
+pub(crate) struct ExpressionGenerator<'a> {
+    hlir: &'a Hlir,
+}
 
-impl ExpressionGenerator {
+impl<'a> ExpressionGenerator<'a> {
+    pub fn new(hlir: &'a Hlir) -> Self {
+        Self{ hlir }
+    }
 
-    pub(crate) fn generate_expression(xpr: &Expression) -> TokenStream {
+    pub(crate) fn generate_expression(&self, xpr: &Expression) -> TokenStream {
         match &xpr.kind {
             ExpressionKind::BoolLit(v) => {
                 quote!{ #v }
@@ -17,37 +23,47 @@ impl ExpressionGenerator {
                 quote!{ #v }
             }
             ExpressionKind::BitLit(width, v) => {
-                Self::generate_bit_literal(*width, *v)
+                self.generate_bit_literal(*width, *v)
             }
             ExpressionKind::SignedLit(_width, _v) => {
                 todo!("generate expression signed lit");
             }
             ExpressionKind::Lvalue(v) => {
-                Self::generate_lvalue(v)
+                self.generate_lvalue(v)
             }
             ExpressionKind::Binary(lhs, op, rhs) => {
                 let mut ts = TokenStream::new();
-                ts.extend(Self::generate_expression(lhs.as_ref()));
-                ts.extend(Self::generate_binop(*op));
-                ts.extend(Self::generate_expression(rhs.as_ref()));
+                ts.extend(self.generate_expression(lhs.as_ref()));
+                ts.extend(self.generate_binop(*op));
+                ts.extend(self.generate_expression(rhs.as_ref()));
                 ts
             }
             ExpressionKind::Index(lval, xpr) => {
-                let mut ts = Self::generate_lvalue(lval);
-                ts.extend(Self::generate_expression(xpr.as_ref()));
+                let mut ts = self.generate_lvalue(lval);
+                ts.extend(self.generate_expression(xpr.as_ref()));
                 ts
             }
             ExpressionKind::Slice(begin, end) => {
-                let lhs = Self::generate_expression(begin.as_ref());
-                let rhs = Self::generate_expression(end.as_ref());
+                /*
+                let lhs = self.generate_expression(begin.as_ref());
+                let rhs = self.generate_expression(end.as_ref());
+                */
+                let l = match &begin.kind {
+                    ExpressionKind::IntegerLit(v) => *v as usize,
+                    _ => panic!("slice ranges can only be integer literals"),
+                };
+                let r = match &end.kind {
+                    ExpressionKind::IntegerLit(v) => *v as usize,
+                    _ => panic!("slice ranges can only be integer literals"),
+                };
                 quote!{
-                    [#lhs..#rhs]
+                    [#l..#r]
                 }
             }
         }
     }
 
-    pub(crate) fn generate_bit_literal(width: u16, value: u128) -> TokenStream {
+    pub(crate) fn generate_bit_literal(&self, width: u16, value: u128) -> TokenStream {
         assert!(width <= 128);
 
         let width = width as usize;
@@ -83,7 +99,7 @@ impl ExpressionGenerator {
         }
     }
 
-    pub(crate) fn generate_binop(op: BinOp) -> TokenStream {
+    pub(crate) fn generate_binop(&self, op: BinOp) -> TokenStream {
         match op {
             BinOp::Add => quote! { + },
             BinOp::Subtract=> quote! { - },
@@ -93,7 +109,8 @@ impl ExpressionGenerator {
         }
     }
 
-    pub(crate) fn generate_lvalue(lval: &Lvalue) -> TokenStream {
+    pub(crate) fn generate_lvalue(&self, lval: &Lvalue) -> TokenStream {
+
         let lv: Vec<TokenStream> = lval
             .name
             .split(".")
@@ -101,6 +118,16 @@ impl ExpressionGenerator {
             .map(|x| quote! { #x })
             .collect();
 
-        return quote!{ #(#lv).* };
+        let lvalue = quote!{ #(#lv).* };
+
+        let decl_info = self.hlir.lvalue_decls.get(lval).expect(&format!(
+            "declaration info for {:#?}",
+            lval,
+        ));
+
+        match decl_info {
+            DeclarationInfo::HeaderMember => quote!{ #lvalue.as_ref().unwrap() },
+            _ => lvalue
+        }
     }
 }
