@@ -33,9 +33,9 @@ fn generate_rs(filename: String) -> Result<TokenStream, syn::Error> {
     let lxr = lexer::Lexer::new(lines.clone());
     let mut psr = parser::Parser::new(lxr);
     let ast = psr.run().unwrap();
-    let static_diags = check::all(&ast);
-    check(&lines, &static_diags);
-    let tokens = p4_rust::emit_tokens(&ast);
+    let (hlir, diags) = check::all(&ast);
+    check(&lines, &diags);
+    let tokens = p4_rust::emit_tokens(&ast, &hlir);
 
     Ok(tokens.into())
 }

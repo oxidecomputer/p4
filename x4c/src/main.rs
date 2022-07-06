@@ -19,6 +19,10 @@ struct Opts {
     #[clap(long)]
     show_pre: bool,
 
+    /// Show high-level intermediate representation info.
+    #[clap(long)]
+    show_hlir: bool,
+
     /// File to compile.
     filename: String,
 
@@ -65,8 +69,12 @@ fn main() -> Result<()> {
         println!("{:#?}", ast);
     }
 
-    let static_diags = check::all(&ast);
-    check(&lines, &static_diags)?;
+    let (hlir, diags) = check::all(&ast);
+    check(&lines, &diags)?;
+
+    if opts.show_hlir {
+        println!("{:#?}", hlir);
+    }
 
     if opts.check {
         return Ok(())
@@ -74,7 +82,7 @@ fn main() -> Result<()> {
 
     match opts.target {
         Target::Rust => {
-            p4_rust::emit(&ast, &opts.out)?;
+            p4_rust::emit(&ast, &hlir, &opts.out)?;
         }
         Target::RedHawk => {
             todo!("RedHawk code generator");

@@ -5,7 +5,7 @@ use crate::ast::{
     AST, DeclarationInfo, Expression, ExpressionKind, Lvalue,
     NameInfo, Parser, Statement, StatementBlock, Type
 };
-use crate::hlir::HlirGenerator;
+use crate::hlir::{Hlir, HlirGenerator};
 
 // TODO Check List
 // This is a running list of things to check
@@ -51,16 +51,15 @@ impl Diagnostics {
     }
 }
 
-pub fn all(ast: &AST) -> Diagnostics {
+pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     let mut diags = Diagnostics::new();
     for parser in &ast.parsers {
         diags.extend(&ParserChecker::check(parser, ast));
     }
     let mut hg = HlirGenerator::new(ast);
     hg.run();
-    println!("{:#?}", hg.hlir);
     diags.extend(&hg.diags);
-    diags
+    (hg.hlir, diags)
 }
 
 pub struct ParserChecker {}

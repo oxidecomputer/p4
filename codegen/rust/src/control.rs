@@ -11,6 +11,7 @@ use p4::ast::{
     Action, AST, Call, Control, ControlParameter, Direction, ExpressionKind,
     KeySetElementValue, MatchKind, Statement, Table, Type
 };
+use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -18,11 +19,16 @@ use quote::{format_ident, quote};
 pub(crate) struct ControlGenerator<'a> {
     ast: &'a AST,
     ctx: &'a mut Context,
+    hlir: &'a Hlir,
 }
 
 impl<'a> ControlGenerator<'a> {
-    pub(crate) fn new(ast: &'a AST, ctx: &'a mut Context) -> Self {
-        Self{ ast, ctx }
+    pub(crate) fn new(
+        ast: &'a AST,
+        hlir: &'a Hlir, 
+        ctx: &'a mut Context
+    ) -> Self {
+        Self{ ast, hlir, ctx }
     }
 
     pub(crate) fn generate(&mut self) {
@@ -155,10 +161,8 @@ impl<'a> ControlGenerator<'a> {
         let body = self.generate_control_action_body(control, action);
         */
         let mut names = control.names();
-        let body = StatementGenerator::generate_block(
-            &action.statement_block,
-            &mut names,
-        );
+        let sg = StatementGenerator::new(self.hlir);
+        let body = sg.generate_block(&action.statement_block, &mut names);
 
         self.ctx.functions.insert(
             name.to_string(),
@@ -429,10 +433,8 @@ impl<'a> ControlGenerator<'a> {
             }
             _ => {
                 let mut names = control.names();
-                tokens.extend(StatementGenerator::generate_statement(
-                    stmt,
-                    &mut names,
-                ));
+                let sg = StatementGenerator::new(self.hlir);
+                tokens.extend(sg.generate_statement(stmt, &mut names));
             }
         }
     }

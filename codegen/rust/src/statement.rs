@@ -7,24 +7,32 @@ use crate::{
 use p4::ast::{
     DeclarationInfo, Expression, NameInfo, Statement, StatementBlock, Type
 };
+use p4::hlir::Hlir;
 use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
 
-pub(crate) struct StatementGenerator { }
+pub(crate) struct StatementGenerator<'a> { 
+    hlir: &'a Hlir,
+}
 
-impl StatementGenerator {
+impl<'a> StatementGenerator<'a> {
+    pub fn new(hlir: &'a Hlir) -> Self {
+        Self{ hlir }
+    }
     pub(crate) fn generate_block(
+        &self,
         sb: &StatementBlock,
         names: &mut HashMap::<String, NameInfo>,
     ) -> TokenStream {
         let mut ts = TokenStream::new();
         for stmt in &sb.statements {
-            ts.extend(Self::generate_statement(stmt, names));
+            ts.extend(self.generate_statement(stmt, names));
         }
         ts
     }
 
     pub(crate) fn generate_statement(
+        &self,
         stmt: &Statement,
         names: &mut HashMap::<String, NameInfo>,
     ) -> TokenStream {
@@ -50,7 +58,7 @@ impl StatementGenerator {
             Statement::If(ifb) => {
                 let predicate = 
                     ExpressionGenerator::generate_expression(ifb.predicate.as_ref());
-                let block = Self::generate_block(&ifb.block, names);
+                let block = self.generate_block(&ifb.block, names);
                 let mut ts = quote! {
                     if #predicate { #block }
                 };
@@ -58,11 +66,11 @@ impl StatementGenerator {
                     let predicate = ExpressionGenerator::generate_expression(
                         ei.predicate.as_ref()
                     );
-                    let block = Self::generate_block(&ei.block, names);
+                    let block = self.generate_block(&ei.block, names);
                     ts.extend(quote!{else if #predicate { #block }})
                 }
                 if let Some(eb) = &ifb.else_block {
-                    let block = Self::generate_block(&eb, names);
+                    let block = self.generate_block(&eb, names);
                     ts.extend(quote!{else { #block }})
                 }
                 ts
@@ -72,7 +80,18 @@ impl StatementGenerator {
                 let ty = rust_type(&v.ty, false, 0);
                 let initializer = match &v.initializer {
                     Some(xpr) =>  {
-                        ExpressionGenerator::generate_expression(xpr.as_ref())
+                        let ini = ExpressionGenerator::generate_expression(xpr.as_ref());
+                        let ini_ty = self
+                            .hlir
+                            .expression_types
+                            .get(xpr)
+                            .expect(&format!("type for expression {:#?}", xpr));
+                        if ini_ty != &v.ty {
+                            let converter = self.converter(&ini_ty, &v.ty);
+                            quote!{ #converter(#ini) }
+                        } else {
+                            ini
+                        }
                     },
                     None => quote!{ #ty::default() },
                 };
@@ -94,6 +113,19 @@ impl StatementGenerator {
                     let #name: #ty = #initializer;
                 }
             }
+        }
+    }
+
+    fn converter(
+        &self,
+        from: &Type,
+        to: &Type,
+    ) -> TokenStream {
+        match (from, to) {
+            (Type::Int(_), Type::Bit(_)) => {
+                quote!{ p4rs::int_to_bitvec }
+            }
+            _ => todo!("type converter for {} to {}", from, to),
         }
     }
 

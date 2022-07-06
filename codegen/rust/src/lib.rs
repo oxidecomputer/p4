@@ -9,8 +9,8 @@ use p4::ast::{
     AST, ControlParameter, DeclarationInfo, Direction, Expression,
     ExpressionKind, Lvalue, NameInfo, Parser, Type
 };
-
 use p4::util::resolve_lvalue;
+use p4::hlir::Hlir;
 
 use header::HeaderGenerator;
 use p4struct::StructGenerator;
@@ -34,8 +34,8 @@ struct Context {
     functions: HashMap<String, TokenStream>,
 }
 
-pub fn emit(ast: &AST, filename: &str) -> io::Result<()> {
-    let tokens = emit_tokens(ast);
+pub fn emit(ast: &AST, hlir: &Hlir, filename: &str) -> io::Result<()> {
+    let tokens = emit_tokens(ast, hlir);
 
     //
     // format the code and write it out to a Rust source file
@@ -69,7 +69,7 @@ fn write_to_tempfile(tokens: &TokenStream) -> io::Result<()> {
     Ok(())
 }
 
-pub fn emit_tokens(ast: &AST) -> TokenStream {
+pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     //
     // initialize a context to track state while we generate code
     //
@@ -89,7 +89,7 @@ pub fn emit_tokens(ast: &AST) -> TokenStream {
     let mut pg = ParserGenerator::new(ast, &mut ctx);
     pg.generate();
 
-    let mut cg = ControlGenerator::new(ast, &mut ctx);
+    let mut cg = ControlGenerator::new(ast, hlir, &mut ctx);
     cg.generate();
 
 
@@ -128,10 +128,6 @@ fn get_parser_arg<'a>(
     }
     None
 }
-
-
-
-
 
 /// Return the rust type for a given P4 type. To support zero copy pipelines,
 /// a P4 type such as `bit<N>` may be one of two types. If it's in a header,

@@ -14,7 +14,7 @@ impl ExpressionGenerator {
                 quote!{ #v }
             }
             ExpressionKind::IntegerLit(v) => {
-                quote!{ #v.into() }
+                quote!{ #v }
             }
             ExpressionKind::BitLit(width, v) => {
                 Self::generate_bit_literal(*width, *v)

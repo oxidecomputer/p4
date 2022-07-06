@@ -243,3 +243,9 @@ pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
 
 #[repr(C, align(16))]
 pub struct AlignedU128(pub u128);
+
+pub fn int_to_bitvec(x: i128) -> BitVec::<u8, Lsb0> {
+    let mut bv = BitVec::<u8, Lsb0>::new();
+    bv.store(x);
+    bv
+}
