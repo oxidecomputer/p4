@@ -27,7 +27,16 @@ SoftNPU(
 
 struct headers_t {
     ethernet_t ethernet;
+    sidecar_t sidecar;
     ipv6_t ipv6;
+}
+
+header sidecar_t {
+    bit<8> sc_code;
+    bit<8> sc_ingress;
+    bit<8> sc_egress;
+    bit<16> sc_ether_type;
+    bit<128> sc_payload;
 }
 
 header ethernet_t {
@@ -81,8 +90,11 @@ control local(
         }
         default_action = nonlocal;
         const entries = {
-            128w0xfe801000000000001de1defffe01701c: local();
-            128w0xfe801000000000001de1defffe01701d: local();
+            //fe80::1de1:deff:fe01:701c
+            128w0xfe800000000000001de1defffe01701c : local();
+
+            //fe80::1de1:deff:fe01:701d
+            128w0xfe800000000000001de1defffe01701d : local();
         }
     }
 
@@ -122,12 +134,12 @@ control router(
             // fd00:1000::/24
             128w0xfd001000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(1);
+            forward(2);
 
             // fd00:2000::/24
             128w0xfd002000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(2);
+            forward(3);
 
         }
     }
@@ -152,7 +164,16 @@ control ingress(
         local.apply(hdr, is_local);
 
         if (is_local) {
-            egress.port = 255;
+            //TODO hdr.sidecar.setValid();
+
+            //SC_FORWARD_TO_USERSPACE
+            hdr.sidecar.sc_code = 8w0x01;
+            hdr.sidecar.sc_ingress = ingress.port;
+            hdr.sidecar.sc_ether_type = 16w0x86dd;
+            hdr.sidecar.sc_payload = 128w0x1701d;
+
+            // scrimlet port
+            egress.port = 1;
         } else {
             router.apply(hdr, ingress, egress);
         }

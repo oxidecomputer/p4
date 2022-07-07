@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use crate::{
     expression::ExpressionGenerator,
     rust_type,
+    is_header_member,
     is_rust_reference,
     is_header,
 };
@@ -70,7 +71,13 @@ impl<'a> StatementGenerator<'a> {
                     .hlir
                     .lvalue_decls
                     .get(lval)
-                    .expect(&format!("codegen name not resolved for {:#?}", lval));
+                    .expect(&format!(
+                            "codegen name not resolved for {:#?}", lval));
+
+
+                if is_header_member(&lval, self.hlir) {
+                    return quote!{ #lhs.copy_from_bitslice(#rhs.as_bitslice()); }
+                }
 
                 let rhs = if rhs_ty != &name_info.ty {
                     let converter = self.converter(rhs_ty, &name_info.ty);

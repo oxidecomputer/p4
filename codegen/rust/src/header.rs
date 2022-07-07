@@ -44,6 +44,7 @@ impl<'a> HeaderGenerator<'a> {
         let mut generated = quote! {
             #[derive(Debug)]
             pub struct #name<'a> {
+                pub is_valid: bool,
                 #(#members),*
             }
         };
@@ -78,6 +79,7 @@ impl<'a> HeaderGenerator<'a> {
             impl<'a> Header<'a> for #name<'a> {
                 fn new() -> Self {
                     Self {
+                        is_valid: false,
                         #(#member_values),*
                     }
                 }

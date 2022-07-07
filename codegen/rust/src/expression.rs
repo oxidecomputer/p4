@@ -74,7 +74,7 @@ impl<'a> ExpressionGenerator<'a> {
         }
         else if width <= 16 {
             let v = value as u16;
-            return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
+            return quote! { #v.to_le_bytes().view_bits::<Lsb0>().to_bitvec() }
         }
         else if width <= 32 {
             let v = value as u32;
@@ -126,7 +126,7 @@ impl<'a> ExpressionGenerator<'a> {
         ));
 
         match name_info.decl {
-            DeclarationInfo::HeaderMember => quote!{ #lvalue.as_ref().unwrap() },
+            DeclarationInfo::HeaderMember => quote!{ #lvalue.as_mut().unwrap() },
             _ => lvalue
         }
     }

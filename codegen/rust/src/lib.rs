@@ -267,6 +267,26 @@ fn is_header(
     }
 }
 
+fn is_header_member(
+    lval: &Lvalue,
+    hlir: &Hlir,
+) -> bool {
+    if lval.degree() >= 1 {
+        let name_info = hlir
+            .lvalue_decls
+            .get(lval)
+            .expect(&format!("name for lval {:#?}", lval));
+
+        match name_info.decl {
+            DeclarationInfo::HeaderMember => true,
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
+// TODO define in terms of hlir rather than names
 fn is_rust_reference(
     lval: &Lvalue,
     names: &HashMap::<String, NameInfo>,
