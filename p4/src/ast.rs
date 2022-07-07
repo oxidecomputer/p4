@@ -752,7 +752,7 @@ pub struct ExternMethod {
     pub parameters: Vec<ControlParameter>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DeclarationInfo {
     Parameter(Direction),
     Method,

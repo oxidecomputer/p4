@@ -106,12 +106,15 @@ impl<'a> ControlGenerator<'a> {
                             let lifetime = type_lifetime(self.ast, &arg.ty);
                             match &arg.direction {
                                 Direction::Out | Direction::InOut => {
-                                    params
-                                        .push(quote! { #name: &mut #ty #lifetime });
+                                    params.push(quote! {
+                                        #name: &mut #ty #lifetime 
+                                    });
                                     types.push(quote! { &mut #ty #lifetime });
                                 }
                                 _ => {
-                                    params.push(quote! { #name: &#ty #lifetime });
+                                    params.push(quote! { 
+                                        #name: &#ty #lifetime 
+                                    });
                                     types.push(quote! { &#ty #lifetime });
                                 }
                             }
@@ -188,7 +191,7 @@ impl<'a> ControlGenerator<'a> {
         self.ctx.functions.insert(
             name.to_string(),
             quote! {
-                fn #name<'a>(#(#params),*) {
+                pub fn #name<'a>(#(#params),*) {
                     #body
                 }
             },

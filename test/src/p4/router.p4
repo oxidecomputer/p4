@@ -164,7 +164,7 @@ control ingress(
         local.apply(hdr, is_local);
 
         if (is_local) {
-            //TODO hdr.sidecar.setValid();
+            hdr.sidecar.setValid();
 
             //SC_FORWARD_TO_USERSPACE
             hdr.sidecar.sc_code = 8w0x01;

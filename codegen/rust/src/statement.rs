@@ -99,7 +99,7 @@ impl<'a> StatementGenerator<'a> {
                 match &self.context {
                     StatementContext::Control(control) => {
                         let mut ts = TokenStream::new();
-                        self.generate_control_apply_body_call(
+                        self.generate_control_body_call(
                             control,
                             c,
                             &mut ts,
@@ -186,7 +186,7 @@ impl<'a> StatementGenerator<'a> {
         }
     }
 
-    fn generate_control_apply_body_call(
+    fn generate_control_body_call(
         &self,
         control: &Control,
         c: &Call,
@@ -196,20 +196,50 @@ impl<'a> StatementGenerator<'a> {
         // get the lval reference to the thing being called
         //
         let parts: Vec<&str> = c.lval.name.split(".").collect();
-        if parts.len() != 2 || parts[1] != "apply" {
+        if parts.len() < 2 {
             panic!(
-                "codegen: only <tablename>.apply() calls are 
-             supported in apply blocks right now: {:#?}",
+                "codegen: bare calls not supported, \
+                only <ref>.apply() calls are: {:#?}",
              c
             );
         }
+        match c.lval.leaf() {
+            "apply" => { 
+                self.generate_control_apply_body_call(control, c, tokens);
+            }
+            "setValid" => {
+                self.generate_header_set_validity(c, tokens, true);
+            }
+            "setInvalid" => {
+                self.generate_header_set_validity(c, tokens, false);
+            }
+            "isValid" => {
+                self.generate_header_get_validity(c, tokens);
+            }
+            _ => {
+                panic!(
+                    "codegen: only <tablename>.apply() and \
+                    <header>.{{isValid, setValid, setInvalid}}() calls are \
+                    supported in apply blocks right now: {:#?}",
+                     c
+                );
+            }
+        }
 
+    }
+
+    fn generate_control_apply_body_call(
+        &self,
+        control: &Control,
+        c: &Call,
+        tokens: &mut TokenStream,
+    ) {
         let name_info = self
             .hlir
             .lvalue_decls
             .get(&c.lval.pop_right()).expect(&format!(
-                    "codegen: lval root for {:#?} not found in hlir",
-                    c.lval
+                "codegen: lval root for {:#?} not found in hlir",
+                c.lval
             ));
 
         let control_instance = match &name_info.ty {
@@ -221,10 +251,12 @@ impl<'a> StatementGenerator<'a> {
             t => panic!("call references non-user-defined type {:#?}", t),
         };
 
+        let root = c.lval.root();
+
         // This is a call to another control instance
         if control_instance.name != control.name {
 
-            let call = format_ident!("{}_apply", parts[0]);
+            let call = format_ident!("{}_apply", root);
             let eg = ExpressionGenerator::new(self.hlir);
             let mut args = Vec::new();
             for (i, a) in c.args.iter().enumerate() {
@@ -259,7 +291,7 @@ impl<'a> StatementGenerator<'a> {
                     }
                 }
             }
-            let tbl_arg = format_ident!("{}", parts[0]);
+            let tbl_arg = format_ident!("{}", root);
             args.push(quote!{#tbl_arg});
 
             tokens.extend(quote!{
@@ -270,12 +302,12 @@ impl<'a> StatementGenerator<'a> {
 
         }
 
-        let table = match control_instance.get_table(parts[0]) {
+        let table = match control_instance.get_table(root) {
             Some(table) => table,
             None => {
                 panic!(
                     "codegen: table {} not found in control {} decl: {:#?}",
-                    parts[0],
+                    root,
                     control.name,
                     name_info,
                 );
@@ -339,6 +371,73 @@ impl<'a> StatementGenerator<'a> {
                 (matches[0].action)(#(#action_args),*)
             }
         });
+    }
+
+    fn generate_header_set_validity(
+        &self,
+        c: &Call,
+        tokens: &mut TokenStream,
+        valid: bool,
+    ) {
+
+        /* TODO XXX do this check in the checker
+        let name_info = self
+            .hlir
+            .lvalue_decls
+            .get(&c.lval.pop_right()).expect(&format!(
+                "codegen: lval root for {:#?} not found in hlir",
+                c.lval
+            ));
+
+        let header = match &name_info.ty {
+            Type::UserDefined(name) => {
+                self.ast
+                    .get_header(name)
+                    .expect(&format!(
+                        "codegen: setValid called on type {} \
+                        whic is not a header: {:#?}",
+                        name,
+                        c
+                    ))
+            }
+            _ => {
+                panic!(
+                    "codegen: setValid called on non-header: {:#?} : {:#?}", 
+                    c.lval,
+                    name_info,
+                );
+            }
+        };
+        */
+
+        let lhs: Vec<TokenStream> = c.lval.pop_right()
+            .name
+            .split(".")
+            .map(|x| format_ident!("{}", x))
+            .map(|x| quote! { #x })
+            .collect();
+        tokens.extend(quote! {
+            #(#lhs).*.is_valid = #valid;
+        });
+
+    }
+
+    fn generate_header_get_validity(
+        &self,
+        c: &Call,
+        tokens: &mut TokenStream,
+    ) {
+
+        let lhs: Vec<TokenStream> = c.lval.pop_right()
+            .name
+            .split(".")
+            .map(|x| format_ident!("{}", x))
+            .map(|x| quote! { #x })
+            .collect();
+        tokens.extend(quote! {
+            #(#lhs).*.is_valid
+        });
+
     }
 
     fn converter(

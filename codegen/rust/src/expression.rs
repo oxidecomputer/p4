@@ -104,7 +104,7 @@ impl<'a> ExpressionGenerator<'a> {
         }
         else if width <= 128 {
             let v = value as u128;
-            return quote! { 
+            return quote! {
                 {
                     let mut x = bitvec![mut u8, Lsb0; 0; 128];
                     x.store(#v);
