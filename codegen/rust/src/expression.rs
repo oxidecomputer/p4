@@ -74,15 +74,33 @@ impl<'a> ExpressionGenerator<'a> {
         }
         else if width <= 16 {
             let v = value as u16;
-            return quote! { #v.to_le_bytes().view_bits::<Lsb0>().to_bitvec() }
+            return quote! { 
+                {
+                    let mut x = bitvec![mut u8, Lsb0; 0; 16];
+                    x.store(#v);
+                    x
+                }
+            }
         }
         else if width <= 32 {
             let v = value as u32;
-            return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
+            return quote! { 
+                {
+                    let mut x = bitvec![mut u8, Lsb0; 0; 32];
+                    x.store(#v);
+                    x
+                }
+            }
         }
         else if width <= 64 {
             let v = value as u64;
-            return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
+            return quote! { 
+                {
+                    let mut x = bitvec![mut u8, Lsb0; 0; 64];
+                    x.store(#v);
+                    x
+                }
+            }
         }
         else if width <= 128 {
             let v = value as u128;
