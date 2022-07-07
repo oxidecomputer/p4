@@ -155,15 +155,16 @@ control ingress(
     inout IngressMetadata ingress,
     inout EgressMetadata egress,
 ) {
-
     local() local;
     router() router;
 
     apply {
-        bool is_local = false;
-        local.apply(hdr, is_local);
+        bool local_dst = false;
+        local.apply(hdr, local_dst);
 
-        if (is_local) {
+        // if the packet has a local destination, create the sidecar header and
+        // send it to the scrimlet
+        if (local_dst) {
             hdr.sidecar.setValid();
 
             //SC_FORWARD_TO_USERSPACE
@@ -175,9 +176,12 @@ control ingress(
             // scrimlet port
             egress.port = 1;
         } else {
+            // if the packet came from the scrimlet invalidate the header
+            // sidecar header so.
+            if (ingress.port == 8w1) {
+                hdr.sidecar.setInvalid();
+            }
             router.apply(hdr, ingress, egress);
         }
     }
-
-
 }
