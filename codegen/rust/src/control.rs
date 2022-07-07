@@ -3,12 +3,11 @@ use crate::{
     rust_type,
     type_lifetime,
     try_extract_prefix_len,
-    is_header,
-    statement::StatementGenerator,
+    statement::{StatementGenerator, StatementContext},
     expression::ExpressionGenerator,
 };
 use p4::ast::{
-    Action, AST, Call, Control, ControlParameter, Direction, ExpressionKind,
+    Action, AST, Control, ControlParameter, Direction, ExpressionKind,
     KeySetElementValue, MatchKind, Statement, Table, Type
 };
 use p4::hlir::Hlir;
@@ -38,6 +37,8 @@ impl<'a> ControlGenerator<'a> {
             for action in &control.actions {
                 self.generate_control_action(control, action);
             }
+
+            // local tables
             for table in &control.tables {
                 let (type_tokens, table_tokens) =
                     self.generate_control_table(control, table, &param_types);
@@ -54,6 +55,25 @@ impl<'a> ControlGenerator<'a> {
                 params.push(quote! {
                     #name: &#type_tokens
                 });
+            }
+
+            // control instances as variables
+            for v in &control.variables {
+                if let Type::UserDefined(name) = &v.ty {
+                    if let Some(control_inst) = self.ast.get_control(name) {
+                        let (_, param_types) = self.control_parameters(control_inst);
+                        for table in & control_inst.tables {
+                            let n = table.key.len() as usize;
+                            let table_type = quote! {
+                                p4rs::table::Table::<#n, fn(#(#param_types),*)> 
+                            };
+                            let name = format_ident!("{}", v.name);
+                            params.push(quote! {
+                                #name: &#table_type
+                            });
+                        }
+                    }
+                }
             }
 
             let name = format_ident!("{}_apply", control.name);
@@ -157,11 +177,12 @@ impl<'a> ControlGenerator<'a> {
             }
         }
 
-        /*
-        let body = self.generate_control_action_body(control, action);
-        */
         let mut names = control.names();
-        let sg = StatementGenerator::new(self.hlir);
+        let sg = StatementGenerator::new(
+            self.ast, 
+            self.hlir,
+            StatementContext::Control(control),
+        );
         let body = sg.generate_block(&action.statement_block, &mut names);
 
         self.ctx.functions.insert(
@@ -327,116 +348,19 @@ impl<'a> ControlGenerator<'a> {
         (table_type, tokens)
     }
 
-    fn generate_control_apply_body_call(
-        &mut self,
-        control: &Control,
-        c: &Call,
-        tokens: &mut TokenStream,
-    ) {
-        // TODO only supporting tably apply calls for now
-
-        //
-        // get the referenced table
-        //
-        let parts: Vec<&str> = c.lval.name.split(".").collect();
-        if parts.len() != 2 || parts[1] != "apply" {
-            panic!(
-                "codegen: only <tablename>.apply() calls are 
-             supported in apply blocks right now: {:#?}",
-             c
-            );
-        }
-        let table = match control.get_table(parts[0]) {
-            Some(table) => table,
-            None => {
-                panic!(
-                    "codegen: table {} not found in control {}",
-                    parts[0],
-                    control.name,
-                );
-            }
-        };
-
-        //
-        // match an action based on the key material
-        //
-
-        // TODO only supporting direct matches right now and implicitly
-        // assuming all match kinds are direct
-        let table_name: Vec<TokenStream> = table
-            .name
-            .split(".")
-            .map(|x| format_ident!("{}", x))
-            .map(|x| quote! { #x })
-            .collect();
-
-        let mut action_args = Vec::new();
-        for p in &control.parameters {
-            let name = format_ident!("{}", p.name);
-            action_args.push(quote! { #name });
-        }
-
-        let mut selector_components = Vec::new();
-        for (lval, _match_kind) in &table.key {
-
-            let lvref: Vec<TokenStream> = lval
-                .name
-                .split(".")
-                .map(|x| format_ident!("{}", x))
-                .map(|x| quote! { #x })
-                .collect();
-
-            // determine if this lvalue references a header or a struct,
-            // if it's a header there's a bit of extra unsrapping we
-            // need to do to match the selector against the value.
-
-            let names = control.names();
-
-            if is_header(&lval.pop_right(), self.ast, &names) {
-                //TODO: to_bitvec is bad here, copying on data path
-                selector_components.push(quote!{
-                    p4rs::bitvec_to_biguint(
-                        &#(#lvref).*.as_ref().unwrap().to_bitvec()
-                    )
-                });
-            } else {
-                selector_components.push(quote!{
-                    p4rs::bitvec_to_biguint(&#(#lvref).*)
-                });
-            }
-
-        }
-        tokens.extend(quote! {
-            let matches = #(#table_name).*.match_selector(
-                &[#(#selector_components),*]
-            );
-            if matches.len() > 0 { 
-                (matches[0].action)(#(#action_args),*)
-            }
-        });
-    }
-
     fn generate_control_apply_stmt(
         &mut self,
         control: &Control,
         stmt: &Statement,
         tokens: &mut TokenStream,
     ) {
-        match stmt {
-            Statement::Call(c) => {
-                self.generate_control_apply_body_call(
-                    control,
-                    c,
-                    tokens
-                );
-                return;
-            }
-            _ => {
-                let mut names = control.names();
-                let sg = StatementGenerator::new(self.hlir);
-                tokens.extend(sg.generate_statement(stmt, &mut names));
-            }
-        }
+        let mut names = control.names();
+        let sg = StatementGenerator::new(
+            self.ast, 
+            self.hlir,
+            StatementContext::Control(control),
+        );
+        tokens.extend(sg.generate_statement(stmt, &mut names));
     }
 
     fn generate_control_apply_body(

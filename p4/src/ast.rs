@@ -68,6 +68,15 @@ impl AST {
         None
     }
 
+    pub fn get_control(&self, name: &str) -> Option<&Control> {
+        for c in &self.controls {
+            if c.name == name {
+                return Some(c)
+            }
+        }
+        None
+    }
+
     pub fn get_user_defined_type(&self, name: &str) -> Option<UserDefinedType> {
         if let Some(user_struct) = self.get_struct(name) {
             return Some(UserDefinedType::Struct(user_struct));
@@ -180,6 +189,7 @@ pub struct Variable {
     pub ty: Type,
     pub name: String,
     pub initializer: Option<Box<Expression>>,
+    pub parameters: Vec<ControlParameter>,
 }
 
 #[derive(Debug, Clone)]
@@ -307,6 +317,8 @@ pub struct StructMember {
 #[derive(Debug, Clone)]
 pub struct Control {
     pub name: String,
+    pub variables: Vec<Variable>,
+    pub constants: Vec<Constant>,
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
     pub actions: Vec<Action>,
@@ -318,6 +330,8 @@ impl Control {
     pub fn new(name: String) -> Self {
         Self {
             name,
+            variables: Vec::new(),
+            constants: Vec::new(),
             type_parameters: Vec::new(),
             parameters: Vec::new(),
             actions: Vec::new(),
@@ -373,7 +387,19 @@ impl Control {
         for t in &self.tables {
             names.insert(t.name.clone(), NameInfo{
                 ty: Type::Table,
-                decl: DeclarationInfo::Local,
+                decl: DeclarationInfo::ControlTable,
+            });
+        }
+        for v in &self.variables {
+            names.insert(v.name.clone(), NameInfo {
+                ty: v.ty.clone(),
+                decl: DeclarationInfo::ControlMember,
+            });
+        }
+        for c in &self.constants {
+            names.insert(c.name.clone(), NameInfo {
+                ty: c.ty.clone(),
+                decl: DeclarationInfo::ControlMember,
             });
         }
         names
@@ -733,6 +759,8 @@ pub enum DeclarationInfo {
     StructMember,
     HeaderMember,
     Local,
+    ControlTable,
+    ControlMember,
 }
 
 #[derive(Debug, Clone)]

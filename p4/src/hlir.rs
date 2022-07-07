@@ -19,7 +19,7 @@ use crate::util::resolve_lvalue;
 #[derive(Debug, Default)]
 pub struct Hlir {
     pub expression_types: HashMap::<Expression, Type>,
-    pub lvalue_decls: HashMap::<Lvalue, DeclarationInfo>,
+    pub lvalue_decls: HashMap::<Lvalue, NameInfo>,
 }
 
 
@@ -76,7 +76,8 @@ impl<'a> HlirGenerator<'a> {
                     self.expression(xpr, names);
                 }
                 Statement::Call(c) => { 
-                    self.lvalue(&c.lval, names);
+                    // pop the function name off the lval before resolving
+                    self.lvalue(&c.lval.pop_right(), names);
                     for xpr in &c.args {
                         self.expression(xpr.as_ref(), names);
                     }
@@ -140,7 +141,9 @@ impl<'a> HlirGenerator<'a> {
                 Some(ty)
             }
             ExpressionKind::Lvalue(lval) => {
-                self.lvalue(lval, names)
+                let ty = self.lvalue(lval, names)?;
+                self.hlir.expression_types.insert(xpr.clone(), ty.clone());
+                Some(ty)
             }
             ExpressionKind::Binary(lhs, op, rhs) => {
                 self.binary_expression(xpr, lhs, rhs, op, names)
@@ -350,7 +353,7 @@ impl<'a> HlirGenerator<'a> {
             Ok(name_info) => {
                 self.hlir.lvalue_decls.insert(
                     lval.clone(),
-                    name_info.decl,
+                    name_info.clone(),
                 );
                 Some(name_info.ty)
             }

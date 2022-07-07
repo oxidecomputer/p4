@@ -120,12 +120,12 @@ impl<'a> ExpressionGenerator<'a> {
 
         let lvalue = quote!{ #(#lv).* };
 
-        let decl_info = self.hlir.lvalue_decls.get(lval).expect(&format!(
+        let name_info = self.hlir.lvalue_decls.get(lval).expect(&format!(
             "declaration info for {:#?}",
             lval,
         ));
 
-        match decl_info {
+        match name_info.decl {
             DeclarationInfo::HeaderMember => quote!{ #lvalue.as_ref().unwrap() },
             _ => lvalue
         }

@@ -138,24 +138,25 @@ control router(
 
 }
 
-//control ingress(
-//    inout headers_t hdr,
-//    inout IngressMetadata ingress,
-//    inout EgressMetadata egress,
-//) {
-//
-//    Local() local;
-//    Router() router;
-//
-//    bool is_local = false;
-//
-//    local.apply(is_local);
-//
-//    if is_local {
-//        egress.port = 255;
-//    } else {
-//        router.apply();
-//    }
-//
-//
-//}
+control ingress(
+    inout headers_t hdr,
+    inout IngressMetadata ingress,
+    inout EgressMetadata egress,
+) {
+
+    local() local;
+    router() router;
+
+    apply {
+        bool is_local = false;
+        local.apply(hdr, is_local);
+
+        if (is_local) {
+            egress.port = 255;
+        } else {
+            router.apply(hdr, ingress, egress);
+        }
+    }
+
+
+}

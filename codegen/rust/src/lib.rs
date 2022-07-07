@@ -286,6 +286,8 @@ fn is_rust_reference(
             DeclarationInfo::Method => false,
             DeclarationInfo::StructMember => false,
             DeclarationInfo::HeaderMember => false,
+            DeclarationInfo::ControlTable => false,
+            DeclarationInfo::ControlMember => false,
         }
     } else {
         false

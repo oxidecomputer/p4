@@ -211,18 +211,40 @@ impl<'a> Parser<'a> {
 
     pub fn parse_variable(&mut self) -> Result<Variable, Error> {
         let (ty, _) = self.parse_type()?;
+        let token = self.next_token()?;
+
+        // check for constructor
+        let parameters = if token.kind == lexer::Kind::ParenOpen {
+            self.backlog.push(token.clone());
+            self.parse_parameters()?
+        } else {
+            self.backlog.push(token.clone());
+            Vec::new()
+        };
+
+
         let (name, _) = self.parse_identifier()?;
 
-        // check for initializer
         let token = self.next_token()?;
+        // check for initializer
         if token.kind == lexer::Kind::Equals {
             let initializer = self.parse_expression()?;
             self.expect_token(lexer::Kind::Semicolon)?;
-            Ok(Variable { ty, name, initializer: Some(initializer) })
+            Ok(Variable {
+                ty,
+                name,
+                initializer: Some(initializer),
+                parameters,
+            })
         } else {
             self.backlog.push(token);
             self.expect_token(lexer::Kind::Semicolon)?;
-            Ok(Variable { ty, name, initializer: None })
+            Ok(Variable {
+                ty,
+                name,
+                initializer: None,
+                parameters,
+            })
         }
     }
 
@@ -887,6 +909,10 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         let (name, _) = self.parser.parse_identifier()?;
         let mut control = Control::new(name);
 
+        //
+        // check for type parameters
+        //
+        
         let token = self.parser.next_token()?;
         match token.kind {
             lexer::Kind::AngleOpen => {
@@ -899,8 +925,16 @@ impl<'a, 'b> ControlParser<'a, 'b> {
             }
         }
 
+        //
+        // control parameters
+        //
+        
         control.parameters = self.parser.parse_parameters()?;
 
+        //
+        // check for declaration only (e.g. no body)
+        //
+        
         let token = self.parser.next_token()?;
         match token.kind {
             lexer::Kind::Semicolon => return Ok(control),
@@ -909,6 +943,10 @@ impl<'a, 'b> ControlParser<'a, 'b> {
             }
         }
 
+        //
+        // parse body of the control
+        //
+        
         self.parse_body(&mut control)?;
 
         Ok(control)
@@ -926,6 +964,15 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                 lexer::Kind::Action => self.parse_action(control)?,
                 lexer::Kind::Table => self.parse_table(control)?,
                 lexer::Kind::Apply => self.parse_apply(control)?,
+                lexer::Kind::Const => {
+                    let c = self.parser.parse_constant()?;
+                    control.constants.push(c);
+                }
+                lexer::Kind::Identifier(_) => {
+                    self.parser.backlog.push(token);
+                    let v = self.parser.parse_variable()?;
+                    control.variables.push(v);
+                }
                 _ => {
                     return Err(ParserError {
                         at: token.clone(),
