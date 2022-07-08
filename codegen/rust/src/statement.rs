@@ -178,7 +178,9 @@ impl<'a> StatementGenerator<'a> {
                 let name = format_ident!("{}", c.name);
                 let ty = rust_type(&c.ty, false, 0);
                 let eg = ExpressionGenerator::new(self.hlir);
-                let initializer = eg.generate_expression(c.initializer.as_ref());
+                let initializer = eg.generate_expression(
+                    c.initializer.as_ref()
+                );
                 quote!{
                     let #name: #ty = #initializer;
                 }
@@ -243,10 +245,13 @@ impl<'a> StatementGenerator<'a> {
             ));
 
         let control_instance = match &name_info.ty {
-            Type::UserDefined(name) => self.ast.get_control(name).expect(&format!(
-                "codegen: control {} not found in AST",
-                name,
-            )),
+            Type::UserDefined(name) => self
+                .ast
+                .get_control(name)
+                .expect(&format!(
+                    "codegen: control {} not found in AST",
+                    name,
+                )),
             Type::Table => control,
             t => panic!("call references non-user-defined type {:#?}", t),
         };
@@ -269,8 +274,8 @@ impl<'a> StatementGenerator<'a> {
                                     .hlir
                                     .lvalue_decls
                                     .get(lval).expect(&format!(
-                                            "codegen: lvalue resolve fail {:#?}",
-                                            lval
+                                        "codegen: lvalue resolve fail {:#?}",
+                                        lval
                                     ));
                                 match name_info.decl {
                                     DeclarationInfo::Parameter(_) => {

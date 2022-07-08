@@ -1,8 +1,11 @@
 
 //TODO abstract away generated code from here
 //use crate::hub::{ethernet_t, headers_t, EgressMetadata, IngressMetadata};
-use crate::router::{ipv6_t, ethernet_t, headers_t, EgressMetadata, IngressMetadata};
+//use crate::router::{ipv6_t, ethernet_t, headers_t, EgressMetadata, IngressMetadata};
 //use crate::router::{ipv6_t, ethernet_t, headers_t};
+use crate::disag_router::{
+    ipv6_t, ethernet_t, headers_t, sidecar_t, EgressMetadata, IngressMetadata
+};
 
 use p4rs::{bit, packet_in, Header};
 use std::collections::HashMap;
@@ -85,16 +88,26 @@ impl<const R: usize, const N: usize, const F: usize> Phy<R, N, F> {
 pub fn run<'a, const R: usize, const N: usize, const F: usize>(
     ingress: &[RingConsumer<R, N, F>],
     egress: &[RingProducer<R, N, F>],
-    tbl: p4rs::table::Table<1,
-        fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata)
+    local: &p4rs::table::Table<
+        1usize,
+        fn(&mut headers_t<'a>, &mut bool)
+    >,
+    router: &p4rs::table::Table<
+        1usize,
+        fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata),
     >,
     parse: fn(pkt: &mut packet_in<'a>, headers: &mut headers_t<'a>) -> bool,
     control: fn(
         hdr: &mut headers_t<'a>,
         ingress: &mut IngressMetadata,
         egress: &mut EgressMetadata,
-        tbl: &p4rs::table::Table<1,
-            fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata)
+        local: &p4rs::table::Table<
+            1usize,
+            fn(&mut headers_t<'a>, &mut bool)
+        >,
+        router: &p4rs::table::Table<
+            1usize,
+            fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata),
         >,
     ),
 ) {
@@ -138,6 +151,7 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                 // should not be here, need more abstraction.
                 let mut header = headers_t {
                     ethernet: ethernet_t::new(),
+                    sidecar: sidecar_t::new(),
                     ipv6: ipv6_t::new(),
                 };
 
@@ -164,11 +178,15 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                     &mut header,
                     &mut ingress_metadata,
                     &mut egress_metadata,
-                    &tbl,
+                    &local,
+                    &router,
                 );
 
                 // write to egress port
-                let port: usize = egress_metadata.port.as_raw_slice()[0] as usize;
+                let port: usize = egress_metadata
+                    .port
+                    .as_raw_slice()[0] as usize;
+
                 if port == 0 {
                     // indicates no table match
                     continue
