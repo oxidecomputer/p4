@@ -100,18 +100,10 @@ impl ParserChecker {
             // create a name context for each parser state to pick up any
             // variables that may get created within parser states to reference
             // locally.
-            let mut names = parser.names();
-            let mut state_names = names.clone();
-            for v in &state.variables {
-                state_names.insert(v.name.clone(), NameInfo{
-                    ty: v.ty.clone(),
-                    decl: DeclarationInfo::Local,
-                });
-            }
-            // TODO use a StatementBlock here?
-            for stmt in &state.statements {
-                diags.extend(&check_statement_lvalues(stmt, ast, &mut names));
-            }
+            let names = parser.names();
+            diags.extend(
+                &check_statement_block_lvalues(&state.statements, ast, &names)
+            );
         }
     }
 }
@@ -217,6 +209,9 @@ fn check_statement_lvalues(
                     &names,
                 ));
             }
+        }
+        Statement::Transition(_transition) => {
+            //TODO
         }
     }
     diags

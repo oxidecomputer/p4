@@ -86,7 +86,7 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     let mut sg = StructGenerator::new(ast, &mut ctx);
     sg.generate();
 
-    let mut pg = ParserGenerator::new(ast, &mut ctx);
+    let mut pg = ParserGenerator::new(ast, hlir, &mut ctx);
     pg.generate();
 
     let mut cg = ControlGenerator::new(ast, hlir, &mut ctx);

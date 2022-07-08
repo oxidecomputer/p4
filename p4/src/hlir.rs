@@ -22,7 +22,6 @@ pub struct Hlir {
     pub lvalue_decls: HashMap::<Lvalue, NameInfo>,
 }
 
-
 pub struct HlirGenerator<'a> { 
     ast: &'a AST,
     pub hlir: Hlir,
@@ -108,6 +107,9 @@ impl<'a> HlirGenerator<'a> {
                         decl: DeclarationInfo::Local,
                     });
                     self.expression(c.initializer.as_ref(), names);
+                }
+                Statement::Transition(_t) => {
+                    //TODO
                 }
             }
         }
@@ -408,7 +410,12 @@ impl<'a> HlirGenerator<'a> {
 
     }
 
-    fn parser(&mut self, _p: &Parser) {
+    fn parser(&mut self, p: &Parser) {
+        let names = p.names();
+        for s in &p.states {
+            let mut local_names = names.clone();
+            self.statement_block(&s.statements, &mut local_names);
+        }
         // TODO
     }
 }

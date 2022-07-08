@@ -475,6 +475,12 @@ pub struct StatementBlock {
     pub statements: Vec<Statement>,
 }
 
+impl StatementBlock {
+    fn new() -> Self {
+        Self { statements: Vec::new() }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Action {
     pub name: String,
@@ -590,6 +596,7 @@ pub enum Statement {
     If(IfBlock),
     Variable(Variable),
     Constant(Constant),
+    Transition(Transition),
 
     // TODO ...
 }
@@ -687,21 +694,14 @@ impl Ord for Lvalue {
 #[derive(Debug, Clone)]
 pub struct State {
     pub name: String,
-    //TODO the following should probably be a statement block
-    pub variables: Vec<Variable>,
-    pub constants: Vec<Constant>,
-    pub statements: Vec<Statement>,
-    pub transition: Option<Transition>,
+    pub statements: StatementBlock,
 }
 
 impl State {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            variables: Vec::new(),
-            constants: Vec::new(),
-            statements: Vec::new(),
-            transition: None,
+            statements: StatementBlock::new(),
         }
     }
 }

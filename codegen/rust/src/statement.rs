@@ -8,7 +8,7 @@ use crate::{
 };
 use p4::ast::{
     AST, Call, Control, DeclarationInfo, Direction, Expression, ExpressionKind,
-    NameInfo, Parser, Statement, StatementBlock, Type
+    NameInfo, Parser, Statement, StatementBlock, Transition, Type
 };
 use p4::hlir::Hlir;
 use quote::{format_ident, quote};
@@ -93,9 +93,6 @@ impl<'a> StatementGenerator<'a> {
                 }
             }
             Statement::Call(c) => {
-                let eg = ExpressionGenerator::new(self.hlir);
-                let lval = eg.generate_lvalue(&c.lval.pop_right());
-
                 match &self.context {
                     StatementContext::Control(control) => {
                         let mut ts = TokenStream::new();
@@ -106,12 +103,14 @@ impl<'a> StatementGenerator<'a> {
                         );
                         ts
                     }
-                    StatementContext::Parser(_) => {
-                        let args: Vec::<TokenStream> = c.args
-                            .iter()
-                            .map(|xpr| eg.generate_expression(xpr.as_ref()))
-                            .collect();
-                        quote!{ #lval(#(#args),*); }
+                    StatementContext::Parser(parser) => {
+                        let mut ts = TokenStream::new();
+                        self.generate_parser_body_call(
+                            parser,
+                            c,
+                            &mut ts,
+                        );
+                        ts
                     }
 
                 }
@@ -185,7 +184,95 @@ impl<'a> StatementGenerator<'a> {
                     let #name: #ty = #initializer;
                 }
             }
+            Statement::Transition(transition) => {
+                let parser = match self.context {
+                    StatementContext::Parser(p) => p,
+                    _ => {
+                        panic!(
+                            "transition statement outside parser: {:#?}",
+                            transition,
+                        )
+                    }
+                };
+                match transition {
+                    Transition::Reference(next_state) => {
+                        match next_state.as_str() {
+                            "accept" => quote! { return true; },
+                            "reject" => quote! { return false; },
+                            state_ref => {
+                                let state_name = format_ident!(
+                                    "{}_{}",
+                                    parser.name,
+                                    state_ref
+                                );
+                                let mut args = Vec::new();
+                                for arg in &parser.parameters {
+                                    let name = format_ident!("{}", arg.name);
+                                    args.push(quote! { #name });
+                                }
+                                quote! { return #state_name( #(#args),* ); }
+                            }
+                        }
+                    }
+                    Transition::Select(_) => {
+                        todo!();
+                    }
+                }
+            }
         }
+    }
+
+    fn generate_parser_body_call(
+        &self,
+        parser: &Parser,
+        c: &Call,
+        tokens: &mut TokenStream,
+    ) {
+        let lval: Vec<TokenStream> = c
+            .lval
+            .name
+            .split(".")
+            .map(|x| format_ident!("{}", x))
+            .map(|x| quote! { #x })
+            .collect();
+
+        let mut args = Vec::new();
+        for a in &c.args {
+            match &a.kind {
+                ExpressionKind::Lvalue(lvarg) => {
+                    let parts: Vec<&str> =
+                        lvarg.name.split(".").collect();
+                    let root = parts[0];
+                    let mut mut_arg = false;
+                    for parg in &parser.parameters {
+                        if parg.name == root {
+                            match parg.direction {
+                                Direction::Out
+                                    | Direction::InOut => {
+                                        mut_arg = true;
+                                    }
+                                _ => {}
+                            }
+                        }
+                    }
+                    let lvref: Vec<TokenStream> = parts
+                        .iter()
+                        .map(|x| format_ident!("{}", x))
+                        .map(|x| quote! { #x })
+                        .collect();
+                    if mut_arg {
+                        args.push(quote! { &mut #(#lvref).* });
+                    } else {
+                        args.push(quote! { #(#lvref).* });
+                    }
+                }
+                x => todo!("extern arg {:?}", x),
+            }
+        }
+        tokens.extend(quote! {
+            #(#lval).* ( #(#args),* );
+        });
+
     }
 
     fn generate_control_body_call(
@@ -421,9 +508,15 @@ impl<'a> StatementGenerator<'a> {
             .map(|x| format_ident!("{}", x))
             .map(|x| quote! { #x })
             .collect();
-        tokens.extend(quote! {
-            #(#lhs).*.is_valid = #valid;
-        });
+        if valid {
+            tokens.extend(quote! {
+                #(#lhs).*.set_valid();
+            });
+        } else {
+            tokens.extend(quote! {
+                #(#lhs).*.set_invalid();
+            });
+        }
 
     }
 
@@ -440,7 +533,7 @@ impl<'a> StatementGenerator<'a> {
             .map(|x| quote! { #x })
             .collect();
         tokens.extend(quote! {
-            #(#lhs).*.is_valid
+            #(#lhs).*.is_valid()
         });
 
     }

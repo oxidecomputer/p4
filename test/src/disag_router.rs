@@ -30,11 +30,11 @@ p4_macro::use_p4!("test/src/p4/router.p4");
 ///                           *========*
 ///                           |        |
 ///                           |   sc   |
-///                           |        |
+///                           | (phy3) |
 ///                           *========*
 ///
 #[test]
-fn router() -> Result<(), anyhow::Error> {
+fn disag_router() -> Result<(), anyhow::Error> {
 
     let fb = Arc::new(FrameBuffer::<N, F>::new());
 

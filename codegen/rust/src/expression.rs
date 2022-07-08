@@ -4,6 +4,7 @@ use p4::ast::{
 use p4::hlir::Hlir;
 use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
+use crate::is_header_member;
 
 pub(crate) struct ExpressionGenerator<'a> {
     hlir: &'a Hlir,
@@ -32,10 +33,34 @@ impl<'a> ExpressionGenerator<'a> {
                 self.generate_lvalue(v)
             }
             ExpressionKind::Binary(lhs, op, rhs) => {
+                let lhs_tks = self.generate_expression(lhs.as_ref());
+                let op_tks = self.generate_binop(*op);
+                let rhs_tks = self.generate_expression(rhs.as_ref());
+                let rhs_tks = match &lhs.kind {
+                    ExpressionKind::Lvalue(lhs_lval) => {
+                        if is_header_member(lhs_lval, self.hlir) {
+                            match &rhs.kind {
+                                ExpressionKind::Lvalue(rhs_lval) => {
+                                    if is_header_member(rhs_lval, self.hlir) {
+                                        rhs_tks
+                                    } else {
+                                        quote!{ &#rhs_tks }
+                                    }
+                                }
+                                _ => {
+                                    quote!{ &#rhs_tks }
+                                }
+                            }
+                        } else {
+                            rhs_tks
+                        }
+                    }
+                    _ => {rhs_tks}
+                };
                 let mut ts = TokenStream::new();
-                ts.extend(self.generate_expression(lhs.as_ref()));
-                ts.extend(self.generate_binop(*op));
-                ts.extend(self.generate_expression(rhs.as_ref()));
+                ts.extend(lhs_tks);
+                ts.extend(op_tks);
+                ts.extend(rhs_tks);
                 ts
             }
             ExpressionKind::Index(lval, xpr) => {

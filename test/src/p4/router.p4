@@ -62,9 +62,27 @@ parser parse(
 ){
     state start {
         pkt.extract(headers.ethernet);
+        if (headers.ethernet.ether_type == 16w0x86dd) {
+            transition sidecar;
+        }
+        if (headers.ethernet.ether_type == 16w0x0901) {
+            transition ipv6;
+        }
+        transition reject;
+    }
+
+    state sidecar {
+        if (headers.ethernet.ether_type == 16w0x0901) {
+            transition ipv6;
+        }
+        transition reject;
+    }
+
+    state ipv6 {
         pkt.extract(headers.ipv6);
         transition accept;
     }
+
 }
 
 control local(

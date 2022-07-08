@@ -44,7 +44,7 @@ impl<'a> HeaderGenerator<'a> {
         let mut generated = quote! {
             #[derive(Debug)]
             pub struct #name<'a> {
-                pub is_valid: bool,
+                pub valid: bool,
                 #(#members),*
             }
         };
@@ -79,7 +79,7 @@ impl<'a> HeaderGenerator<'a> {
             impl<'a> Header<'a> for #name<'a> {
                 fn new() -> Self {
                     Self {
-                        is_valid: false,
+                        valid: false,
                         #(#member_values),*
                     }
                 }
@@ -94,6 +94,15 @@ impl<'a> HeaderGenerator<'a> {
                 }
                 fn size() -> usize {
                     #offset
+                }
+                fn set_valid(&mut self) {
+                    self.valid = true;
+                }
+                fn set_invalid(&mut self) {
+                    self.valid = false;
+                }
+                fn is_valid(&self) -> bool {
+                    self.valid
                 }
             }
         });

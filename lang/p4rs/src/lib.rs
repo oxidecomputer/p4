@@ -83,6 +83,7 @@ pub struct Ethernet<'a> {
     pub dst: Option<&'a mut [u8]>,
     pub src: Option<&'a mut [u8]>,
     pub ethertype: Option<&'a mut [u8]>,
+    pub valid: bool,
 }
 
 /// A fixed length header trait.
@@ -90,6 +91,9 @@ pub trait Header<'a> {
     fn new() -> Self;
     fn size() -> usize;
     fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError>;
+    fn set_valid(&mut self);
+    fn set_invalid(&mut self);
+    fn is_valid(&self) -> bool;
 }
 
 /// A variable length header trait.
@@ -106,6 +110,7 @@ impl<'a> Header<'a> for Ethernet<'a> {
             src: None,
             dst: None,
             ethertype: None,
+            valid: false,
         }
     }
 
@@ -130,6 +135,18 @@ impl<'a> Header<'a> for Ethernet<'a> {
             ));
         }
         Ok(())
+    }
+
+    fn set_valid(&mut self) {
+        self.valid = true;
+    }
+
+    fn set_invalid(&mut self) {
+        self.valid = true;
+    }
+
+    fn is_valid(&self) -> bool {
+        self.valid
     }
 }
 

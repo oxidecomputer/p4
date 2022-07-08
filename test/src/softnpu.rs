@@ -193,7 +193,38 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                 }
                 let eg = &egress[port - 1];
                 let mut fps = eg.reserve(1).unwrap();
-                eg.write(fps.next().unwrap(), content);
+                let fp = fps.next().unwrap();
+
+                //
+                // emit headers
+                //
+
+                let mut is_valid = false;
+                let mut off = 0;
+                if header.ethernet.is_valid() {
+                    is_valid = true;
+                    eg.write(fp, &content[0..ethernet_t::size()>>3]);
+                }
+                off += ethernet_t::size()>>3;
+                if header.sidecar.is_valid() {
+                    is_valid = true;
+                    eg.write(fp, &content[off..off+sidecar_t::size()>>3]);
+                }
+                off += sidecar_t::size()>>3;
+                if header.ipv6.is_valid() {
+                    is_valid = true;
+                    eg.write(fp, &content[off..off+ipv6_t::size()>>3]);
+                }
+                off += sidecar_t::size()>>3;
+
+                //
+                // emit payload
+                //
+
+                if is_valid {
+                    eg.write(fp, &content[off..]);
+                }
+                //eg.write(fps.next().unwrap(), content);
                 egress_count[port - 1] += 1;
             }
 

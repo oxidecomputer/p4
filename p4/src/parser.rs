@@ -449,7 +449,7 @@ impl<'a> Parser<'a> {
         loop {
             let token = self.next_token()?;
 
-            // check if we've reached the end of the parameters
+            // check if we've reached the end of the statements
             match token.kind {
                 lexer::Kind::CurlyClose => break,
 
@@ -479,12 +479,17 @@ impl<'a> Parser<'a> {
                     let stmt = sp.run()?;
                     result.statements.push(stmt);
                 }
+                lexer::Kind::Transition => {
+                    result.statements.push(Statement::Transition(
+                        self.parse_transition()?
+                    ));
+                }
 
                 _ => return Err(ParserError {
                     at: token.clone(),
                     message: format!(
                         "Found {} expected variable, constant, statement or \
-                            instantiation.",
+                        instantiation.",
                         token.kind,
                     ),
                     source: self.lexer.lines[token.line].into(),
@@ -494,6 +499,33 @@ impl<'a> Parser<'a> {
         }
 
         Ok(result)
+    }
+
+    pub fn parse_transition(&mut self) -> Result<Transition, Error> {
+        let token = self.next_token()?;
+
+        match token.kind {
+            lexer::Kind::Select => {
+                let mut sp = SelectParser::new(self);
+                let select = sp.run()?;
+                Ok(Transition::Select(select))
+            }
+            lexer::Kind::Identifier(name) => {
+                let result = Transition::Reference(name);
+                self.expect_token(lexer::Kind::Semicolon)?;
+                Ok(result)
+            }
+            _ => {
+                Err(ParserError {
+                    at: token.clone(),
+                    message: format!(
+                        "Found {}: expected select or identifier",
+                        token.kind,
+                    ),
+                    source: self.lexer.lines[token.line].into(),
+                }.into())
+            }
+        }
     }
 
     pub fn parse_parameters(&mut self) -> Result<Vec<ControlParameter>, Error> {
@@ -1708,6 +1740,9 @@ impl<'a, 'b> StateParser<'a, 'b> {
     }
 
     pub fn parse_body(&mut self, state: &mut State) -> Result<(), Error> {
+        state.statements = self.parser.parse_statement_block()?;
+        Ok(())
+        /*
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         loop {
@@ -1751,7 +1786,7 @@ impl<'a, 'b> StateParser<'a, 'b> {
                     at: token.clone(),
                     message: format!(
                         "Found {}: expected variable, constant, statement or \
-                            instantiation.",
+                        instantiation.",
                         token.kind,
                     ),
                     source: self.parser.lexer.lines[token.line].into(),
@@ -1761,8 +1796,10 @@ impl<'a, 'b> StateParser<'a, 'b> {
         }
 
         Ok(())
+        */
     }
 
+    /* TODO integrate into statement parsing
     pub fn parse_transition(&mut self, state: &mut State) -> Result<(), Error> {
         let token = self.parser.next_token()?;
 
@@ -1791,6 +1828,7 @@ impl<'a, 'b> StateParser<'a, 'b> {
 
         Ok(())
     }
+    */
 }
 
 pub struct SelectParser<'a, 'b> {
