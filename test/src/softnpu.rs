@@ -166,12 +166,17 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                     port: 0u8.view_bits::<Lsb0>().to_bitvec(),
                 };
 
+                println!("begin");
+
                 // run the parser block
                 let accept = parse(&mut pkt, &mut header);
                 if !accept {
                     // drop the packet
+                    println!("parser drop");
                     continue;
                 }
+
+                println!("parser accepted");
 
                 // run the control block
                 control(
@@ -189,6 +194,7 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
 
                 if port == 0 {
                     // indicates no table match
+                    println!("no match");
                     continue
                 }
                 let eg = &egress[port - 1];
@@ -199,30 +205,43 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                 // emit headers
                 //
 
+                println!("control pass");
+
                 let mut is_valid = false;
                 let mut off = 0;
+                let mut out = 0;
+                let n = ethernet_t::size()>>3;
                 if header.ethernet.is_valid() {
                     is_valid = true;
-                    eg.write(fp, &content[0..ethernet_t::size()>>3]);
+                    eg.write_at(fp, &content[0..n], out);
+                    println!("ethernet {} -> {}", off, out);
+                    out += n;
+                    off += n;
                 }
-                off += ethernet_t::size()>>3;
+                let n = sidecar_t::size()>>3;
                 if header.sidecar.is_valid() {
                     is_valid = true;
-                    eg.write(fp, &content[off..off+sidecar_t::size()>>3]);
+                    eg.write_at(fp, &content[off..off+n], out);
+                    println!("sidecar {} -> {}", off, out);
+                    out += n;
+                    off += n;
                 }
-                off += sidecar_t::size()>>3;
+                let n = ipv6_t::size()>>3;
                 if header.ipv6.is_valid() {
                     is_valid = true;
-                    eg.write(fp, &content[off..off+ipv6_t::size()>>3]);
+                    eg.write_at(fp, &content[off..off+n], out);
+                    println!("ipv6 {} -> {}", off, out);
+                    out += n;
+                    off += n;
                 }
-                off += sidecar_t::size()>>3;
 
                 //
                 // emit payload
                 //
 
                 if is_valid {
-                    eg.write(fp, &content[off..]);
+                    eg.write_at(fp, &content[off..], out);
+                    println!("payload {} -> {}", off, out);
                 }
                 //eg.write(fps.next().unwrap(), content);
                 egress_count[port - 1] += 1;

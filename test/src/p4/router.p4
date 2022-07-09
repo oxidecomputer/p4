@@ -63,16 +63,17 @@ parser parse(
     state start {
         pkt.extract(headers.ethernet);
         if (headers.ethernet.ether_type == 16w0x86dd) {
-            transition sidecar;
+            transition ipv6;
         }
         if (headers.ethernet.ether_type == 16w0x0901) {
-            transition ipv6;
+            transition sidecar;
         }
         transition reject;
     }
 
     state sidecar {
-        if (headers.ethernet.ether_type == 16w0x0901) {
+        pkt.extract(headers.sidecar);
+        if (headers.sidecar.sc_ether_type == 16w0x0901) {
             transition ipv6;
         }
         transition reject;
@@ -109,19 +110,22 @@ control local(
         default_action = nonlocal;
         const entries = {
             //fe80::1de1:deff:fe01:701c
-            128w0xfe800000000000001de1defffe01701c : local();
+            //128w0xfe800000000000001de1defffe01701c : local();
+            128w0x1c7001feffdee11d00000000000080fe : local();
 
             //fe80::1de1:deff:fe01:701d
-            128w0xfe800000000000001de1defffe01701d : local();
+            //128w0xfe800000000000001de1defffe01701d : local();
+            128w0x1d7001feffdee11d00000000000080fe : local();
         }
     }
 
     apply {
         local.apply();
-        bit<16> ll = 0xff02;
-        if(hdr.ipv6.dst[127:112] == ll) {
-            is_local = true;
-        }
+        //TODO, backwards indexing behaving badly
+        //bit<16> ll = 0xff02;
+        //if(hdr.ipv6.dst[127:112] == ll) {
+        //    is_local = true;
+        //}
     }
     
 }
@@ -152,12 +156,12 @@ control router(
             // fd00:1000::/24
             128w0xfd001000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(2);
+            forward(1);
 
             // fd00:2000::/24
             128w0xfd002000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(3);
+            forward(2);
 
         }
     }
@@ -192,7 +196,7 @@ control ingress(
             hdr.sidecar.sc_payload = 128w0x1701d;
 
             // scrimlet port
-            egress.port = 1;
+            egress.port = 3;
         } else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.

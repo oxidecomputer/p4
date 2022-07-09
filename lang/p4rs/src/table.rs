@@ -46,7 +46,11 @@ impl<const D: usize, A: Clone> Table<D, A> {
         Self{ entries: HashSet::new() }
     }
 
-    pub fn match_selector(&self, keyset: &[BigUint; D]) -> Vec<TableEntry<D, A>> {
+    pub fn match_selector(
+        &self,
+        keyset: &[BigUint; D]
+    ) -> Vec<TableEntry<D, A>> {
+
         let mut result = Vec::new();
         for entry in &self.entries {
             if keyset_matches(keyset, &entry.key) {
@@ -55,6 +59,7 @@ impl<const D: usize, A: Clone> Table<D, A> {
         }
         let sorted = sort_entries(result);
         sorted 
+
     }
 }
 
@@ -149,6 +154,7 @@ pub fn sort_entries_by_priority<const D: usize, A: Clone>(
 pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     match key {
         Key::Exact(x) => {
+            println!("{:x} =?= {:x}", selector, x);
             selector == x
         }
         Key::Range(begin, end) => {
@@ -196,7 +202,10 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     }
 }
 
-pub fn keyset_matches<const D: usize>(selector: &[BigUint; D], key: &[Key; D]) -> bool {
+pub fn keyset_matches<const D: usize>(
+    selector: &[BigUint; D],
+    key: &[Key; D]
+) -> bool {
     for i in 0..D {
         if !key_matches(&selector[i], &key[i]) {
             return false

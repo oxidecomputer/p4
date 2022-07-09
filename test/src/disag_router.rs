@@ -51,7 +51,7 @@ fn disag_router() -> Result<(), anyhow::Error> {
     // create phys
     let phy1 = Phy::new(1, rx1_p);
     let phy2 = Phy::new(2, rx2_p);
-    let phy3 = Phy::new(2, rx3_p);
+    let phy3 = Phy::new(3, rx3_p);
 
     // run phys
     phy1.run(tx1_c, phy1_egress);
@@ -92,16 +92,16 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let p = b"the muffin man?";
     write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
 
-
     let p = b"the muffin man!";
     write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip3, mac1, mac3);
 
     let p = b"why yes";
     write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip4, mac2, mac4);
-    let p = b"i know the muffin man";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
-    let p = b"the muffin man is me!!!";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
+
+    //let p = b"i know the muffin man";
+    //write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
+    //let p = b"the muffin man is me!!!";
+    //write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
 
     sleep(Duration::from_secs(2));
 
@@ -123,7 +123,7 @@ fn write(
     dmac: [u8;6],
 ) {
     let mut data = [0u8; 256];
-    let et = 0x86ed;
+    let et = 0x86ddu16.to_be();
     let mut pkt = MutableIpv6Packet::new(&mut data).unwrap();
     pkt.set_version(6);
     pkt.set_traffic_class(traffic_class);
@@ -156,5 +156,5 @@ fn phy2_egress(frame: &[u8]) {
 fn phy3_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
     println!("{:#?}", pkt);
-    println!("phy 2 !!! {}", String::from_utf8_lossy(&frame[54..]));
+    println!("phy 3 !!! {}", String::from_utf8_lossy(&frame[54..]));
 }

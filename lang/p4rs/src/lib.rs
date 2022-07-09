@@ -222,6 +222,7 @@ impl<'a> packet_in<'a> {
         //   let (extracted, remaining) = self.data.split_at_mut(n);
         //   self.data = remaining;
         //   h.set(shared_mut);
+        h.set_valid();
     }
 
     // This is the same as extract except we return a new header instead of
@@ -262,7 +263,8 @@ pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
 pub struct AlignedU128(pub u128);
 
 pub fn int_to_bitvec(x: i128) -> BitVec::<u8, Lsb0> {
-    let mut bv = BitVec::<u8, Lsb0>::new();
+    //let mut bv = BitVec::<u8, Lsb0>::new();
+    let mut bv = bitvec![mut u8, Lsb0; 0; 128];
     bv.store(x);
     bv
 }
