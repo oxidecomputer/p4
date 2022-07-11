@@ -155,6 +155,8 @@ fn phy2_egress(frame: &[u8]) {
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
+    let sc = &frame[14..35];
     println!("{:#?}", pkt);
+    println!("{:x?}", sc);
     println!("phy 3 !!! {}", String::from_utf8_lossy(&frame[75..]));
 }

@@ -34,7 +34,7 @@ impl<'a> HeaderGenerator<'a> {
         let mut members = Vec::new();
         let mut offset = 0;
         for member in &h.members {
-            let size = type_size(&member.ty);
+            let size = type_size(&member.ty, self.ast);
             let name = format_ident!("{}", member.name);
             let ty = rust_type(&member.ty, true, offset);
             members.push(quote! { pub #name: #ty });
@@ -56,10 +56,11 @@ impl<'a> HeaderGenerator<'a> {
         // generate member assignments
         let mut member_values = Vec::new();
         let mut set_statements = Vec::new();
+        let mut to_bitvec_statements = Vec::new();
         let mut offset = 0;
         for member in &h.members {
             let name = format_ident!("{}", member.name);
-            let size = type_size(&member.ty);
+            let size = type_size(&member.ty, self.ast);
             member_values.push(quote! {
                 #name: BitVec::<u8, Msb0>::default()
             });
@@ -67,9 +68,14 @@ impl<'a> HeaderGenerator<'a> {
             set_statements.push(quote! {
                 self.#name = buf.view_bits::<Msb0>()[#offset..#end].to_owned()
             });
+            to_bitvec_statements.push(quote! {
+                x[#offset..#end] |= &self.#name
+            });
             offset += size;
         }
 
+        //TODO perhaps we should just keep the whole header as one bitvec so we
+        //don't need to construct a consolidated bitvec like to_bitvec does?
         generated.extend(quote! {
             impl Header for #name {
                 fn new() -> Self {
@@ -96,6 +102,11 @@ impl<'a> HeaderGenerator<'a> {
                 }
                 fn is_valid(&self) -> bool {
                     self.valid
+                }
+                fn to_bitvec(&self) -> BitVec<u8, Msb0> {
+                    let mut x = bitvec![u8, Msb0; 0u8; Self::size()];
+                    #(#to_bitvec_statements);*;
+                    x
                 }
             }
         });

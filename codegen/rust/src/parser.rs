@@ -68,10 +68,6 @@ impl<'a> ParserGenerator<'a> {
         parser: &Parser,
         state: &State,
     ) -> TokenStream {
-        /*
-        let tokens = self.generate_state_statements(parser, state);
-        tokens
-        */
         let sg = StatementGenerator::new(
             self.ast,
             self.hlir,

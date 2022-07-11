@@ -7,7 +7,7 @@ use quote::{format_ident, quote};
 
 use p4::ast::{
     AST, ControlParameter, DeclarationInfo, Direction, Expression,
-    ExpressionKind, Lvalue, NameInfo, Parser, Type
+    ExpressionKind, Lvalue, NameInfo, Parser, Type, UserDefinedType,
 };
 use p4::util::resolve_lvalue;
 use p4::hlir::Hlir;
@@ -156,7 +156,7 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
     }
 }
 
-fn type_size(ty: &Type) -> usize {
+fn type_size(ty: &Type, ast: &AST) -> usize {
     match ty {
         Type::Bool => 1,
         Type::Error => todo!("generate error size"),
@@ -164,7 +164,30 @@ fn type_size(ty: &Type) -> usize {
         Type::Int(size) => *size,
         Type::Varbit(size) => *size,
         Type::String => todo!("generate string size"),
-        Type::UserDefined(_name) => todo!("generate user defined type size"),
+        Type::UserDefined(name) => {
+            let mut sz: usize = 0;
+            let udt = ast
+                .get_user_defined_type(name)
+                .expect(&format!("expect user defined type: {}", name));
+
+            match udt {
+                UserDefinedType::Struct(s) => {
+                    for m in &s.members {
+                        sz += type_size(&m.ty, ast);
+                    }
+                    sz
+                }
+                UserDefinedType::Header(h) => {
+                    for m in &h.members {
+                        sz += type_size(&m.ty, ast);
+                    }
+                    sz
+                }
+                UserDefinedType::Extern(_) => {
+                    todo!("size for extern?");
+                }
+            }
+        }
         Type::ExternFunction => { todo!("type size for extern function"); }
         Type::Table => { todo!("type size for table"); }
     }

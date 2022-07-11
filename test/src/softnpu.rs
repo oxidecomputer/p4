@@ -220,57 +220,13 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
 
                 println!("control pass");
 
-                let mut is_valid = false;
                 let mut out = 0;
-                if header.ethernet.is_valid() {
-                    println!("ethernet@{} -> {}", port, out);
-                    is_valid = true;
-                    //eg.write_at(fp, &content[0..n], out);
-                    //TODO require as_bytes method on headers and generate in
-                    //codegen.
-                    eg.write_at(fp, header.ethernet.dst.as_raw_slice(), out);
-                    out += 6;
-                    eg.write_at(fp, header.ethernet.src.as_raw_slice(), out);
-                    out += 6;
-                    eg.write_at(fp, header.ethernet.ether_type.as_raw_slice(), out);
-                    out += 2;
-                }
-                if header.sidecar.is_valid() {
-                    println!("sidecar@{} -> {}", port, out);
-                    is_valid = true;
-                    //eg.write_at(fp, &content[off..off+n], out);
-                    eg.write_at(fp, header.sidecar.sc_code.as_raw_slice(), out);
-                    out += 1;
-                    eg.write_at(fp, header.sidecar.sc_ingress.as_raw_slice(), out);
-                    out += 1;
-                    eg.write_at(fp, header.sidecar.sc_egress.as_raw_slice(), out);
-                    out += 1;
-                    eg.write_at(fp, header.sidecar.sc_ether_type.as_raw_slice(), out);
-                    out += 2;
-                    eg.write_at(fp, header.sidecar.sc_payload.as_raw_slice(), out);
-                    out += 16;
-                }
-                if header.ipv6.is_valid() {
-                    println!("ipv6@{} -> {}", port, out);
-                    is_valid = true;
-                    //eg.write_at(fp, &content[off..off+n], out);
-                    //TODO sub-byte
-                    eg.write_at(fp, header.ipv6.version.as_raw_slice(), out);
-                    out += 4;
-                    //eg.write_at(fp, header.ipv6.traffic_class.as_raw_slice(), out);
-                    //eg.write_at(fp, header.ipv6.flow_label.as_raw_slice(), out);
-                    eg.write_at(fp, header.ipv6.payload_len.as_raw_slice(), out);
-                    out += 2;
-                    eg.write_at(fp, header.ipv6.next_hdr.as_raw_slice(), out);
-                    out += 1;
-                    eg.write_at(fp, header.ipv6.hop_limit.as_raw_slice(), out);
-                    out += 1;
-                    eg.write_at(fp, header.ipv6.src.as_raw_slice(), out);
-                    out += 16;
-                    eg.write_at(fp, header.ipv6.dst.as_raw_slice(), out);
-                    out += 16;
-                    println!("ipv6@{} -> {}", port, out);
-                }
+
+                let bv = header.to_bitvec();
+                let buf = bv.as_raw_slice();
+                eg.write_at(fp, buf, out);
+                out += header.valid_header_size() >> 3;
+                let is_valid = out > 0;
 
                 //
                 // emit payload
@@ -280,7 +236,6 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                     eg.write_at(fp, &content[parsed_size..], out);
                     println!("payload@{} -> {}", port, out);
                 }
-                //eg.write(fps.next().unwrap(), content);
                 egress_count[port - 1] += 1;
             }
 

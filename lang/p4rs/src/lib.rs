@@ -86,6 +86,7 @@ pub trait Header {
     fn set_valid(&mut self);
     fn set_invalid(&mut self);
     fn is_valid(&self) -> bool;
+    fn to_bitvec(&self) -> BitVec<u8, Msb0>;
 }
 
 /*XXX
