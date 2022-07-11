@@ -37,13 +37,13 @@ impl<'a> HeaderGenerator<'a> {
             let size = type_size(&member.ty);
             let name = format_ident!("{}", member.name);
             let ty = rust_type(&member.ty, true, offset);
-            members.push(quote! { pub #name: Option::<&'a mut #ty> });
+            members.push(quote! { pub #name: #ty });
             offset += size;
         }
 
         let mut generated = quote! {
             #[derive(Debug)]
-            pub struct #name<'a> {
+            pub struct #name {
                 pub valid: bool,
                 #(#members),*
             }
@@ -61,22 +61,17 @@ impl<'a> HeaderGenerator<'a> {
             let name = format_ident!("{}", member.name);
             let size = type_size(&member.ty);
             member_values.push(quote! {
-                #name: None
+                #name: BitVec::<u8, Msb0>::default()
             });
             let end = offset+size;
             set_statements.push(quote! {
-                self.#name = Some(
-                    &mut (*std::ptr::slice_from_raw_parts_mut(
-                            buf.as_mut_ptr(),
-                            buf.len(),
-                    )).view_bits_mut::<Lsb0>()[#offset..#end]
-                )
+                self.#name = buf.view_bits::<Msb0>()[#offset..#end].to_owned()
             });
             offset += size;
         }
 
         generated.extend(quote! {
-            impl<'a> Header<'a> for #name<'a> {
+            impl Header for #name {
                 fn new() -> Self {
                     Self {
                         valid: false,
@@ -85,11 +80,9 @@ impl<'a> HeaderGenerator<'a> {
                 }
                 fn set(
                     &mut self,
-                    buf: &'a mut [u8]
+                    buf: &[u8]
                 ) -> Result<(), TryFromSliceError> {
-                    unsafe {
-                        #(#set_statements);*;
-                    }
+                    #(#set_statements);*;
                     Ok(())
                 }
                 fn size() -> usize {

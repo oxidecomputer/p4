@@ -1,7 +1,6 @@
 use crate::{
     Context,
     rust_type,
-    type_lifetime,
     statement::{StatementGenerator, StatementContext},
 };
 use p4::ast::{
@@ -45,19 +44,18 @@ impl<'a> ParserGenerator<'a> {
         for arg in &parser.parameters {
             let name = format_ident!("{}", arg.name);
             let typename = rust_type(&arg.ty, false, 0);
-            let lifetime = type_lifetime(self.ast, &arg.ty);
             match arg.direction {
                 Direction::Out | Direction::InOut => {
-                    args.push(quote! { #name: &mut #typename #lifetime });
+                    args.push(quote! { #name: &mut #typename });
                 }
-                _ => args.push(quote! { #name: &mut #typename #lifetime }),
+                _ => args.push(quote! { #name: &mut #typename }),
             };
         }
 
         let body = self.generate_state_function_body(parser, state);
 
         let function = quote! {
-            pub fn #function_name<'a>(#(#args),*) -> bool {
+            pub fn #function_name(#(#args),*) -> bool {
                 #body
             }
         };

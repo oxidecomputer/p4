@@ -1,0 +1,188 @@
+= Packet Mapping
+
+This document describes how mapping packets works on ingress and egress.
+
+Packets from the perspective of P4 are stacks of headers. For example we may
+have a packet that looks like this, which is a standard IPv6 packet.
+
+[source,p4]
+----
+struct headers_t {
+    ethernet_h  ethernet;
+    ipv6_h      ipv6;
+}
+----
+
+We also may want to perform some sort of encapsulation on the packet like adding
+a sidecar header.
+
+[source,p4]
+----
+struct headers_t {
+    ethernet_h  ethernet;
+    sidecar_h   sidecar;
+    ipv6_h      ipv6;
+}
+----
+
+Or adding a Geneve header.
+
+[source,p4]
+----
+struct headers_t {
+    ethernet_h  ethernet;
+    ipv6_h      outer;
+    geneve_h    geneve;
+    ipv6_h      inner;
+}
+----
+
+We may also want to perform decapsulation where these types of headers are
+present on ingress and removed on egress.
+
+The challenge with encapsulation and decapsulation is that the overall structure
+of a packet's header stack may change during processing. This means that we
+cannot simply pass packet pointers through a pipeline, modifying individual
+properties as needed.
+
+The techniques used to process headers with encap and decap are described in the
+sections below.
+
+== Sparse Mapping
+
+Let's consider the case where we need to add a sidecar header to incoming
+packets. The byte layout of our ingress packet looks like this. For header
+definitions see the <<Appendix>>.
+
+----
+[00:14, 14] Ethernet
+[14:54, 40] IPv6
+----
+
+And the byte layout of our outgoing packet looks like this.
+
+----
+[00:14, 14] Ethernet
+[14:35, 21] Sidecar
+[35:75, 40] IPv6
+----
+
+The sparse mapping approach uses a carrier buffer for each packet whose size is
+the maximum of the ingress and egress header stacks. So in this case we would
+have the following mapping on ingress.
+
+----
+Packet                       Carrier Buffer
+====================         ==============
+
+[00:14, 14] Ethernet ------> [00:14, 14] Ethernet
+[14:54, 40] IPv6 ---.        [14:35, 21] Sidecar
+                    '------> [35:75, 40] IPv6
+----
+
+and in the decapsulating case
+
+----
+Carrier Buffer               Packet
+====================         ======
+
+[00:14, 14] Ethernet ------> [00:14, 14] Ethernet
+[14:35, 21] Sidecar    .---> [14:54, 40] IPv6
+[35:75, 40] IPv6 ------'
+----
+
+In this approach, the contents of each header are copied into the carrier
+buffer on ingress, and copied out of the carrier buffer on egress. This is OK
+for headers, but would be prohibitively expensive for payloads. Efficient packet
+decomposition and recomposition is discussed next.
+
+== Packet Decomposition and Recomposition
+
+When a packet ingresses into a pipline, the parsers in that pipeline will parse
+enough of the packet to perform the logic of the pipeline. We'll refer to the
+number of bytes parsed as `n`.
+
+----
+  -  ....
+  |  eth
+n |  ....
+  |  ipv6
+  -  ....
+      .
+      .
+      .
+----
+
+When a packet egresses a pipline, a modified set of headers will be emitted that
+may be larger or smaller than the parse ingress headers. We'll refer to the
+number of bytes emitted as `m`.
+
+----
+  -  ....
+  |  eth
+  |  ....
+m |  sc
+  |  ....
+  |  ipv6
+  -  ....
+      .
+      .
+      .
+----
+
+The pipeline interface then looks like the following.
+
+----
+out_h, n, m = pipeline(in_pkt);
+----
+
+Where the parsed input header is
+
+----
+in_h = pkt[..n]
+----
+
+and the output packet is the following.
+
+----
+egress = (out_h, in_pkt[n..])
+----
+
+Nothing below byte `n` is touched in the input packet, and the contents of
+`0..n` are replaced with the output header buffer produced by the pipeline.
+
+== Appendix
+
+[source,p4]
+----
+header ethernet_t {
+    bit<48> dst;
+    bit<48> src;
+    bit<16> ether_type;
+}
+----
+
+[source,p4]
+----
+header ipv6_t {
+	bit<4>	    version;
+	bit<8>	    traffic_class;
+	bit<20>	    flow_label;
+	bit<16>	    payload_len;
+	bit<8>	    next_hdr;
+	bit<8>	    hop_limit;
+	bit<128>    src;
+	bit<128>    dst;
+}
+----
+
+[source,p4]
+----
+header sidecar_t {
+    bit<8>      sc_code;
+    bit<8>      sc_ingress;
+    bit<8>      sc_egress;
+    bit<16>     sc_ether_type;
+    bit<128>    sc_payload;
+}
+----

@@ -85,29 +85,29 @@ impl<const R: usize, const N: usize, const F: usize> Phy<R, N, F> {
     }
 }
 
-pub fn run<'a, const R: usize, const N: usize, const F: usize>(
+pub fn run<const R: usize, const N: usize, const F: usize>(
     ingress: &[RingConsumer<R, N, F>],
     egress: &[RingProducer<R, N, F>],
     local: &p4rs::table::Table<
         1usize,
-        fn(&mut headers_t<'a>, &mut bool)
+        fn(&mut headers_t, &mut bool)
     >,
     router: &p4rs::table::Table<
         1usize,
-        fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata),
+        fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
     >,
-    parse: fn(pkt: &mut packet_in<'a>, headers: &mut headers_t<'a>) -> bool,
+    parse: fn(pkt: &mut packet_in, headers: &mut headers_t) -> bool,
     control: fn(
-        hdr: &mut headers_t<'a>,
+        hdr: &mut headers_t,
         ingress: &mut IngressMetadata,
         egress: &mut EgressMetadata,
         local: &p4rs::table::Table<
             1usize,
-            fn(&mut headers_t<'a>, &mut bool)
+            fn(&mut headers_t, &mut bool)
         >,
         router: &p4rs::table::Table<
             1usize,
-            fn(&mut headers_t<'a>, &mut IngressMetadata, &mut EgressMetadata),
+            fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
         >,
     ),
 ) {
@@ -158,12 +158,12 @@ pub fn run<'a, const R: usize, const N: usize, const F: usize>(
                 // assumes phys are ordered starting from 1
                 let mut ingress_metadata = IngressMetadata {
                     //TODO more than u8::MAX ports
-                    port: ((i+1) as u8).view_bits::<Lsb0>().to_bitvec(),
+                    port: ((i+1) as u8).view_bits::<Msb0>().to_bitvec(),
                 };
 
                 // to be filled in by pipeline
                 let mut egress_metadata = EgressMetadata {
-                    port: 0u8.view_bits::<Lsb0>().to_bitvec(),
+                    port: 0u8.view_bits::<Msb0>().to_bitvec(),
                 };
 
                 println!("begin");

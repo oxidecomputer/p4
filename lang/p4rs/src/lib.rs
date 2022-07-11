@@ -78,24 +78,17 @@ pub struct packet_in<'a> {
     pub index: usize,
 }
 
-#[derive(Debug)]
-pub struct Ethernet<'a> {
-    pub dst: Option<&'a mut [u8]>,
-    pub src: Option<&'a mut [u8]>,
-    pub ethertype: Option<&'a mut [u8]>,
-    pub valid: bool,
-}
-
 /// A fixed length header trait.
-pub trait Header<'a> {
+pub trait Header {
     fn new() -> Self;
     fn size() -> usize;
-    fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError>;
+    fn set(&mut self, buf: &[u8]) -> Result<(), TryFromSliceError>;
     fn set_valid(&mut self);
     fn set_invalid(&mut self);
     fn is_valid(&self) -> bool;
 }
 
+/*XXX
 /// A variable length header trait.
 pub trait VarHeader<'a> {
     fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError>
@@ -103,52 +96,7 @@ pub trait VarHeader<'a> {
         Self: Sized;
     fn set(&mut self, buf: &'a mut [u8]) -> Result<usize, TryFromSliceError>;
 }
-
-impl<'a> Header<'a> for Ethernet<'a> {
-    fn new() -> Self {
-        Self {
-            src: None,
-            dst: None,
-            ethertype: None,
-            valid: false,
-        }
-    }
-
-    fn size() -> usize {
-        14
-    }
-
-    fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
-        if buf.len() < 14 {
-            return Err(TryFromSliceError(buf.len()));
-        }
-        unsafe {
-            self.dst =
-                Some(&mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6));
-            self.src = Some(&mut *slice_from_raw_parts_mut(
-                buf.as_mut_ptr().add(6),
-                6,
-            ));
-            self.ethertype = Some(&mut *slice_from_raw_parts_mut(
-                buf.as_mut_ptr().add(12),
-                2,
-            ));
-        }
-        Ok(())
-    }
-
-    fn set_valid(&mut self) {
-        self.valid = true;
-    }
-
-    fn set_invalid(&mut self) {
-        self.valid = true;
-    }
-
-    fn is_valid(&self) -> bool {
-        self.valid
-    }
-}
+*/
 
 impl<'a> packet_in<'a> {
     pub fn new(data: &'a mut [u8]) -> Self {
@@ -163,7 +111,7 @@ impl<'a> packet_in<'a> {
     // standard library requires the return type to be `void`, so this signature
     // cannot return a result without the compiler having special knowledge of
     // functions that happen to be called "extract".
-    pub fn extract<H: Header<'a>>(
+    pub fn extract<H: Header>(
         &mut self,
         h: &mut H,
     ) {
@@ -198,7 +146,7 @@ impl<'a> packet_in<'a> {
             } else {
                 0
             };
-            &mut *std::ptr::slice_from_raw_parts_mut(
+            &mut *slice_from_raw_parts_mut(
                 self.data.as_mut_ptr().add(start),
                 self.index + (n >> 3),
             )
@@ -227,12 +175,12 @@ impl<'a> packet_in<'a> {
 
     // This is the same as extract except we return a new header instead of
     // modifying an existing one.
-    pub fn extract_new<H: Header<'a>>(
+    pub fn extract_new<H: Header>(
         &mut self,
     ) -> Result<H, TryFromSliceError> {
         let n = H::size();
         let shared_mut = unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(
+            &mut *slice_from_raw_parts_mut(
                 self.data.as_mut_ptr(),
                 self.index + n,
             )
@@ -245,13 +193,13 @@ impl<'a> packet_in<'a> {
 }
 
 //XXX: remove once classifier defined in terms of bitvecs
-pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> num::BigUint {
+pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> num::BigUint {
     let u = num::BigUint::from_bytes_be(bv.as_raw_slice());
     //println!("{:x?} -> {:x}", bv.as_raw_slice(), u);
     u
 }
 
-pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
+pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
     let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
     std::net::IpAddr::V6(
         std::net::Ipv6Addr::from(arr),
@@ -262,9 +210,9 @@ pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
 #[repr(C, align(16))]
 pub struct AlignedU128(pub u128);
 
-pub fn int_to_bitvec(x: i128) -> BitVec::<u8, Lsb0> {
-    //let mut bv = BitVec::<u8, Lsb0>::new();
-    let mut bv = bitvec![mut u8, Lsb0; 0; 128];
+pub fn int_to_bitvec(x: i128) -> BitVec::<u8, Msb0> {
+    //let mut bv = BitVec::<u8, Msb0>::new();
+    let mut bv = bitvec![mut u8, Msb0; 0; 128];
     bv.store(x);
     bv
 }

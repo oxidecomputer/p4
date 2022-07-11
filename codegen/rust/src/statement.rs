@@ -76,7 +76,7 @@ impl<'a> StatementGenerator<'a> {
 
 
                 if is_header_member(&lval, self.hlir) {
-                    return quote!{ #lhs.copy_from_bitslice(#rhs.as_bitslice()); }
+                    return quote!{ #lhs = #rhs.clone(); }
                 }
 
                 let rhs = if rhs_ty != &name_info.ty {
@@ -445,7 +445,7 @@ impl<'a> StatementGenerator<'a> {
                 //TODO: to_bitvec is bad here, copying on data path
                 selector_components.push(quote!{
                     p4rs::bitvec_to_biguint(
-                        &#(#lvref).*.as_ref().unwrap().to_bitvec()
+                        &#(#lvref).*
                     )
                 });
             } else {

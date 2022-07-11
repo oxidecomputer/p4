@@ -4,7 +4,6 @@ use p4::ast::{
 use p4::hlir::Hlir;
 use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
-use crate::is_header_member;
 
 pub(crate) struct ExpressionGenerator<'a> {
     hlir: &'a Hlir,
@@ -36,27 +35,6 @@ impl<'a> ExpressionGenerator<'a> {
                 let lhs_tks = self.generate_expression(lhs.as_ref());
                 let op_tks = self.generate_binop(*op);
                 let rhs_tks = self.generate_expression(rhs.as_ref());
-                let rhs_tks = match &lhs.kind {
-                    ExpressionKind::Lvalue(lhs_lval) => {
-                        if is_header_member(lhs_lval, self.hlir) {
-                            match &rhs.kind {
-                                ExpressionKind::Lvalue(rhs_lval) => {
-                                    if is_header_member(rhs_lval, self.hlir) {
-                                        rhs_tks
-                                    } else {
-                                        quote!{ &#rhs_tks }
-                                    }
-                                }
-                                _ => {
-                                    quote!{ &#rhs_tks }
-                                }
-                            }
-                        } else {
-                            rhs_tks
-                        }
-                    }
-                    _ => {rhs_tks}
-                };
                 let mut ts = TokenStream::new();
                 ts.extend(lhs_tks);
                 ts.extend(op_tks);
@@ -95,13 +73,13 @@ impl<'a> ExpressionGenerator<'a> {
 
         if width <= 8 {
             let v = value as u8;
-            return quote! { #v.view_bits::<Lsb0>().to_bitvec() }
+            return quote! { #v.view_bits::<Msb0>().to_bitvec() }
         }
         else if width <= 16 {
             let v = value as u16;
             return quote! { 
                 {
-                    let mut x = bitvec![mut u8, Lsb0; 0; 16];
+                    let mut x = bitvec![mut u8, Msb0; 0; 16];
                     x.store(#v);
                     x
                 }
@@ -111,7 +89,7 @@ impl<'a> ExpressionGenerator<'a> {
             let v = value as u32;
             return quote! { 
                 {
-                    let mut x = bitvec![mut u8, Lsb0; 0; 32];
+                    let mut x = bitvec![mut u8, Msb0; 0; 32];
                     x.store(#v);
                     x
                 }
@@ -121,7 +99,7 @@ impl<'a> ExpressionGenerator<'a> {
             let v = value as u64;
             return quote! { 
                 {
-                    let mut x = bitvec![mut u8, Lsb0; 0; 64];
+                    let mut x = bitvec![mut u8, Msb0; 0; 64];
                     x.store(#v);
                     x
                 }
@@ -131,7 +109,7 @@ impl<'a> ExpressionGenerator<'a> {
             let v = value as u128;
             return quote! {
                 {
-                    let mut x = bitvec![mut u8, Lsb0; 0; 128];
+                    let mut x = bitvec![mut u8, Msb0; 0; 128];
                     x.store(#v);
                     x
                 }
@@ -169,7 +147,9 @@ impl<'a> ExpressionGenerator<'a> {
         ));
 
         match name_info.decl {
-            DeclarationInfo::HeaderMember => quote!{ #lvalue.as_mut().unwrap() },
+            DeclarationInfo::HeaderMember => quote!{
+                #lvalue
+            },
             _ => lvalue
         }
     }

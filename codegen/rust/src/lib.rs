@@ -139,9 +139,9 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
         Type::Error => todo!("generate error type"),
         Type::Bit(_size) => {
             if header_member {
-                quote!{ BitSlice<u8, Lsb0> }
+                quote!{ BitVec<u8, Msb0> }
             } else {
-                quote!{ BitVec<u8, Lsb0> }
+                quote!{ BitVec<u8, Msb0> }
             }
         }
         Type::Int(_size) => todo!("generate int type"),
@@ -167,56 +167,6 @@ fn type_size(ty: &Type) -> usize {
         Type::UserDefined(_name) => todo!("generate user defined type size"),
         Type::ExternFunction => { todo!("type size for extern function"); }
         Type::Table => { todo!("type size for table"); }
-    }
-}
-
-fn type_lifetime(ast: &AST, ty: &Type) -> TokenStream {
-    if requires_lifetime(ast, ty) {
-        quote! {<'a>}
-    } else {
-        quote! {}
-    }
-}
-
-fn requires_lifetime(ast: &AST, ty: &Type) -> bool {
-    match ty {
-        Type::Bool
-        | Type::Error
-        | Type::Bit(_)
-        | Type::Int(_)
-        | Type::Varbit(_)
-        | Type::String => {
-            return false;
-        }
-        Type::UserDefined(typename) => {
-            if let Some(_) = ast.get_header(typename) {
-                return true;
-            }
-            if let Some(s) = ast.get_struct(typename) {
-                for m in &s.members {
-                    if requires_lifetime(ast, &m.ty) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-            if let Some(_x) = ast.get_extern(typename) {
-                //TODO this should be determined from the packet_in definition?
-                //Externs are strange like this in the sense that they are
-                //platform specific. Since we are in the Rust platform specific
-                //code generation code here, perhaps this hard coding is ok.
-                if typename == "packet_in" {
-                    return true;
-                }
-                if typename == "packet_out" {
-                    return true;
-                }
-                return false;
-            }
-            return false;
-        }
-        Type::ExternFunction => { todo!("lifetime for extern function"); }
-        Type::Table => { todo!("lifetime for table"); }
     }
 }
 

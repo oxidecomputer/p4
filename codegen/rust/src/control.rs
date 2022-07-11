@@ -1,7 +1,6 @@
 use crate::{
     Context,
     rust_type,
-    type_lifetime,
     try_extract_prefix_len,
     statement::{StatementGenerator, StatementContext},
     expression::ExpressionGenerator,
@@ -46,7 +45,7 @@ impl<'a> ControlGenerator<'a> {
                 self.ctx.functions.insert(
                     name.to_string(),
                     quote! {
-                        pub fn #name<'a>() -> #type_tokens {
+                        pub fn #name() -> #type_tokens {
                             #table_tokens
                         }
                     },
@@ -81,7 +80,7 @@ impl<'a> ControlGenerator<'a> {
             self.ctx.functions.insert(
                 name.to_string(),
                 quote! {
-                    pub fn #name<'a>(#(#params),*) {
+                    pub fn #name(#(#params),*) {
                         #apply_body
                     }
                 },
@@ -103,19 +102,18 @@ impl<'a> ControlGenerator<'a> {
                         Some(_udt) => {
                             let name = format_ident!("{}", arg.name);
                             let ty = rust_type(&arg.ty, false, 0);
-                            let lifetime = type_lifetime(self.ast, &arg.ty);
                             match &arg.direction {
                                 Direction::Out | Direction::InOut => {
                                     params.push(quote! {
-                                        #name: &mut #ty #lifetime 
+                                        #name: &mut #ty
                                     });
-                                    types.push(quote! { &mut #ty #lifetime });
+                                    types.push(quote! { &mut #ty });
                                 }
                                 _ => {
                                     params.push(quote! { 
-                                        #name: &#ty #lifetime 
+                                        #name: &#ty
                                     });
-                                    types.push(quote! { &#ty #lifetime });
+                                    types.push(quote! { &#ty });
                                 }
                             }
                         }
@@ -191,7 +189,7 @@ impl<'a> ControlGenerator<'a> {
         self.ctx.functions.insert(
             name.to_string(),
             quote! {
-                pub fn #name<'a>(#(#params),*) {
+                pub fn #name(#(#params),*) {
                     #body
                 }
             },
@@ -316,7 +314,7 @@ impl<'a> ControlGenerator<'a> {
                                 if *n <= 8 {
                                     let v = *v as u8;
                                     action_fn_args.push(quote!{
-                                        #v.view_bits::<Lsb0>().to_bitvec()
+                                        #v.view_bits::<Msb0>().to_bitvec()
                                     });
                                 }
                             }
