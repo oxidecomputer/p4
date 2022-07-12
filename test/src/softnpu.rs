@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::thread::spawn;
 use xfr::{RingConsumer, RingProducer};
 use bitvec::prelude::*;
+use colored::*;
 
 /*
 mod p4 {
@@ -166,7 +167,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                     port: 0u8.view_bits::<Msb0>().to_bitvec(),
                 };
 
-                println!("begin");
+                println!("{}", "begin".green());
 
                 // run the parser block
                 let accept = parse(&mut pkt, &mut header);
@@ -189,7 +190,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                     parsed_size += ipv6_t::size() >> 3;
                 }
 
-                println!("parser accepted");
+                println!("{}", "parser accepted".green());
                 println!("{}", header.dump());
 
                 // run the control block
@@ -208,7 +209,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
 
                 if port == 0 {
                     // indicates no table match
-                    println!("no match");
+                    println!("{}", "no match".red());
                     continue
                 }
                 let eg = &egress[port - 1];
@@ -219,7 +220,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                 // emit headers
                 //
 
-                println!("control pass");
+                println!("{}", "control pass".green());
 
                 let mut out = 0;
 
@@ -235,7 +236,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
 
                 if is_valid {
                     eg.write_at(fp, &content[parsed_size..], out);
-                    println!("payload@{} -> {}", port, out);
+                    //println!("payload@{} -> {}", port, out);
                 }
                 egress_count[port - 1] += 1;
             }

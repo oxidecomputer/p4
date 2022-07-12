@@ -154,7 +154,7 @@ pub fn sort_entries_by_priority<const D: usize, A: Clone>(
 pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     match key {
         Key::Exact(x) => {
-            println!("{:x} =?= {:x}", selector, x);
+            //println!("{:x} =?= {:x}", selector, x);
             selector == x
         }
         Key::Range(begin, end) => {

@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::net::Ipv6Addr;
 use xfr::{ring, FrameBuffer};
 use pnet::packet::ipv6::MutableIpv6Packet;
+use colored::*;
 
 const R: usize = 1024;
 const N: usize = 4096;
@@ -184,22 +185,37 @@ fn v6_pkt<'a>(
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    println!("{:#?}", pkt);
-    println!("phy 1 !!! {}", String::from_utf8_lossy(&frame[54..]));
+    let dump = format!(
+        "{:#?} | {}", 
+        pkt,
+        String::from_utf8_lossy(&frame[54..]),
+    );
+    println!("[phy 1] {}", dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    println!("{:#?}", pkt);
-    println!("phy 2 !!! {}", String::from_utf8_lossy(&frame[54..]));
+    let dump = format!(
+        "{:#?} | {}", 
+        pkt,
+        String::from_utf8_lossy(&frame[54..]),
+    );
+    println!("[phy 2] {}", dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
     let sc = &frame[14..35];
-    println!("{:#?}", pkt);
-    println!("{:x?}", sc);
-    println!("phy 3 !!! {}", String::from_utf8_lossy(&frame[75..]));
+    //println!("{:#?}", pkt);
+    //println!("{:x?}", sc);
+    //println!("phy 3 !!! {}", String::from_utf8_lossy(&frame[75..]));
+    let dump = format!(
+        "{:#?} | {:x?} | {}", 
+        pkt,
+        sc,
+        String::from_utf8_lossy(&frame[75..]),
+    );
+    println!("[phy 3] {}", dump.dimmed());
 }
