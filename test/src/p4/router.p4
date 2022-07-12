@@ -73,7 +73,7 @@ parser parse(
 
     state sidecar {
         pkt.extract(headers.sidecar);
-        if (headers.sidecar.sc_ether_type == 16w0x0901) {
+        if (headers.sidecar.sc_ether_type == 16w0x86dd) {
             transition ipv6;
         }
         transition reject;

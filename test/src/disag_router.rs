@@ -86,22 +86,30 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let mac4 = [0x01, 0xde, 0xde, 0x01, 0x70, 0x1d];
 
     let p = b"do you know the muffin man?";
-    write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip2, mac1, mac2);
+    write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip2, mac1, mac2, None);
 
 
     let p = b"the muffin man?";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
+    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1, None);
 
     let p = b"the muffin man!";
-    write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip3, mac1, mac3);
+    write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip3, mac1, mac3, None);
 
     let p = b"why yes";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip4, mac2, mac4);
+    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip4, mac2, mac4, None);
 
-    //let p = b"i know the muffin man";
-    //write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
+
+    let p = b"i know the muffin man";
+    let mut sc = [0u8; 21];
+    sc[0] = 1;
+    sc[1] = 3;
+    sc[2] = 2;
+    sc[3] = 0xdd;
+    sc[4] = 0x86;
+    write(&phy3, 101, 1701, p.len(), p, 74, 32, ip3, ip2, mac3, mac2, Some(sc));
+
     //let p = b"the muffin man is me!!!";
-    //write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1);
+    //write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1, None);
 
     sleep(Duration::from_secs(2));
 
@@ -121,10 +129,45 @@ fn write(
     dst: Ipv6Addr,
     smac: [u8;6],
     dmac: [u8;6],
+    sc: Option<[u8;21]>,
 ) {
     let mut data = [0u8; 256];
-    let et = 0x86ddu16.to_be();
-    let mut pkt = MutableIpv6Packet::new(&mut data).unwrap();
+    let (index, et) = match sc {
+        Some(sc) => {
+            println!("SC: {:x?}", sc);
+            data[..21].copy_from_slice(&sc);
+            (21, 0x0901u16.to_be())
+        }
+        None => (0, 0x86ddu16.to_be())
+    };
+    let _pkt = v6_pkt(
+        &mut data[index..], 
+        traffic_class,
+        flow_label,
+        payload_length,
+        payload,
+        next_header,
+        hop_limit,
+        src,
+        dst,
+    );
+    //println!("SEND {:x?}", data);
+    phy.write(&[Frame::new(smac, dmac, et, &data)]).expect("phy write");
+}
+
+#[cfg(test)]
+fn v6_pkt<'a>(
+    data: &'a mut [u8],
+    traffic_class: u8,
+    flow_label: u32,
+    payload_length: usize,
+    payload: &[u8],
+    next_header: u8,
+    hop_limit: u8,
+    src: Ipv6Addr,
+    dst: Ipv6Addr,
+) -> MutableIpv6Packet<'a> {
+    let mut pkt = MutableIpv6Packet::new(data).unwrap();
     pkt.set_version(6);
     pkt.set_traffic_class(traffic_class);
     pkt.set_flow_label(flow_label);
@@ -134,8 +177,7 @@ fn write(
     pkt.set_hop_limit(hop_limit);
     pkt.set_source(src);
     pkt.set_destination(dst);
-    //println!("SEND {:x?}", data);
-    phy.write(&[Frame::new(smac, dmac, et, &data)]).expect("phy write");
+    pkt
 }
 
 #[cfg(test)]
