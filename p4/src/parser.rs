@@ -471,7 +471,9 @@ impl<'a> Parser<'a> {
                     result.statements.push(Statement::Constant(c));
                 }
 
-                lexer::Kind::Identifier(_) | lexer::Kind::If => {
+                lexer::Kind::Identifier(_) |
+                lexer::Kind::If |
+                lexer::Kind::Return => {
                     // push the identifier token into the backlog and run the
                     // statement parser
                     self.backlog.push(token);
@@ -1382,11 +1384,24 @@ impl<'a, 'b> StatementParser<'a, 'b> {
     pub fn run(&mut self) -> Result<Statement, Error> {
 
         let token = self.parser.next_token()?;
-        if token.kind == lexer::Kind::If {
-            let mut iep = IfElseParser::new(self.parser);
-            return iep.run();
-        } else {
-            self.parser.backlog.push(token);
+        match token.kind {
+            lexer::Kind::If => {
+                let mut iep = IfElseParser::new(self.parser);
+                return iep.run();
+            } 
+            lexer::Kind::Return => {
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::Semicolon {
+                    return Ok(Statement::Return(None))
+                } else {
+                    self.parser.backlog.push(token.clone());
+                    let mut ep = ExpressionParser::new(self.parser);
+                    return Ok(Statement::Return(Some(ep.run()?)));
+                }
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
         }
 
         // wrap the identifier as an lvalue, consuming any dot
@@ -1507,26 +1522,42 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
         let token = self.parser.next_token()?;
         let lhs = match token.kind {
             lexer::Kind::TrueLiteral => {
-                Expression::new(token.clone(), ExpressionKind::BoolLit(true))
+                Expression::new(
+                    token.clone(),
+                    ExpressionKind::BoolLit(true)
+                )
             }
             lexer::Kind::FalseLiteral => {
-                Expression::new(token.clone(), ExpressionKind::BoolLit(false))
+                Expression::new(
+                    token.clone(), 
+                    ExpressionKind::BoolLit(false)
+                )
             }
             lexer::Kind::IntLiteral(value) => {
-                Expression::new(token.clone(), ExpressionKind::IntegerLit(value))
+                Expression::new(
+                    token.clone(),
+                    ExpressionKind::IntegerLit(value)
+                )
             }
             lexer::Kind::BitLiteral(width, value) => {
-                Expression::new(token.clone(), ExpressionKind::BitLit(width, value))
+                Expression::new(
+                    token.clone(),
+                    ExpressionKind::BitLit(width, value)
+                )
             }
             lexer::Kind::SignedLiteral(width, value) => {
-                Expression::new(token.clone(), ExpressionKind::SignedLit(width, value))
+                Expression::new(
+                    token.clone(),
+                    ExpressionKind::SignedLit(width, value)
+                )
             }
             lexer::Kind::Identifier(_) => {
                 self.parser.backlog.push(token.clone());
                 let lval = self.parser.parse_lvalue()?;
 
-                // check for index
                 let token = self.parser.next_token()?;
+
+                // check for index
                 if token.kind == lexer::Kind::SquareOpen {
                     let mut xp = ExpressionParser::new(self.parser);
                     let xpr = xp.run()?;
@@ -1551,7 +1582,20 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                         self.parser.expect_token(lexer::Kind::SquareClose)?;
                         Expression::new(token, ExpressionKind::Index(lval, xpr))
                     }
-                } else {
+                }
+
+                // check for call
+                else if token.kind == lexer::Kind::ParenOpen {
+                    self.parser.backlog.push(token.clone());
+                    let args = self.parser.parse_expr_parameters()?;
+                    Expression::new(token, ExpressionKind::Call(Call{
+                        lval,
+                        args,
+                    }))
+                }
+
+                // if it's not an index and it's not a call, it's an lvalue
+                else {
                     self.parser.backlog.push(token.clone());
                     Expression::new(token, ExpressionKind::Lvalue(lval))
                 }

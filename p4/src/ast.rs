@@ -153,6 +153,7 @@ pub enum Type {
     UserDefined(String),
     ExternFunction, //TODO actual signature
     Table,
+    Void,
 }
 
 impl fmt::Display for Type {
@@ -167,6 +168,7 @@ impl fmt::Display for Type {
             Type::UserDefined(name) => write!(f, "{}", name),
             Type::ExternFunction => write!(f, "extern function"),
             Type::Table => write!(f, "table"),
+            Type::Void => write!(f, "void"),
         }
     }
 }
@@ -228,6 +230,7 @@ pub enum ExpressionKind {
     Binary(Box<Expression>, BinOp, Box<Expression>),
     Index(Lvalue, Box<Expression>),
     Slice(Box<Expression>, Box<Expression>),
+    Call(Call),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -597,6 +600,7 @@ pub enum Statement {
     Variable(Variable),
     Constant(Constant),
     Transition(Transition),
+    Return(Option<Box<Expression>>),
 
     // TODO ...
 }

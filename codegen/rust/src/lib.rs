@@ -153,6 +153,7 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
         }
         Type::ExternFunction => { todo!("rust type for extern function"); }
         Type::Table => { todo!("rust type for table"); }
+        Type::Void => { quote!{ () } }
     }
 }
 
@@ -190,6 +191,7 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         }
         Type::ExternFunction => { todo!("type size for extern function"); }
         Type::Table => { todo!("type size for table"); }
+        Type::Void => { 0 }
     }
 }
 

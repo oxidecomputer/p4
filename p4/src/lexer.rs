@@ -33,6 +33,7 @@ pub enum Kind {
     Extern,
     If,
     Else,
+    Return,
 
     //
     // types
@@ -156,6 +157,7 @@ impl fmt::Display for Kind {
             Kind::Extern => write!(f, "keyword extern"),
             Kind::If => write!(f, "keyword if"),
             Kind::Else => write!(f, "keyword else"),
+            Kind::Return => write!(f, "keyword return"),
 
             //
             // types
@@ -373,6 +375,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("else", Kind::Else) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("return", Kind::Return) {
             Some(t) => return Ok(t),
             None => {}
         }

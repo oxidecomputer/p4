@@ -19,6 +19,7 @@ pub fn resolve_lvalue(
         Type::String => root.clone(),
         Type::ExternFunction => root.clone(),
         Type::Table => root.clone(),
+        Type::Void => root.clone(),
         Type::UserDefined(name) => {
             if lval.degree() == 1 {
                 root.clone()

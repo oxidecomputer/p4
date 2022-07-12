@@ -63,10 +63,31 @@ impl<'a> ExpressionGenerator<'a> {
                     [#l..#r]
                 }
             }
+            ExpressionKind::Call(call) => {
+                let lv: Vec<TokenStream> = call.lval
+                    .name
+                    .split(".")
+                    .map(|x| format_ident!("{}", x))
+                    .map(|x| quote! { #x })
+                    .collect();
+
+                let lvalue = quote!{ #(#lv).* };
+                let mut args = Vec::new();
+                for arg in &call.args {
+                    args.push(self.generate_expression(&arg));
+                }
+                quote!{
+                    #lvalue(#(#args),*)
+                }
+            }
         }
     }
 
-    pub(crate) fn generate_bit_literal(&self, width: u16, value: u128) -> TokenStream {
+    pub(crate) fn generate_bit_literal(
+        &self,
+        width: u16,
+        value: u128
+    ) -> TokenStream {
         assert!(width <= 128);
 
         let width = width as usize;

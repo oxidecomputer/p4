@@ -213,6 +213,15 @@ fn check_statement_lvalues(
         Statement::Transition(_transition) => {
             //TODO
         }
+        Statement::Return(xpr) => {
+            if let Some(xpr) = xpr {
+                diags.extend(&check_expression_lvalues(
+                    xpr.as_ref(),
+                    ast,
+                    &names
+                ));
+            }
+        }
     }
     diags
 }
@@ -375,6 +384,18 @@ fn check_lvalue(
                     level: Level::Error,
                     message: format!(
                         "type table does not have a member {}",
+                        parts[1]
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::Void => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type void does not have a member {}",
                         parts[1]
                     ),
                     token: lval.token.clone(),

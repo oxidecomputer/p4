@@ -111,6 +111,11 @@ impl<'a> HlirGenerator<'a> {
                 Statement::Transition(_t) => {
                     //TODO
                 }
+                Statement::Return(xpr) => {
+                    if let Some(xpr) = xpr {
+                        self.expression(xpr.as_ref(), names);
+                    }
+                }
             }
         }
     }
@@ -161,6 +166,17 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
+            ExpressionKind::Call(call) => {
+                self.lvalue(&call.lval.pop_right(), names)?;
+                for arg in &call.args {
+                    self.expression(arg.as_ref(), names);
+                }
+                //TODO less special case-y?
+                Some(match call.lval.leaf() {
+                    "isValid" => Type::Bool,
+                    _ => Type::Void,
+                })
+            }
         }
     }
 
@@ -191,10 +207,19 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
+            Type::Void => {
+                self.diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!("cannot index a void"),
+                    token: lval.token.clone(),
+                });
+                None
+            }
             Type::Bit(width) => {
                 match &xpr.kind {
                     ExpressionKind::Slice(end, begin) => {
-                        let (begin_val, end_val) = self.slice(begin, end, width)?;
+                        let (begin_val, end_val) = 
+                            self.slice(begin, end, width)?;
                         let w = end_val - begin_val + 1;
                         Some(Type::Bit(w as usize))
                     }

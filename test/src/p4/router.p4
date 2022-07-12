@@ -181,11 +181,25 @@ control ingress(
     router() router;
 
     apply {
+
+        //
+        // Check if this is a packet coming from the scrimlet.
+        //
+
+        if (hdr.sidecar.isValid()) {
+            egress.port = hdr.sidecar.sc_egress;
+            hdr.sidecar.setInvalid();
+            return;
+        }
+
+        //
+        // If the packet has a local destination, create the sidecar header and
+        // send it to the scrimlet.
+        //
+
         bool local_dst = false;
         local.apply(hdr, local_dst);
 
-        // if the packet has a local destination, create the sidecar header and
-        // send it to the scrimlet
         if (local_dst) {
             hdr.sidecar.setValid();
 
@@ -197,7 +211,13 @@ control ingress(
 
             // scrimlet port
             egress.port = 3;
-        } else {
+        }
+
+        //
+        // Otherwise route the packet using the L3 routing table.
+        //
+
+        else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.
             if (ingress.port == 8w1) {

@@ -109,6 +109,18 @@ impl<'a> HeaderGenerator<'a> {
                     x
                 }
             }
+
+            impl #name {
+                fn setValid(&mut self) {
+                    self.valid = true;
+                }
+                fn setInvalid(&mut self) {
+                    self.valid = false;
+                }
+                fn isValid(&self) -> bool {
+                    self.valid
+                }
+            }
         });
 
         self.ctx.structs.insert(h.name.clone(), generated);

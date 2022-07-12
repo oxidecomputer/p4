@@ -86,6 +86,12 @@ impl<'a> StatementGenerator<'a> {
                     rhs
                 };
 
+                let rhs = if let Type::Bit(_) = rhs_ty {
+                    quote!{ #rhs.clone() }
+                } else {
+                    rhs
+                };
+
                 if is_rust_reference(&lval, names) {
                     quote!{ *#lhs = #rhs; }
                 } else {
@@ -217,6 +223,15 @@ impl<'a> StatementGenerator<'a> {
                     Transition::Select(_) => {
                         todo!();
                     }
+                }
+            }
+            Statement::Return(xpr) => {
+                let eg = ExpressionGenerator::new(self.hlir);
+                if let Some(xpr) = xpr {
+                    let xp = eg.generate_expression(xpr.as_ref());
+                    quote! { return #xp; }
+                } else {
+                    quote! { return }
                 }
             }
         }
@@ -564,6 +579,7 @@ impl<'a> StatementGenerator<'a> {
             Type::UserDefined(_) => todo!(),
             Type::ExternFunction => todo!(),
             Type::Table => todo!(),
+            Type::Void => todo!(),
         }
     }
 
