@@ -308,6 +308,7 @@ impl<'a> Lexer<'a> {
             });
         }
         self.skip_whitespace();
+        //self.skip_comment();
 
         match self.match_token("#include", Kind::PoundInclude) {
             Some(t) => return Ok(t),

@@ -108,8 +108,9 @@ fn disag_router() -> Result<(), anyhow::Error> {
     sc[4] = 0x86;
     write(&phy3, 101, 1701, p.len(), p, 74, 32, ip3, ip2, mac3, mac2, Some(sc));
 
-    //let p = b"the muffin man is me!!!";
-    //write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1, None);
+    sc[2] = 1;
+    let p = b"the muffin man is me!!!";
+    write(&phy3, 101, 1701, p.len(), p, 74, 32, ip3, ip1, mac3, mac1, Some(sc));
 
     sleep(Duration::from_secs(2));
 

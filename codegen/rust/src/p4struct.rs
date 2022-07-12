@@ -26,9 +26,13 @@ impl<'a> StructGenerator<'a> {
         let mut members = Vec::new();
         let mut valid_member_size = Vec::new();
         let mut to_bitvec_stmts = Vec::new();
+        let mut dump_statements = Vec::new();
+        let fmt = "{}: {}\n".repeat(s.members.len());
+        let fmt = fmt.trim();
 
         for member in &s.members {
             let name = format_ident!("{}", member.name);
+            let name_s = &member.name;
             match &member.ty {
                 Type::UserDefined(ref typename) => {
                     if let Some(_) = self.ast.get_header(typename) {
@@ -52,6 +56,11 @@ impl<'a> StructGenerator<'a> {
                             }
                         });
 
+                        dump_statements.push(quote! {
+                            #name_s.blue(),
+                            self.#name.dump()
+                        });
+
                     } else {
                         panic!(
                             "Struct member {:#?} undefined in {:#?}",
@@ -67,6 +76,10 @@ impl<'a> StructGenerator<'a> {
                 }
             }
         }
+
+        let dump = quote!{
+            format!(#fmt, #(#dump_statements),*)
+        };
 
         let name = format_ident!("{}", s.name);
 
@@ -91,6 +104,10 @@ impl<'a> StructGenerator<'a> {
                         let mut off = 0;
                         #(#to_bitvec_stmts)*
                         x
+                    }
+
+                    pub fn dump(&self) -> String {
+                        #dump
                     }
                 }
             })

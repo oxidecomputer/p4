@@ -110,11 +110,9 @@ control local(
         default_action = nonlocal;
         const entries = {
             //fe80::1de1:deff:fe01:701c
-            //128w0xfe800000000000001de1defffe01701c : local();
             128w0x1c7001feffdee11d00000000000080fe : local();
 
             //fe80::1de1:deff:fe01:701d
-            //128w0xfe800000000000001de1defffe01701d : local();
             128w0x1d7001feffdee11d00000000000080fe : local();
         }
     }
@@ -187,9 +185,15 @@ control ingress(
         //
 
         if (hdr.sidecar.isValid()) {
-            egress.port = hdr.sidecar.sc_egress;
+            // uncomment the following to direct packets based on sidecar header
+            // data
+            // ----
+            // egress.port = hdr.sidecar.sc_egress;
+            // return;
+
+            // decap the sidecar header and process the packet normally from
+            // here
             hdr.sidecar.setInvalid();
-            return;
         }
 
         //

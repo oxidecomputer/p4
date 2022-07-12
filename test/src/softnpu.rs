@@ -190,6 +190,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                 }
 
                 println!("parser accepted");
+                println!("{}", header.dump());
 
                 // run the control block
                 control(

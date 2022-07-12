@@ -57,9 +57,13 @@ impl<'a> HeaderGenerator<'a> {
         let mut member_values = Vec::new();
         let mut set_statements = Vec::new();
         let mut to_bitvec_statements = Vec::new();
+        let mut dump_statements = Vec::new();
+        let fmt = "{} ".repeat(h.members.len()*2);
+        let fmt = fmt.trim();
         let mut offset = 0;
         for member in &h.members {
             let name = format_ident!("{}", member.name);
+            let name_s = &member.name;
             let size = type_size(&member.ty, self.ast);
             member_values.push(quote! {
                 #name: BitVec::<u8, Msb0>::default()
@@ -71,8 +75,16 @@ impl<'a> HeaderGenerator<'a> {
             to_bitvec_statements.push(quote! {
                 x[#offset..#end] |= &self.#name
             });
+            dump_statements.push(quote! {
+                #name_s.cyan(),
+                p4rs::dump_bv(&self.#name)
+            });
+
             offset += size;
         }
+        let dump = quote!{
+            format!(#fmt, #(#dump_statements),*)
+        };
 
         //TODO perhaps we should just keep the whole header as one bitvec so we
         //don't need to construct a consolidated bitvec like to_bitvec does?
@@ -119,6 +131,9 @@ impl<'a> HeaderGenerator<'a> {
                 }
                 fn isValid(&self) -> bool {
                     self.valid
+                }
+                fn dump(&self) -> String {
+                    #dump
                 }
             }
         });

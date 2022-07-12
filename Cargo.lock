@@ -395,6 +395,7 @@ name = "p4-macro-test"
 version = "0.1.0"
 dependencies = [
  "bitvec",
+ "colored",
  "p4-macro",
  "p4rs",
 ]
@@ -417,6 +418,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitvec",
+ "colored",
  "num",
  "p4-macro",
  "p4rs",
@@ -429,6 +431,7 @@ name = "p4rs"
 version = "0.1.0"
 dependencies = [
  "bitvec",
+ "colored",
  "num",
  "slog",
  "slog-async",

@@ -100,6 +100,7 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     // start with use statements
     let mut tokens = quote! {
         use p4rs::*;
+        use colored::*;
         use bitvec::prelude::*;
     };
 
