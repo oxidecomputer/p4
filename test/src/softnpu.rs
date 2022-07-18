@@ -7,7 +7,7 @@ use crate::disag_router::{
     ipv6_t, ethernet_t, headers_t, sidecar_t, EgressMetadata, IngressMetadata
 };
 
-use p4rs::{bit, packet_in, Header};
+use p4rs::{packet_in, Header};
 use std::collections::HashMap;
 use std::thread::spawn;
 use xfr::{RingConsumer, RingProducer};
