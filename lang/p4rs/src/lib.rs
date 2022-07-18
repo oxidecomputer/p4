@@ -76,6 +76,21 @@ pub struct packet_in<'a> {
     pub index: usize,
 }
 
+pub struct packet_out<'a> {
+    pub header_data: Vec<u8>,
+    pub payload_data: &'a [u8],
+}
+
+pub trait Pipeline {
+    /// Process a packet for the specified port optionally producing an output
+    /// packet and output port number.
+    fn process_packet<'a>(
+        &mut self,
+        port: u8, 
+        pkt: packet_in<'a>,
+    ) -> Option<(packet_out<'a>, u8)>;
+}
+
 /// A fixed length header trait.
 pub trait Header {
     fn new() -> Self;
