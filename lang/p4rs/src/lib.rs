@@ -1,18 +1,16 @@
 #![allow(incomplete_features)]
 #![allow(non_camel_case_types)]
-#![feature(generic_const_exprs)]
-#![feature(saturating_int_impl)]
 
 use std::fmt;
 use std::ptr::slice_from_raw_parts_mut;
 
-pub use bits::bit;
-pub use bits::bit_slice;
+//pub use bits::bit;
+//pub use bits::bit_slice;
 pub use error::TryFromSliceError;
 
 use bitvec::prelude::*;
 
-pub mod bits;
+//pub mod bits;
 pub mod error;
 //pub mod hicuts;
 //pub mod rice;
@@ -76,6 +74,21 @@ pub struct packet_in<'a> {
     /// Only data after `index` is eligble for extraction. Extraction is always
     /// for contiguous segments of the underlying packet ring data.
     pub index: usize,
+}
+
+pub struct packet_out<'a> {
+    pub header_data: Vec<u8>,
+    pub payload_data: &'a [u8],
+}
+
+pub trait Pipeline {
+    /// Process a packet for the specified port optionally producing an output
+    /// packet and output port number.
+    fn process_packet<'a>(
+        &mut self,
+        port: u8, 
+        pkt: packet_in<'a>,
+    ) -> Option<(packet_out<'a>, u8)>;
 }
 
 /// A fixed length header trait.
