@@ -210,6 +210,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                 if port == 0 {
                     // indicates no table match
                     println!("{}", "no match".red());
+                    println!("{}", "---".dimmed());
                     continue
                 }
                 let eg = &egress[port - 1];
@@ -221,6 +222,7 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
                 //
 
                 println!("{}", "control pass".green());
+                println!("{}", "---".dimmed());
 
                 let mut out = 0;
 

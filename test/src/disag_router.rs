@@ -136,7 +136,6 @@ fn write(
     let mut data = [0u8; 256];
     let (index, et) = match sc {
         Some(sc) => {
-            println!("SC: {:x?}", sc);
             data[..21].copy_from_slice(&sc);
             (21, 0x0901u16.to_be())
         }
@@ -190,7 +189,7 @@ fn phy1_egress(frame: &[u8]) {
         pkt,
         String::from_utf8_lossy(&frame[54..]),
     );
-    println!("[phy 1] {}", dump.dimmed());
+    println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
@@ -201,7 +200,7 @@ fn phy2_egress(frame: &[u8]) {
         pkt,
         String::from_utf8_lossy(&frame[54..]),
     );
-    println!("[phy 2] {}", dump.dimmed());
+    println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
@@ -217,5 +216,5 @@ fn phy3_egress(frame: &[u8]) {
         sc,
         String::from_utf8_lossy(&frame[75..]),
     );
-    println!("[phy 3] {}", dump.dimmed());
+    println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
 }
