@@ -16,6 +16,7 @@ use header::HeaderGenerator;
 use p4struct::StructGenerator;
 use parser::ParserGenerator;
 use control::ControlGenerator;
+use pipeline::PipelineGenerator;
 
 mod header;
 mod p4struct;
@@ -23,6 +24,7 @@ mod parser;
 mod control;
 mod statement;
 mod expression;
+mod pipeline;
 
 /// An object for keeping track of state as we generate code.
 #[derive(Default)]
@@ -32,6 +34,9 @@ struct Context {
 
     /// Rust functions we've generated.
     functions: HashMap<String, TokenStream>,
+
+    /// Pipeline structures we've generated.
+    pipelines: HashMap<String, TokenStream>,
 }
 
 pub fn emit(ast: &AST, hlir: &Hlir, filename: &str) -> io::Result<()> {
@@ -92,6 +97,9 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     let mut cg = ControlGenerator::new(ast, hlir, &mut ctx);
     cg.generate();
 
+    let mut pg = PipelineGenerator::new(ast, hlir, &mut ctx);
+    pg.generate();
+
 
     //
     // collect all the tokens we generated into one stream
@@ -112,6 +120,11 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     // functions
     for s in ctx.functions.values() {
         tokens.extend(s.clone());
+    }
+
+    // pipelines
+    for p in ctx.pipelines.values() {
+        tokens.extend(p.clone());
     }
 
     tokens

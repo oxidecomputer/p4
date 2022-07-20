@@ -31,64 +31,81 @@ impl<'a> ControlGenerator<'a> {
 
     pub(crate) fn generate(&mut self) {
         for control in &self.ast.controls {
-            let (mut params, param_types) = self.control_parameters(control);
-
-            for action in &control.actions {
-                self.generate_control_action(control, action);
-            }
-
-            // local tables
-            for table in &control.tables {
-                let (type_tokens, table_tokens) =
-                    self.generate_control_table(control, table, &param_types);
-                let name = format_ident!("{}_table_{}", control.name, table.name);
-                self.ctx.functions.insert(
-                    name.to_string(),
-                    quote! {
-                        pub fn #name() -> #type_tokens {
-                            #table_tokens
-                        }
-                    },
-                );
-                let name = format_ident!("{}", table.name);
-                params.push(quote! {
-                    #name: &#type_tokens
-                });
-            }
-
-            // control instances as variables
-            for v in &control.variables {
-                if let Type::UserDefined(name) = &v.ty {
-                    if let Some(control_inst) = self.ast.get_control(name) {
-                        let (_, param_types) = self.control_parameters(control_inst);
-                        for table in & control_inst.tables {
-                            let n = table.key.len() as usize;
-                            let table_type = quote! {
-                                p4rs::table::Table::<#n, fn(#(#param_types),*)> 
-                            };
-                            let name = format_ident!("{}", v.name);
-                            params.push(quote! {
-                                #name: &#table_type
-                            });
-                        }
-                    }
-                }
-            }
-
-            let name = format_ident!("{}_apply", control.name);
-            let apply_body = self.generate_control_apply_body(control);
-            self.ctx.functions.insert(
-                name.to_string(),
-                quote! {
-                    pub fn #name(#(#params),*) {
-                        #apply_body
-                    }
-                },
-            );
+            self.generate_control(control);
         }
     }
 
-    fn control_parameters(
+    pub(crate) fn generate_control(
+        &mut self,
+        control: &Control,
+    ) -> (TokenStream, TokenStream) {
+        let (mut params, param_types) = self.control_parameters(control);
+
+        for action in &control.actions {
+            self.generate_control_action(control, action);
+        }
+
+        // local tables
+        for table in &control.tables {
+            let (type_tokens, table_tokens) =
+                self.generate_control_table(control, table, &param_types);
+
+            let name = format_ident!(
+                "{}_table_{}",
+                control.name,
+                table.name
+            );
+            self.ctx.functions.insert(
+                name.to_string(),
+                quote! {
+                    pub fn #name() -> #type_tokens {
+                        #table_tokens
+                    }
+                },
+            );
+            let name = format_ident!("{}", table.name);
+            params.push(quote! {
+                #name: &#type_tokens
+            });
+        }
+
+        // control instances as variables
+        for v in &control.variables {
+            if let Type::UserDefined(name) = &v.ty {
+                if let Some(control_inst) = self.ast.get_control(name) {
+                    let (_, param_types) = self.control_parameters(control_inst);
+                    for table in & control_inst.tables {
+                        let n = table.key.len() as usize;
+                        let table_type = quote! {
+                            p4rs::table::Table::<#n, fn(#(#param_types),*)> 
+                        };
+                        let name = format_ident!("{}", v.name);
+                        params.push(quote! {
+                            #name: &#table_type
+                        });
+                    }
+                }
+            }
+        }
+
+        let name = format_ident!("{}_apply", control.name);
+        let apply_body = self.generate_control_apply_body(control);
+        let sig = quote! {
+            (#(#params),*)
+        };
+        self.ctx.functions.insert(
+            name.to_string(),
+            quote! {
+                pub fn #name #sig {
+                    #apply_body
+                }
+            },
+        );
+
+        (sig, apply_body)
+    }
+
+    pub(crate) fn control_parameters(
         &mut self,
         control: &Control,
     ) -> (Vec<TokenStream>, Vec<TokenStream>) {
@@ -196,7 +213,7 @@ impl<'a> ControlGenerator<'a> {
         );
     }
 
-    fn generate_control_table(
+    pub(crate) fn generate_control_table(
         &mut self,
         control: &Control,
         table: &Table,

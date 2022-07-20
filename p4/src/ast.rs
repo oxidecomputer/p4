@@ -77,6 +77,15 @@ impl AST {
         None
     }
 
+    pub fn get_parser(&self, name: &str) -> Option<&Parser> {
+        for p in &self.parsers {
+            if p.name == name {
+                return Some(p)
+            }
+        }
+        None
+    }
+
     pub fn get_user_defined_type(&self, name: &str) -> Option<UserDefinedType> {
         if let Some(user_struct) = self.get_struct(name) {
             return Some(UserDefinedType::Struct(user_struct));
@@ -451,6 +460,15 @@ impl Parser {
             });
         }
         names
+    }
+
+    pub fn get_start_state(&self) -> Option<&State> {
+        for s in &self.states {
+            if s.name == "start" {
+                return Some(s)
+            }
+        }
+        None
     }
 }
 

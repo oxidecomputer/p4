@@ -33,11 +33,11 @@ impl<'a> ParserGenerator<'a> {
         }
     }
 
-    fn generate_state_function(
+    pub(crate) fn generate_state_function(
         &mut self,
         parser: &Parser,
         state: &State,
-    ) {
+    ) -> (TokenStream, TokenStream) {
         let function_name = format_ident!("{}_{}", parser.name, state.name);
 
         let mut args = Vec::new();
@@ -54,13 +54,20 @@ impl<'a> ParserGenerator<'a> {
 
         let body = self.generate_state_function_body(parser, state);
 
+        let signature = quote! {
+            (#(#args),*) -> bool
+        };
+
         let function = quote! {
-            pub fn #function_name(#(#args),*) -> bool {
+            pub fn #function_name #signature {
                 #body
             }
         };
 
         self.ctx.functions.insert(function_name.to_string(), function);
+
+        (signature, body)
+        
     }
 
     fn generate_state_function_body(
