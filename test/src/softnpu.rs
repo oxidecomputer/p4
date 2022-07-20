@@ -22,103 +22,6 @@ mod p4 {
 
 //p4_macro::use_p4!("p4/examples/codegen/softnpu.p4");
 
-struct SoftNPUPipeline {
-    local: p4rs::table::Table<
-        1usize,
-        fn(&mut headers_t, &mut bool)
-    >,
-    router: p4rs::table::Table<
-        1usize,
-        fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
-    >,
-    parse: fn(pkt: &packet_in, headers: &mut headers_t) -> bool,
-    control: fn(
-        hdr: &mut headers_t,
-        ingress: &mut IngressMetadata,
-        egress: &mut EgressMetadata,
-        local: &p4rs::table::Table<
-            1usize,
-            fn(&mut headers_t, &mut bool)
-        >,
-        router: &p4rs::table::Table<
-            1usize,
-            fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
-        >,
-    ),
-}
-
-// XXX: generate this
-impl p4rs::Pipeline for SoftNPUPipeline {
-    fn process_packet<'a>(
-        &mut self,
-        port: u8,
-        pkt: packet_in<'a>,
-    ) -> Option<(packet_out<'a>, u8)> {
-
-        let mut header = headers_t {
-            ethernet: ethernet_t::new(),
-            sidecar: sidecar_t::new(),
-            ipv6: ipv6_t::new(),
-        };
-
-        let mut ingress_metadata = IngressMetadata {
-            //TODO how to handle more than u8::MAX ports?
-            port: port.view_bits::<Msb0>().to_bitvec(),
-        };
-
-        // to be filled in by pipeline
-        let mut egress_metadata = EgressMetadata {
-            port: 0u8.view_bits::<Msb0>().to_bitvec(),
-        };
-
-        println!("{}", "begin".green());
-
-        // run the parser block
-        let accept = (self.parse)(&pkt, &mut header);
-        if !accept {
-            // drop the packet
-            println!("parser drop");
-            return None
-        }
-        println!("{}", "parser accepted".green());
-        println!("{}", header.dump());
-
-        // TODO generate require a parsed_size method on header trait
-        // and generate impls.
-        let mut parsed_size = 0;
-        if header.ethernet.valid {
-            parsed_size += ethernet_t::size() >> 3;
-        }
-        if header.sidecar.valid {
-            parsed_size += sidecar_t::size() >> 3;
-        }
-        if header.ipv6.valid {
-            parsed_size += ipv6_t::size() >> 3;
-        }
-
-        // run the control block
-        (self.control)(
-            &mut header,
-            &mut ingress_metadata,
-            &mut egress_metadata,
-            &self.local,
-            &self.router,
-        );
-
-        // egress port
-        let port = egress_metadata.port.as_raw_slice()[0];
-
-        let bv = header.to_bitvec();
-        let buf = bv.as_raw_slice();
-        let out = packet_out{
-            header_data: buf.to_owned(),
-            payload_data: &pkt.data[parsed_size..],
-        };
-
-        Some((out, port))
-    }
-}
-
 pub struct Phy<const R: usize, const N: usize, const F: usize> {
     index: usize,
     ingress: RingProducer<R, N, F>,
@@ -345,6 +248,78 @@ pub fn run<const R: usize, const N: usize, const F: usize>(
             for (j, n) in egress_count.iter().enumerate() {
                 egress[j].produce(*n).unwrap();
             }
+        }
+    }
+}
+
+pub fn run_pipeline<
+    P: p4rs::Pipeline,
+    const R: usize,
+    const N: usize,
+    const F: usize,
+>(
+    ingress: &[RingConsumer<R, N, F>],
+    egress: &[RingProducer<R, N, F>],
+    pipeline: &mut P
+) {
+    loop {
+
+        // TODO: yes this is a highly suboptimal linear gather-scatter across
+        // each ingress. Will update to something more concurrent eventually.
+        for (i, ig) in ingress.iter().enumerate() {
+
+            // keep track of how many frames we've produced for each egress
+            let mut egress_count = vec![0; egress.len()];
+
+            // keep track of how many frames we've consumed for this ingress
+            let mut frames_in = 0;
+
+            for fp in ig.consumable() {
+                frames_in += 1;
+                let content = ig.read_mut(fp);
+
+                let mut pkt = packet_in::new(content);
+
+                match pipeline.process_packet(i as u8, &mut pkt) {
+                    Some((out_pkt, port)) => {
+
+                        let port = (port - 1) as usize;
+
+                        //
+                        // get frame for packet
+                        //
+                        
+                        let eg = &egress[port as usize];
+                        let mut fps = eg.reserve(1).unwrap();
+                        let fp = fps.next().unwrap();
+
+                        //
+                        // emit headers
+                        //
+                        
+                        eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
+
+                        //
+                        // emit payload
+                        //
+
+                        eg.write_at(
+                            fp,
+                            out_pkt.payload_data, 
+                            out_pkt.header_data.len(),
+                        );
+
+                        egress_count[port] += 1;
+                    }
+                    None => { }
+                }
+            }
+            ig.consume(frames_in).unwrap();
+
+            for (j, n) in egress_count.iter().enumerate() {
+                egress[j].produce(*n).unwrap();
+            }
+
         }
     }
 }

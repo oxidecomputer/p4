@@ -2,15 +2,11 @@
 #![allow(non_camel_case_types)]
 
 use std::fmt;
-use std::ptr::slice_from_raw_parts_mut;
 
-//pub use bits::bit;
-//pub use bits::bit_slice;
 pub use error::TryFromSliceError;
 
 use bitvec::prelude::*;
 
-//pub mod bits;
 pub mod error;
 //pub mod hicuts;
 //pub mod rice;
@@ -63,12 +59,13 @@ impl<'a> std::cmp::PartialEq for Bit<'a, 8> {
 
 impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 
+
 /// Every packet that goes through a P4 pipeline is represented as a `packet_in`
 /// instance. `packet_in` objects wrap an underlying mutable data reference that
 /// is ultimately rooted in a memory mapped region containing a ring of packets.
 pub struct packet_in<'a> {
     /// The underlying data. Owned by an external, memory-mapped packet ring.
-    pub data: &'a mut [u8],
+    pub data: &'a [u8],
 
     /// Extraction index. Everything before `index` has been extracted already.
     /// Only data after `index` is eligble for extraction. Extraction is always
@@ -87,7 +84,7 @@ pub trait Pipeline {
     fn process_packet<'a>(
         &mut self,
         port: u8, 
-        pkt: packet_in<'a>,
+        pkt: &mut packet_in<'a>,
     ) -> Option<(packet_out<'a>, u8)>;
 }
 
@@ -102,18 +99,8 @@ pub trait Header {
     fn to_bitvec(&self) -> BitVec<u8, Msb0>;
 }
 
-/*XXX
-/// A variable length header trait.
-pub trait VarHeader<'a> {
-    fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError>
-    where
-        Self: Sized;
-    fn set(&mut self, buf: &'a mut [u8]) -> Result<usize, TryFromSliceError>;
-}
-*/
-
 impl<'a> packet_in<'a> {
-    pub fn new(data: &'a mut [u8]) -> Self {
+    pub fn new(data: &'a [u8]) -> Self {
         Self { data, index: 0 }
     }
 
@@ -129,43 +116,14 @@ impl<'a> packet_in<'a> {
         &mut self,
         h: &mut H,
     ) {
-        // The crux of the situation here is we have a reference to mutable
-        // data, and we (packet_in) do not own that mutable data, so the only
-        // way we can give someone else a mutable reference to that data is by
-        // moving it. However, we cannot move a reference out of ourself. So the
-        // following does not work.
-        //
-        //   h.set(self.0);
-        //
-        // The outcome we are after here is giving the Header (h) shared mutable
-        // access to the underlying `packet_in` data. This is not allowed with
-        // references. Only one mutable reference to the same data can exist at
-        // a time. This is a foundational Rust memory saftey rule to prevent
-        // data races.
-        //
-        //
-        // ... but the following trick works, this is what the `slice::split_at`
-        // method does. And what we are doing here is actually quite similar. We
-        // split the underlying buffer at `self.index + H::size()` and give the
-        // caller a mutable reference to the segment `[self.index..H::size()]`
-        // retaining `[H::size()..]` ourselves. Anything before `self.index` has
-        // already been given out to some other `H` instance.
-        //
-
         //TODO what if a header does not end on a byte boundary?
         let n = H::size();
-        let shared_mut = unsafe {
-            let start = if self.index > 0 {
-                self.index >> 3
-            } else {
-                0
-            };
-            &mut *slice_from_raw_parts_mut(
-                self.data.as_mut_ptr().add(start),
-                self.index + (n >> 3),
-            )
+        let start = if self.index > 0 {
+            self.index >> 3
+        } else {
+            0
         };
-        match h.set(shared_mut) {
+        match h.set(&self.data[start..start + (n >> 3)]) {
             Ok(_) => { },
             Err(e) => {
                 //TODO better than this
@@ -173,17 +131,6 @@ impl<'a> packet_in<'a> {
             }
         }
         self.index += n;
-        //
-        // Maybe a Cell is better here? Can we move a reference with a Cell? I
-        // don't want to use a RefCell and take the locking hit. This is a hot
-        // data path, locking on every packet is not an option.
-        //
-        // The thought to just use split_at_mut comes up. However, that hits
-        // similar lifetime issues as we would need to borrow Self::data for 'a.
-        //
-        //   let (extracted, remaining) = self.data.split_at_mut(n);
-        //   self.data = remaining;
-        //   h.set(shared_mut);
         h.set_valid();
     }
 
@@ -193,15 +140,14 @@ impl<'a> packet_in<'a> {
         &mut self,
     ) -> Result<H, TryFromSliceError> {
         let n = H::size();
-        let shared_mut = unsafe {
-            &mut *slice_from_raw_parts_mut(
-                self.data.as_mut_ptr(),
-                self.index + n,
-            )
+        let start = if self.index > 0 {
+            self.index >> 3
+        } else {
+            0
         };
         self.index += n;
         let mut x = H::new();
-        x.set(shared_mut)?;
+        x.set(&self.data[start..start + (n >> 3)])?;
         Ok(x)
     }
 }
