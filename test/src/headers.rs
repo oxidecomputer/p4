@@ -1,4 +1,4 @@
-use num::bigint::BigUint;
+//use num::bigint::BigUint;
 p4_macro::use_p4!("p4/examples/codegen/ipv6_header.p4");
 
 #[test]
