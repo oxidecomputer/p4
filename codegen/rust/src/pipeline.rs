@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::{Context, rust_type};
 use p4::hlir::Hlir;
 use p4::ast::{AST, Control, PackageInstance, Parser, Type};
 use proc_macro2::TokenStream;
@@ -67,15 +67,20 @@ impl <'a> PipelineGenerator<'a> {
         let (table_members, table_initializers) = self.table_members(control);
         let pipeline_name = format_ident!("{}_pipeline", inst.name);
 
-        let (parser_member, parser_initializer) = self.parser_entrypoint(parser);
-        let (control_member, control_initializer) = self.control_entrypoint(control);
+        let (parse_member, parser_initializer) = self.parse_entrypoint(parser);
+        let (control_member, control_initializer) =
+            self.control_entrypoint(control);
+
+        let pipeline_impl_process_packet =
+            self.pipeline_impl_process_packet(parser);
 
         let pipeline = quote!{
             struct #pipeline_name {
                 #(#table_members),*,
-                #parser_member,
+                #parse_member,
                 #control_member
             }
+
             impl #pipeline_name {
                 fn new() -> Self {
                     Self {
@@ -85,10 +90,115 @@ impl <'a> PipelineGenerator<'a> {
                     }
                 }
             }
+
+            impl p4rs::Pipeline for #pipeline_name {
+                #pipeline_impl_process_packet
+            }
         };
 
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);
 
+    }
+
+    fn pipeline_impl_process_packet(
+        &mut self,
+        parser: &Parser,
+    ) -> TokenStream {
+
+        let parsed_type = rust_type(&parser.parameters[1].ty, false, 0);
+
+        quote! {
+            fn process_packet<'a>(
+                &mut self,
+                port: u8,
+                pkt: &mut packet_in<'a>,
+            ) -> Option<(packet_out<'a>, u8)> {
+
+                //
+                // 1. Instantiate the parser out type
+                //
+
+                let mut parsed = #parsed_type::default();
+
+                //
+                // 2. Instantiate ingress/egress metadata
+                //
+                let mut ingress_metadata = IngressMetadata::default();
+                let mut egress_metadata = EgressMetadata::default();
+
+                println!("{}", "begin".green());
+
+                //
+                // 3. run the parser block
+                //
+                let accept = (self.parse)(pkt, &mut parsed);
+                if !accept {
+                    // drop the packet
+                    println!("parser drop");
+                    return None
+                }
+                println!("{}", "parser accepted".green());
+                println!("{}", parsed.dump());
+
+                //
+                // 4. Calculate parsed header size
+                //
+
+                // TODO generate require a parsed_size method on header trait
+                // and generate impls.
+                let mut parsed_size = 0;
+                if parsed.ethernet.valid {
+                    parsed_size += ethernet_t::size() >> 3;
+                }
+                if parsed.sidecar.valid {
+                    parsed_size += sidecar_t::size() >> 3;
+                }
+                if parsed.ipv6.valid {
+                    parsed_size += ipv6_t::size() >> 3;
+                }
+
+                // 
+                // 5. Run the control block
+                //
+
+                (self.control)(
+                    &mut parsed,
+                    &mut ingress_metadata,
+                    &mut egress_metadata,
+                    &self.local,
+                    &self.router,
+                );
+
+                //
+                // 6. Determine egress port
+                //
+
+                let port = egress_metadata.port.as_raw_slice()[0];
+
+                if port == 0 {
+                    // indicates no table match
+                    println!("{}", "no match".red());
+                    println!("{}", "---".dimmed());
+                    return None;
+                }
+
+                println!("{}", "control pass".green());
+                println!("{}", "---".dimmed());
+
+                //
+                // 7. Create the packet output.
+
+                let bv = parsed.to_bitvec();
+                let buf = bv.as_raw_slice();
+                let out = packet_out{
+                    header_data: buf.to_owned(),
+                    payload_data: &pkt.data[parsed_size..],
+                };
+
+                Some((out, port))
+
+            }
+        }
     }
 
     pub(crate) fn table_members(
@@ -145,7 +255,7 @@ impl <'a> PipelineGenerator<'a> {
         (members, initializers)
     }
 
-    pub(crate) fn parser_entrypoint(
+    pub(crate) fn parse_entrypoint(
         &mut self,
         parser: &Parser,
     ) -> (TokenStream, TokenStream) {
@@ -159,11 +269,11 @@ impl <'a> PipelineGenerator<'a> {
         let (sig, _) = pg.generate_state_function(parser, start_state);
 
         let member = quote! {
-            parser: fn #sig
+            parse: fn #sig
         };
 
         let initializer = format_ident!("{}_start", parser.name);
-        (member, quote!{ parser: #initializer })
+        (member, quote!{ parse: #initializer })
 
     }
 

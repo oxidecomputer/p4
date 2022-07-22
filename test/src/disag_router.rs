@@ -64,7 +64,7 @@ fn disag_router() -> Result<(), anyhow::Error> {
         let rx = &[rx1_c, rx2_c, rx3_c];
         let tx = &[tx1_p, tx2_p, tx3_p];
 
-        let mut pipeline = RouterPipeline::new();
+        let mut pipeline = main_pipeline::new();
         softnpu::run_pipeline(
             rx,
             tx,
@@ -88,7 +88,6 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let p = b"do you know the muffin man?";
     write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip2, mac1, mac2, None);
 
-
     let p = b"the muffin man?";
     write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1, None);
 
@@ -97,7 +96,6 @@ fn disag_router() -> Result<(), anyhow::Error> {
 
     let p = b"why yes";
     write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip4, mac2, mac4, None);
-
 
     let p = b"i know the muffin man";
     let mut sc = [0u8; 21];
@@ -213,125 +211,4 @@ fn phy3_egress(frame: &[u8]) {
         String::from_utf8_lossy(&frame[75..]),
     );
     println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
-}
-
-//.................................................
-
-struct RouterPipeline {
-    local: p4rs::table::Table<
-        1usize,
-        fn(&mut headers_t, &mut bool)
-    >,
-    router: p4rs::table::Table<
-        1usize,
-        fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
-    >,
-    parse: fn(pkt: &mut packet_in, headers: &mut headers_t) -> bool,
-    control: fn(
-        hdr: &mut headers_t,
-        ingress: &mut IngressMetadata,
-        egress: &mut EgressMetadata,
-        local: &p4rs::table::Table<
-            1usize,
-            fn(&mut headers_t, &mut bool)
-        >,
-        router: &p4rs::table::Table<
-            1usize,
-            fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
-        >,
-    ),
-}
-
-// XXX: generate this
-impl RouterPipeline {
-    fn new() -> Self {
-        Self {
-            local: local_table_local(),
-            router: router_table_router(),
-            parse: parse_start,
-            control: ingress_apply,
-        }
-    }
-}
-
-// XXX: generate this
-impl p4rs::Pipeline for RouterPipeline {
-    fn process_packet<'a>(
-        &mut self,
-        port: u8,
-        pkt: &mut packet_in<'a>,
-    ) -> Option<(packet_out<'a>, u8)> {
-
-        let mut header = headers_t {
-            ethernet: ethernet_t::new(),
-            sidecar: sidecar_t::new(),
-            ipv6: ipv6_t::new(),
-        };
-
-        let mut ingress_metadata = IngressMetadata {
-            //TODO how to handle more than u8::MAX ports?
-            port: port.view_bits::<Msb0>().to_bitvec(),
-        };
-
-        // to be filled in by pipeline
-        let mut egress_metadata = EgressMetadata {
-            port: 0u8.view_bits::<Msb0>().to_bitvec(),
-        };
-
-        println!("{}", "begin".green());
-
-        // run the parser block
-        let accept = (self.parse)(pkt, &mut header);
-        if !accept {
-            // drop the packet
-            println!("parser drop");
-            return None
-        }
-        println!("{}", "parser accepted".green());
-        println!("{}", header.dump());
-
-        // TODO generate require a parsed_size method on header trait
-        // and generate impls.
-        let mut parsed_size = 0;
-        if header.ethernet.valid {
-            parsed_size += ethernet_t::size() >> 3;
-        }
-        if header.sidecar.valid {
-            parsed_size += sidecar_t::size() >> 3;
-        }
-        if header.ipv6.valid {
-            parsed_size += ipv6_t::size() >> 3;
-        }
-
-        // run the control block
-        (self.control)(
-            &mut header,
-            &mut ingress_metadata,
-            &mut egress_metadata,
-            &self.local,
-            &self.router,
-        );
-
-        // egress port
-        let port = egress_metadata.port.as_raw_slice()[0];
-
-        if port == 0 {
-            // indicates no table match
-            println!("{}", "no match".red());
-            println!("{}", "---".dimmed());
-            return None;
-        }
-
-        println!("{}", "control pass".green());
-        println!("{}", "---".dimmed());
-
-        let bv = header.to_bitvec();
-        let buf = bv.as_raw_slice();
-        let out = packet_out{
-            header_data: buf.to_owned(),
-            payload_data: &pkt.data[parsed_size..],
-        };
-
-        Some((out, port))
-    }
 }

@@ -84,7 +84,7 @@ impl<'a> StructGenerator<'a> {
         let name = format_ident!("{}", s.name);
 
         let mut structure = quote! {
-            #[derive(Debug)]
+            #[derive(Debug, Default)]
             pub struct #name {
                 #(#members),*
             }
