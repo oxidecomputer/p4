@@ -122,11 +122,13 @@ control local(
 
     apply {
         local.apply();
-        //TODO, backwards indexing behaving badly
-        //bit<16> ll = 0xff02;
-        //if(hdr.ipv6.dst[127:112] == ll) {
-        //    is_local = true;
-        //}
+
+        // TODO the bits be backwards
+        bit<16> ll = 16w0x02ff;
+
+        if(hdr.ipv6.dst[15:0] == ll) {
+            is_local = true;
+        }
     }
     
 }

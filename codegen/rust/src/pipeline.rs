@@ -173,10 +173,12 @@ impl <'a> PipelineGenerator<'a> {
                 // 6. Determine egress port
                 //
 
-                let port = egress_metadata.port.as_raw_slice()[0];
-
+                let port = if egress_metadata.port.is_empty() {
+                    0
+                } else {
+                    egress_metadata.port.as_raw_slice()[0]
+                };
                 if port == 0 {
-                    // indicates no table match
                     println!("{}", "no match".red());
                     println!("{}", "---".dimmed());
                     return None;

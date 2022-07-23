@@ -85,11 +85,16 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let ip4: Ipv6Addr = "fe80::1de1:deff:fe01:701d".parse().unwrap();
     let mac4 = [0x01, 0xde, 0xde, 0x01, 0x70, 0x1d];
 
+    let mc1: Ipv6Addr = "ff02::1:ff01:701c".parse().unwrap();
+    let mmc1 = [0x33, 0x33, 0xff, 0x01, 0x70, 0x1c];
+
     let p = b"do you know the muffin man?";
     write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip2, mac1, mac2, None);
 
+    //~~~~
     let p = b"the muffin man?";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip1, mac2, mac1, None);
+    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, mc1, mac2, mmc1, None);
+    //~~~~~~~
 
     let p = b"the muffin man!";
     write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip3, mac1, mac3, None);

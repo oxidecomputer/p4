@@ -55,12 +55,13 @@ impl<'a> ExpressionGenerator<'a> {
                     ExpressionKind::IntegerLit(v) => *v as usize,
                     _ => panic!("slice ranges can only be integer literals"),
                 };
+                let l = l+1;
                 let r = match &end.kind {
                     ExpressionKind::IntegerLit(v) => *v as usize,
                     _ => panic!("slice ranges can only be integer literals"),
                 };
                 quote!{
-                    [#l..#r]
+                    [#r..#l]
                 }
             }
             ExpressionKind::Call(call) => {
