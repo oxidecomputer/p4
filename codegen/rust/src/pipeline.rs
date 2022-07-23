@@ -75,14 +75,14 @@ impl <'a> PipelineGenerator<'a> {
             self.pipeline_impl_process_packet(parser);
 
         let pipeline = quote!{
-            struct #pipeline_name {
+            pub struct #pipeline_name {
                 #(#table_members),*,
                 #parse_member,
                 #control_member
             }
 
             impl #pipeline_name {
-                fn new() -> Self {
+                pub fn new() -> Self {
                     Self {
                         #(#table_initializers),*,
                         #parser_initializer,

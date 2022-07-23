@@ -4,6 +4,9 @@
 
 //mod hub;
 //mod router;
+#[cfg(test)]
 mod disag_router;
+#[cfg(test)]
 mod softnpu;
+#[cfg(test)]
 mod headers;
