@@ -228,6 +228,7 @@ control ingress(
             //SC_FORWARD_TO_USERSPACE
             hdr.sidecar.sc_code = 8w0x01;
             hdr.sidecar.sc_ingress = ingress.port;
+            hdr.sidecar.sc_egress = ingress.port;
             hdr.sidecar.sc_ether_type = 16w0x86dd;
             hdr.sidecar.sc_payload = 128w0x1701d;
 
