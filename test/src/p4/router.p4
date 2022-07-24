@@ -124,9 +124,10 @@ control local(
         local.apply();
 
         // TODO the bits be backwards
-        bit<16> ll = 16w0x02ff;
+        bit<16> ll = 16w0xff02;
 
         if(hdr.ipv6.dst[15:0] == ll) {
+        //if(hdr.ipv6.dst[127:112] == ll) {
             is_local = true;
         }
     }
@@ -224,7 +225,7 @@ control ingress(
             hdr.sidecar.sc_payload = 128w0x1701d;
 
             // scrimlet port
-            egress.port = 3;
+            egress.port = 0;
         }
 
         //

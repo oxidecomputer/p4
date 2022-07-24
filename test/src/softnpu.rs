@@ -97,7 +97,7 @@ pub fn run_pipeline<
                 match pipeline.process_packet(i as u8, &mut pkt) {
                     Some((out_pkt, port)) => {
 
-                        let port = (port - 1) as usize;
+                        let port = port as usize;
 
                         //
                         // get frame for packet

@@ -31,7 +31,7 @@ p4_macro::use_p4!("test/src/p4/router.p4");
 ///                           *========*
 ///                           |        |
 ///                           |   sc   |
-///                           | (phy3) |
+///                           | (phy0) |
 ///                           *========*
 ///
 #[test]
@@ -40,29 +40,29 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let fb = Arc::new(FrameBuffer::<N, F>::new());
 
     // ingress rings
+    let (rx0_p, rx0_c) = ring::<R, N, F>(fb.clone());
     let (rx1_p, rx1_c) = ring::<R, N, F>(fb.clone());
     let (rx2_p, rx2_c) = ring::<R, N, F>(fb.clone());
-    let (rx3_p, rx3_c) = ring::<R, N, F>(fb.clone());
 
     // egress rings
+    let (tx0_p, tx0_c) = ring::<R, N, F>(fb.clone());
     let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
     let (tx2_p, tx2_c) = ring::<R, N, F>(fb.clone());
-    let (tx3_p, tx3_c) = ring::<R, N, F>(fb.clone());
 
     // create phys
+    let phy0 = Phy::new(0, rx0_p);
     let phy1 = Phy::new(1, rx1_p);
     let phy2 = Phy::new(2, rx2_p);
-    let phy3 = Phy::new(3, rx3_p);
 
     // run phys
+    phy0.run(tx0_c, phy0_egress);
     phy1.run(tx1_c, phy1_egress);
     phy2.run(tx2_c, phy2_egress);
-    phy3.run(tx3_c, phy3_egress);
 
     // run the softnpu with the compiled p4 pipelines
     spawn(move || {
-        let rx = &[rx1_c, rx2_c, rx3_c];
-        let tx = &[tx1_p, tx2_p, tx3_p];
+        let rx = &[rx0_c, rx1_c, rx2_c];
+        let tx = &[tx0_p, tx1_p, tx2_p];
 
         let mut pipeline = main_pipeline::new();
         softnpu::run_pipeline(
@@ -107,13 +107,13 @@ fn disag_router() -> Result<(), anyhow::Error> {
     sc[0] = 1;
     sc[1] = 3;
     sc[2] = 2;
-    sc[3] = 0xdd;
-    sc[4] = 0x86;
-    write(&phy3, 101, 1701, p.len(), p, 74, 32, ip3, ip2, mac3, mac2, Some(sc));
+    sc[3] = 0x86;
+    sc[4] = 0xdd;
+    write(&phy0, 101, 1701, p.len(), p, 74, 32, ip3, ip2, mac3, mac2, Some(sc));
 
     sc[2] = 1;
     let p = b"the muffin man is me!!!";
-    write(&phy3, 101, 1701, p.len(), p, 74, 32, ip3, ip1, mac3, mac1, Some(sc));
+    write(&phy0, 101, 1701, p.len(), p, 74, 32, ip3, ip1, mac3, mac1, Some(sc));
 
     sleep(Duration::from_secs(2));
 
@@ -139,9 +139,9 @@ fn write(
     let (index, et) = match sc {
         Some(sc) => {
             data[..21].copy_from_slice(&sc);
-            (21, 0x0901u16.to_be())
+            (21, 0x0901u16)
         }
-        None => (0, 0x86ddu16.to_be())
+        None => (0, 0x86ddu16)
     };
     let _pkt = v6_pkt(
         &mut data[index..], 
@@ -206,7 +206,7 @@ fn phy2_egress(frame: &[u8]) {
 }
 
 #[cfg(test)]
-fn phy3_egress(frame: &[u8]) {
+fn phy0_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
     let sc = &frame[14..35];
     let dump = format!(
@@ -215,5 +215,5 @@ fn phy3_egress(frame: &[u8]) {
         sc,
         String::from_utf8_lossy(&frame[75..]),
     );
-    println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
+    println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
 }

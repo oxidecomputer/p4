@@ -174,15 +174,12 @@ impl <'a> PipelineGenerator<'a> {
                 //
 
                 let port = if egress_metadata.port.is_empty() {
-                    0
-                } else {
-                    egress_metadata.port.as_raw_slice()[0]
-                };
-                if port == 0 {
                     println!("{}", "no match".red());
                     println!("{}", "---".dimmed());
                     return None;
-                }
+                } else {
+                    egress_metadata.port.as_raw_slice()[0]
+                };
 
                 println!("{}", "control pass".green());
                 println!("{}", "---".dimmed());

@@ -84,6 +84,7 @@ impl<'a> ExpressionGenerator<'a> {
         }
     }
 
+    //TODO consistent byte order
     pub(crate) fn generate_bit_literal(
         &self,
         width: u16,
@@ -98,7 +99,7 @@ impl<'a> ExpressionGenerator<'a> {
             return quote! { #v.view_bits::<Msb0>().to_bitvec() }
         }
         else if width <= 16 {
-            let v = value as u16;
+            let v = (value as u16).to_be();
             return quote! { 
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 16];
