@@ -109,25 +109,25 @@ control local(
         }
         default_action = nonlocal;
         const entries = {
-            //fe80::1de1:deff:fe01:701c
-            128w0x1c7001feffdee11d00000000000080fe : local();
+            //fe80::aae1:deff:fe01:701c
+            128w0x1c7001feffdee1aa00000000000080fe : local();
 
-            //fe80::1de1:deff:fe01:701d
-            128w0x1d7001feffdee11d00000000000080fe : local();
+            //fe80::aae1:deff:fe01:701d
+            128w0x1d7001feffdee1aa00000000000080fe : local();
 
-            //fe80::1de1:deff:fe01:701e
-            128w0x1e7001feffdee11d00000000000080fe : local();
+            //fe80::aae1:deff:fe01:701e
+            128w0x1e7001feffdee1aa00000000000080fe : local();
         }
     }
 
     apply {
         local.apply();
 
-        // TODO the bits be backwards
         bit<16> ll = 16w0xff02;
 
-        if(hdr.ipv6.dst[15:0] == ll) {
+        //TODO this is backwards should be
         //if(hdr.ipv6.dst[127:112] == ll) {
+        if(hdr.ipv6.dst[15:0] == ll) {
             is_local = true;
         }
     }
@@ -196,15 +196,21 @@ control ingress(
         //
 
         if (hdr.sidecar.isValid()) {
-            // uncomment the following to direct packets based on sidecar header
-            // data
-            // ----
-            // egress.port = hdr.sidecar.sc_egress;
-            // return;
 
-            // decap the sidecar header and process the packet normally from
-            // here
+            //  Direct packets to the sidecar port corresponding to the scrimlet
+            //  port they came from.
+            egress.port = hdr.sidecar.sc_ingress;
+
+            // Decap the sidecar header.
             hdr.sidecar.setInvalid();
+            hdr.ethernet.ether_type = 16w0x86dd;
+
+            // No more processing is required for sidecar packets, they simple
+            // go out the sidecar port corresponding to the source scrimlet
+            // port. No sort of hairpin back to the scrimlet is supported.
+            // Similarly sending packets from one scrimlet port out a different
+            // sidecar port is also not supported.
+            return;
         }
 
         //
@@ -217,6 +223,7 @@ control ingress(
 
         if (local_dst) {
             hdr.sidecar.setValid();
+            hdr.ethernet.ether_type = 16w0x0901;
 
             //SC_FORWARD_TO_USERSPACE
             hdr.sidecar.sc_code = 8w0x01;

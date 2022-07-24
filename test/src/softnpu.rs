@@ -103,7 +103,7 @@ pub fn run_pipeline<
                         // get frame for packet
                         //
                         
-                        let eg = &egress[port as usize];
+                        let eg = &egress[port];
                         let mut fps = eg.reserve(1).unwrap();
                         let fp = fps.next().unwrap();
 
