@@ -14,25 +14,25 @@ const F: usize = 1500;
 p4_macro::use_p4!("test/src/p4/router.p4");
 
 ///
-///                           ~~~~~~~~~~
-///                           ~        ~
-///                           ~   p4   ~
-///                           ~        ~
-///                           ~~~~~~~~~~
-///                               |
-///                               ▼
-/// *=======*                *==========*                *=======*
-/// |       | --- ( rx ) --> |          | <-- ( rx ) --- |       |
-/// | phy 1 |                | pipeline |                | phy 2 |
-/// |       | <-- ( tx ) --- |          | --- ( tx ) --> |       |
-/// *=======*                *==========*                *=======*
-///                              |  |
-///                              |  |
-///                           *========*
-///                           |        |
-///                           |   sc   |
-///                           | (phy0) |
-///                           *========*
+///   ~~~~~~~~~~                 
+///   ~        ~                 
+///   ~   p4   ~                 *   *=======*
+///   ~        ~                 |   |       |
+///   ~~~~~~~~~~                 |---| phy 1 |
+///       |                      |   |       |
+///       ▼                      |   *=======*
+///  *==========*                |   *=======*
+///  |          | <-- ( rx ) --- |   |       |
+///  | pipeline |                |---| phy 2 |
+///  |          | --- ( tx ) --> |   |       |
+///  *==========*                |   *=======*
+///      |  |                    |   *=======*
+///      |  |                    |   |       |
+///   *========*                 |---| phy 3 |
+///   |        |                 |   |       |
+///   |   sc   |                 *   *=======*
+///   | (phy0) |                 
+///   *========*                 
 ///
 #[test]
 fn disag_router() -> Result<(), anyhow::Error> {
@@ -43,26 +43,30 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let (rx0_p, rx0_c) = ring::<R, N, F>(fb.clone());
     let (rx1_p, rx1_c) = ring::<R, N, F>(fb.clone());
     let (rx2_p, rx2_c) = ring::<R, N, F>(fb.clone());
+    let (rx3_p, rx3_c) = ring::<R, N, F>(fb.clone());
 
     // egress rings
     let (tx0_p, tx0_c) = ring::<R, N, F>(fb.clone());
     let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
     let (tx2_p, tx2_c) = ring::<R, N, F>(fb.clone());
+    let (tx3_p, tx3_c) = ring::<R, N, F>(fb.clone());
 
     // create phys
     let phy0 = Phy::new(0, rx0_p);
     let phy1 = Phy::new(1, rx1_p);
     let phy2 = Phy::new(2, rx2_p);
+    let phy3 = Phy::new(2, rx3_p);
 
     // run phys
     phy0.run(tx0_c, phy0_egress);
     phy1.run(tx1_c, phy1_egress);
     phy2.run(tx2_c, phy2_egress);
+    phy3.run(tx3_c, phy3_egress);
 
     // run the softnpu with the compiled p4 pipelines
     spawn(move || {
-        let rx = &[rx0_c, rx1_c, rx2_c];
-        let tx = &[tx0_p, tx1_p, tx2_p];
+        let rx = &[rx0_c, rx1_c, rx2_c, rx3_c];
+        let tx = &[tx0_p, tx1_p, tx2_p, tx3_p];
 
         let mut pipeline = main_pipeline::new();
         softnpu::run_pipeline(
@@ -79,10 +83,10 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let ip2: Ipv6Addr = "fd00:2000::1".parse().unwrap();
     let mac2 = [0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
 
-    let ip3: Ipv6Addr = "fe80::1de1:deff:fe01:701c".parse().unwrap();
+    let ip3: Ipv6Addr = "fe80::aae1:deff:fe01:701c".parse().unwrap();
     let mac3 = [0x01, 0xde, 0xde, 0x01, 0x70, 0x1c];
 
-    let ip4: Ipv6Addr = "fe80::1de1:deff:fe01:701d".parse().unwrap();
+    let ip4: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
     let mac4 = [0x01, 0xde, 0xde, 0x01, 0x70, 0x1d];
 
     let mc1: Ipv6Addr = "ff02::1:ff01:701c".parse().unwrap();
@@ -184,6 +188,19 @@ fn v6_pkt<'a>(
 }
 
 #[cfg(test)]
+fn phy0_egress(frame: &[u8]) {
+    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
+    let sc = &frame[14..35];
+    let dump = format!(
+        "{:#?} | {:x?} | {}", 
+        pkt,
+        sc,
+        String::from_utf8_lossy(&frame[75..]),
+    );
+    println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
+}
+
+#[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
     let dump = format!(
@@ -206,14 +223,12 @@ fn phy2_egress(frame: &[u8]) {
 }
 
 #[cfg(test)]
-fn phy0_egress(frame: &[u8]) {
-    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
-    let sc = &frame[14..35];
+fn phy3_egress(frame: &[u8]) {
+    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
     let dump = format!(
-        "{:#?} | {:x?} | {}", 
+        "{:#?} | {}", 
         pkt,
-        sc,
-        String::from_utf8_lossy(&frame[75..]),
+        String::from_utf8_lossy(&frame[54..]),
     );
-    println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
+    println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
 }
