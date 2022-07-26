@@ -69,6 +69,58 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
         let tx = &[tx0_p, tx1_p, tx2_p, tx3_p];
 
         let mut pipeline = main_pipeline::new();
+
+        add_router_table_entry_forward(
+            p4rs::table::Key::Lpm(p4rs::table::Prefix {
+                addr: "fd00:1000::".parse().unwrap(),
+                len: 24,
+            }),
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; 8];
+                x.store(1u8);
+                x
+            },
+            0,
+            "control plane rule 1".into(),
+            &mut pipeline.router,
+        );
+
+        add_router_table_entry_forward(
+            p4rs::table::Key::Lpm(p4rs::table::Prefix {
+                // TODO, indicates underlying LPM storage is backwards?
+                //addr: "fd00:2000::".parse().unwrap(),
+                addr: {
+                    let x = 0xfd002000000000000000000000000000u128.to_be();
+                    let a: std::net::Ipv6Addr = x.into();
+                    a.into()
+                },
+                len: 24,
+            }),
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; 8];
+                x.store(2u8);
+                x
+            },
+            0,
+            "control plane rule 2".into(),
+            &mut pipeline.router,
+        );
+
+        add_router_table_entry_forward(
+            p4rs::table::Key::Lpm(p4rs::table::Prefix {
+                addr: "fd00:3000::".parse().unwrap(),
+                len: 24,
+            }),
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; 8];
+                x.store(3u8);
+                x
+            },
+            0,
+            "control plane rule 3".into(),
+            &mut pipeline.router,
+        );
+
         softnpu::run_pipeline(
             rx,
             tx,
