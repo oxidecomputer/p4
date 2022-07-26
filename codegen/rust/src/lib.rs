@@ -223,13 +223,13 @@ fn try_extract_prefix_len(
         ExpressionKind::Binary(_lhs, _op, rhs) => {
             match &rhs.kind {
                 ExpressionKind::IntegerLit(v) => {
-                    Some(v.leading_ones() as u8)
+                    Some(v.trailing_ones() as u8)
                 }
                 ExpressionKind::BitLit(_width, v) => {
-                    Some(v.leading_ones() as u8)
+                    Some(v.trailing_ones() as u8)
                 }
                 ExpressionKind::SignedLit(_width, v) => {
-                    Some(v.leading_ones() as u8)
+                    Some(v.trailing_ones() as u8)
                 }
                 _ => { None }
             }

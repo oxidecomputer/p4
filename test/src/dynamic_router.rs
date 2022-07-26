@@ -87,13 +87,7 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
 
         add_router_table_entry_forward(
             p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                // TODO, indicates underlying LPM storage is backwards?
-                //addr: "fd00:2000::".parse().unwrap(),
-                addr: {
-                    let x = 0xfd002000000000000000000000000000u128.to_be();
-                    let a: std::net::Ipv6Addr = x.into();
-                    a.into()
-                },
+                addr: "fd00:2000::".parse().unwrap(),
                 len: 24,
             }),
             {

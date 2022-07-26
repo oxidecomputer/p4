@@ -172,7 +172,7 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 IpAddr::V6(addr) => {
                     assert!(p.len <= 128);
                     let key: u128 = addr.into();
-                    let key = key.to_be();
+                    //let key = key.to_be();
                     let mask = if p.len == 128 {
                         u128::MAX
                     } else {
