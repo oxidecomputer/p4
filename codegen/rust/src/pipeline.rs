@@ -241,7 +241,10 @@ impl <'a> PipelineGenerator<'a> {
                     for table in & control_inst.tables {
                         let n = table.key.len() as usize;
                         let table_type = quote! {
-                            p4rs::table::Table::<#n, fn(#(#param_types),*)> 
+                            p4rs::table::Table::<
+                                #n, 
+                                std::sync::Arc<dyn Fn(#(#param_types),*)>
+                            > 
                         };
                         let name = format_ident!("{}", v.name);
                         members.push(quote! {

@@ -77,7 +77,10 @@ impl<'a> ControlGenerator<'a> {
                     for table in & control_inst.tables {
                         let n = table.key.len() as usize;
                         let table_type = quote! {
-                            p4rs::table::Table::<#n, fn(#(#param_types),*)> 
+                            p4rs::table::Table::<
+                                #n,
+                                std::sync::Arc<dyn Fn(#(#param_types),*)>
+                            > 
                         };
                         let name = format_ident!("{}", v.name);
                         params.push(quote! {
@@ -248,7 +251,10 @@ impl<'a> ControlGenerator<'a> {
         let table_name = format_ident!("{}_table", table.name);
         let n = table.key.len() as usize;
         let table_type = quote! {
-            p4rs::table::Table::<#n, fn(#(#control_param_types),*)> 
+            p4rs::table::Table::<
+                #n, 
+                std::sync::Arc<dyn Fn(#(#control_param_types),*)>
+            > 
         };
 
         let mut tokens = quote! {
@@ -349,14 +355,21 @@ impl<'a> ControlGenerator<'a> {
             }
 
             tokens.extend(quote! {
+
+                let action: std::sync::Arc<dyn Fn(#(#control_param_types),*)> = 
+                    std::sync::Arc::new(|#(#closure_params),*| {
+                        #action_fn_name(#(#action_fn_args),*);
+                    });
+
                 #table_name.entries.insert(
-                    p4rs::table::TableEntry::<#n, fn(#(#control_param_types),*)>{
+                    p4rs::table::TableEntry::<
+                        #n,
+                        std::sync::Arc<dyn Fn(#(#control_param_types),*)>,
+                    >{
                         key: [#(#keyset),*],
                         priority: 0,
                         name: "your name here".into(),
-                        action: |#(#closure_params),*| {
-                            #action_fn_name(#(#action_fn_args),*);
-                        },
+                        action,
                     });
             })
         }

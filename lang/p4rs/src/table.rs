@@ -586,10 +586,10 @@ mod tests {
             value: 47,
         };
 
-        let table = Table::<1, fn(&mut ActionData)> {
+        let table = Table::<1, Arc<dyn Fn(&mut ActionData)>> {
             entries: HashSet::from([
 
-                 TableEntry::<1, fn(&mut ActionData)>{
+                 TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
                      key: [ Key::Exact(1u8.into()) ],
                      priority: 0,
                      name: "a0".into(),
@@ -598,7 +598,7 @@ mod tests {
                      },
                  },
 
-                 TableEntry::<1, fn(&mut ActionData)>{
+                 TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
                      key: [ Key::Exact(2u8.into()) ],
                      priority: 0,
                      name: "a1".into(),
