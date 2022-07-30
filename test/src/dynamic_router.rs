@@ -279,6 +279,7 @@ fn phy3_egress(frame: &[u8]) {
     //println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
 }
 
+
 // XXX generate
 #[cfg(test)]
 fn add_router_table_entry_forward(

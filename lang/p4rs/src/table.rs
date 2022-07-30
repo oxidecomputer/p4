@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use num::bigint::BigUint;
 use num::ToPrimitive;
 
+// TODO transition from BigUint to BitVec<u8, Msb0>
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum Key {
     Exact(BigUint),
@@ -593,18 +594,18 @@ mod tests {
                      key: [ Key::Exact(1u8.into()) ],
                      priority: 0,
                      name: "a0".into(),
-                     action: |a: &mut ActionData| {
+                     action: Arc::new(|a: &mut ActionData| {
                          a.value += 10;
-                     },
+                     }),
                  },
 
                  TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
                      key: [ Key::Exact(2u8.into()) ],
                      priority: 0,
                      name: "a1".into(),
-                     action: |a: &mut ActionData| {
+                     action: Arc::new(|a: &mut ActionData| {
                          a.value -= 10;
-                     },
+                     }),
                  }
 
             ])

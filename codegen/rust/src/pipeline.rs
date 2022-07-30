@@ -94,6 +94,8 @@ impl <'a> PipelineGenerator<'a> {
             impl p4rs::Pipeline for #pipeline_name {
                 #pipeline_impl_process_packet
             }
+
+            unsafe impl Send for #pipeline_name { }
         };
 
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);
@@ -226,7 +228,7 @@ impl <'a> PipelineGenerator<'a> {
                 table.name
             );
             members.push(quote! {
-                #name: &#type_tokens,
+                pub #name: &#type_tokens,
             });
             let ctor = format_ident!("{}_table_{}", control.name, table.name);
             initializers.push(quote!{
@@ -248,7 +250,7 @@ impl <'a> PipelineGenerator<'a> {
                         };
                         let name = format_ident!("{}", v.name);
                         members.push(quote! {
-                            #name: #table_type
+                            pub #name: #table_type
                         });
                         let ctor = format_ident!(
                             "{}_table_{}", control_inst.name, table.name);
@@ -277,7 +279,7 @@ impl <'a> PipelineGenerator<'a> {
         let (sig, _) = pg.generate_state_function(parser, start_state);
 
         let member = quote! {
-            parse: fn #sig
+            pub parse: fn #sig
         };
 
         let initializer = format_ident!("{}_start", parser.name);
@@ -294,7 +296,7 @@ impl <'a> PipelineGenerator<'a> {
         let (sig, _) = cg.generate_control(control);
 
         let member = quote! {
-            control: fn #sig
+            pub control: fn #sig
         };
 
         let initializer = format_ident!("{}_apply", control.name);
