@@ -77,6 +77,9 @@ impl <'a> PipelineGenerator<'a> {
         let add_table_entry_method =
             self.add_table_entry_method(control);
 
+        let remove_table_entry_method =
+            self.remove_table_entry_method(control);
+
         let table_modifiers =
             self.table_modifiers(control);
 
@@ -96,6 +99,7 @@ impl <'a> PipelineGenerator<'a> {
                     }
                 }
                 #add_table_entry_method
+                #remove_table_entry_method
                 #table_modifiers
             }
 
@@ -330,6 +334,53 @@ impl <'a> PipelineGenerator<'a> {
         }
     }
 
+    fn remove_table_entry_method(
+        &mut self,
+        control: &Control,
+    ) -> TokenStream {
+
+        let mut i: u32 = 0;
+
+        let mut body = TokenStream::new();
+        for table in &control.tables {
+            let call = format_ident!("remove_{}_table_entry", table.name);
+            body.extend(quote!{
+                #i => self.#call(keyset_data),
+            });
+            i += 1;
+        }
+
+        for v in &control.variables {
+            if let Type::UserDefined(name) = &v.ty {
+                if let Some(control_inst) = self.ast.get_control(name) {
+                    for table in & control_inst.tables {
+                        let call = format_ident!("remove_{}_table_entry", table.name);
+                        body.extend(quote!{
+                            #i => self.#call(keyset_data),
+                        });
+                        i += 1;
+                    }
+                }
+            }
+        }
+
+        body.extend(quote!{
+            x => println!("remove table entry: unknown table id {}, ignoring", x),
+        });
+
+        quote! {
+            pub fn remove_table_entry(
+                &mut self,
+                table_id: u32,
+                keyset_data: &Vec<u8>,
+            ) {
+                match table_id {
+                    #body
+                }
+            }
+        }
+    }
+
     fn table_modifiers(
         &mut self,
         control: &Control,
@@ -341,6 +392,9 @@ impl <'a> PipelineGenerator<'a> {
             tokens.extend(
                 self.add_table_entry_function(table, control)
             );
+            tokens.extend(
+                self.remove_table_entry_function(table, control)
+            );
         }
 
         for v in &control.variables {
@@ -350,6 +404,9 @@ impl <'a> PipelineGenerator<'a> {
                         tokens.extend(
                             self.add_table_entry_function(table, control_inst)
                         );
+                        tokens.extend(
+                            self.remove_table_entry_function(table, control_inst)
+                        );
                     }
                 }
             }
@@ -358,10 +415,9 @@ impl <'a> PipelineGenerator<'a> {
         tokens
     }
 
-    fn add_table_entry_function(
+    fn table_entry_keys(
         &mut self,
         table: &Table,
-        control: &Control,
     ) -> TokenStream {
 
         let mut keys = TokenStream::new();
@@ -403,6 +459,18 @@ impl <'a> PipelineGenerator<'a> {
             }
             offset += sz;
         }
+
+        keys
+
+    }
+
+    fn add_table_entry_function(
+        &mut self,
+        table: &Table,
+        control: &Control,
+    ) -> TokenStream {
+
+        let keys = self.table_entry_keys(table);
 
         let mut action_match_body = TokenStream::new();
         for (i, action) in table.actions.iter().enumerate() {
@@ -518,6 +586,65 @@ impl <'a> PipelineGenerator<'a> {
                 match action_id {
                     #action_match_body
                 }
+
+            }
+        }
+
+    }
+
+    fn remove_table_entry_function(
+        &mut self,
+        table: &Table,
+        control: &Control,
+    ) -> TokenStream {
+
+        let keys = self.table_entry_keys(table);
+        let n = table.key.len();
+
+        let tname = format_ident!("{}", table.name);
+        let name = format_ident!("remove_{}_table_entry", table.name);
+
+        let mut control_params = Vec::new();
+        let mut control_param_types = Vec::new();
+        for p in &control.parameters {
+            let name = format_ident!("{}", p.name);
+            control_params.push(quote!{ #name });
+            let ty = rust_type(&p.ty, false, 0);
+            control_param_types.push(quote!{ &mut #ty });
+        }
+
+        quote!{
+            // lifetime is due to
+            // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
+            pub fn #name<'a>(
+                &mut self,
+                keyset_data: &'a Vec<u8>,
+            ) {
+
+                let key = [#keys];
+
+                let action: std::sync::Arc<dyn Fn(
+                    #(#control_param_types),*
+                )>
+                = std::sync::Arc::new(move |
+                    #(#control_params),*
+                | { });
+
+                self.#tname
+                    .entries
+                    .remove(
+                        &p4rs::table::TableEntry::<
+                            #n,
+                            std::sync::Arc<dyn Fn(
+                                #(#control_param_types),*
+                            )>,
+                        > {
+                            key,
+                            priority: 0, //TODO
+                            name: "your name here".into(), //TODO
+                            action,
+                        }
+                    );
 
             }
         }

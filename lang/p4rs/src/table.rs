@@ -223,6 +223,7 @@ pub struct TableEntry<const D: usize, A: Clone> {
     pub name: String,
 }
 
+// TODO: Cannot hash on just the key, this does not work for multipath.
 impl<const D: usize, A: Clone> std::hash::Hash for TableEntry<D, A> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.key.hash(state);
