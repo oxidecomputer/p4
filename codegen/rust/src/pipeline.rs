@@ -1,6 +1,6 @@
-use crate::{Context, rust_type};
+use crate::{Context, rust_type, type_size};
 use p4::hlir::Hlir;
-use p4::ast::{AST, Control, PackageInstance, Parser, Type};
+use p4::ast::{AST, Control, PackageInstance, MatchKind, Parser, Table, Type};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -74,6 +74,12 @@ impl <'a> PipelineGenerator<'a> {
         let pipeline_impl_process_packet =
             self.pipeline_impl_process_packet(parser);
 
+        let add_table_entry_method =
+            self.add_table_entry_method(control);
+
+        let table_modifiers =
+            self.table_modifiers(control);
+
         let pipeline = quote!{
             pub struct #pipeline_name {
                 #(#table_members),*,
@@ -89,6 +95,8 @@ impl <'a> PipelineGenerator<'a> {
                         #control_initializer,
                     }
                 }
+                #add_table_entry_method
+                #table_modifiers
             }
 
             impl p4rs::Pipeline for #pipeline_name {
@@ -263,6 +271,257 @@ impl <'a> PipelineGenerator<'a> {
         }
 
         (members, initializers)
+    }
+
+    fn add_table_entry_method(
+        &mut self,
+        control: &Control,
+    ) -> TokenStream {
+
+        let mut i: u32 = 0;
+
+        let mut body = TokenStream::new();
+        for table in &control.tables {
+            let call = format_ident!("add_{}_table_entry", table.name);
+            body.extend(quote!{
+                #i => self.#call(
+                    action_id,
+                    keyset_data,
+                    parameter_data,
+                ),
+            });
+            i += 1;
+        }
+
+        for v in &control.variables {
+            if let Type::UserDefined(name) = &v.ty {
+                if let Some(control_inst) = self.ast.get_control(name) {
+                    for table in & control_inst.tables {
+                        let call = format_ident!("add_{}_table_entry", table.name);
+                        body.extend(quote!{
+                            #i => self.#call(
+                                action_id,
+                                keyset_data,
+                                parameter_data,
+                            ),
+                        });
+                        i += 1;
+                    }
+                }
+            }
+        }
+
+        body.extend(quote!{
+            x => println!("add table entry: unknown table id {}, ignoring", x),
+        });
+
+        quote! {
+            fn add_table_entry(
+                &mut self,
+                table_id: u32,
+                action_id: u32,
+                keyset_data: &Vec<u8>,
+                parameter_data: &Vec<u8>,
+            ) {
+                match table_id {
+                    #body
+                }
+            }
+        }
+    }
+
+    fn table_modifiers(
+        &mut self,
+        control: &Control,
+    ) -> TokenStream {
+
+        let mut tokens = TokenStream::new();
+
+        for table in &control.tables {
+            tokens.extend(
+                self.add_table_entry_function(table, control)
+            );
+        }
+
+        for v in &control.variables {
+            if let Type::UserDefined(name) = &v.ty {
+                if let Some(control_inst) = self.ast.get_control(name) {
+                    for table in & control_inst.tables {
+                        tokens.extend(
+                            self.add_table_entry_function(table, control_inst)
+                        );
+                    }
+                }
+            }
+        }
+
+        tokens
+    }
+
+    fn add_table_entry_function(
+        &mut self,
+        table: &Table,
+        control: &Control,
+    ) -> TokenStream {
+
+        let mut keys = TokenStream::new();
+        let mut offset: usize = 0;
+        for (lval, match_kind) in &table.key {
+            let name_info = self.hlir.lvalue_decls.get(lval).expect(&format!(
+                    "declaration info for {:#?}",
+                    lval,
+            ));
+            let sz = type_size(&name_info.ty, self.ast) >> 3;
+            match match_kind {
+                MatchKind::Exact => {
+                    keys.extend(quote!{
+                        p4rs::extract_exact_key(
+                            keyset_data,
+                            #offset,
+                            #sz,
+                        )
+                    })
+                }
+                MatchKind::Ternary => {
+                    keys.extend(quote!{
+                        p4rs::extract_ternary_key(
+                            keyset_data,
+                            #offset,
+                            #sz,
+                        )
+                    })
+                }
+                MatchKind::LongestPrefixMatch => {
+                    keys.extend(quote!{
+                        p4rs::extract_lpm_key(
+                            keyset_data,
+                            #offset,
+                            #sz,
+                        )
+                    })
+                }
+            }
+            offset += sz;
+        }
+
+        let mut action_match_body = TokenStream::new();
+        for (i, action) in table.actions.iter().enumerate() {
+            let i = i as u32;
+            let call = format_ident!("{}_action_{}", table.name, action);
+            let n = table.key.len();
+            let a = control.get_action(action).expect(&format!(
+                "control {} must have action {}",
+                control.name,
+                action,
+            ));
+            let mut parameter_tokens = Vec::new();
+            let mut parameter_refs = Vec::new();
+            let mut offset: usize = 0;
+            for p in &a.parameters {
+                let pname = format_ident!("{}", p.name);
+                match &p.ty {
+                    Type::Bool => { 
+                        parameter_tokens.push(quote!{
+                            let #pname = p4rs::extract_bool_action_parameter(
+                                parameter_data,
+                                #offset,
+                            );
+                        });
+                        offset += 1;
+                    }
+                    Type::Error => { todo!(); }
+                    Type::Bit(n) => { 
+                        parameter_tokens.push(quote!{
+                            let #pname = p4rs::extract_bit_action_parameter(
+                                parameter_data,
+                                #offset,
+                                #n,
+                            );
+                        });
+                        parameter_refs.push(quote!{ #pname.clone() });
+                        offset += 1;
+                    }
+                    Type::Varbit(n) => { todo!(); }
+                    Type::Int(n) => { todo!(); }
+                    Type::String => { todo!(); }
+                    Type::UserDefined(s) => { todo!(); }
+                    Type::ExternFunction => { todo!(); }
+                    Type::Table => { todo!(); }
+                    Type::Void => { todo!(); }
+                }
+            }
+            let mut control_params = Vec::new();
+            let mut control_param_types = Vec::new();
+            let mut action_params = Vec::new();
+            let mut action_param_types = Vec::new();
+            for p in &control.parameters {
+                let name = format_ident!("{}", p.name);
+                control_params.push(quote!{ #name });
+                let ty = rust_type(&p.ty, false, 0);
+                control_param_types.push(quote!{ &mut #ty });
+            }
+            for p in &a.parameters {
+                let name = format_ident!("{}", p.name);
+                action_params.push(quote!{ #name });
+                let ty = rust_type(&p.ty, false, 0);
+                action_param_types.push(quote!{ #ty });
+            }
+            let tname = format_ident!("{}", table.name);
+            action_match_body.extend(quote!{
+                #i => {
+                    #(#parameter_tokens)*
+                    let action: std::sync::Arc<dyn Fn(
+                        #(#control_param_types),*
+                    )>
+                    = std::sync::Arc::new(move |
+                        #(#control_params),*
+                    | {
+                        #call(
+                            #(#control_params),*,
+                            #(#parameter_refs),*
+                        )
+                    });
+                    self.#tname
+                        .entries
+                        .insert(p4rs::table::TableEntry::<
+                            #n,
+                            std::sync::Arc<dyn Fn(
+                                #(#control_param_types),*
+                            )>,
+                        > {
+                            key,
+                            priority: 0, //TODO
+                            name: "your name here".into(), //TODO
+                            action,
+                        });
+                }
+            });
+        }
+        let name = format!("{}", control.name);
+        action_match_body.extend(quote!{
+            x => panic!("unknown {} action id {}", #name, x),
+        });
+
+        let name = format_ident!("add_{}_table_entry", table.name);
+        quote!{
+            // lifetime is due to
+            // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
+            fn #name<'a>(
+                &mut self,
+                action_id: u32,
+                keyset_data: &'a Vec<u8>,
+                parameter_data: &'a Vec<u8>,
+            ) {
+
+                let key = [#keys];
+
+                match action_id {
+                    #action_match_body
+                }
+
+            }
+        }
+
     }
 
     pub(crate) fn parse_entrypoint(
