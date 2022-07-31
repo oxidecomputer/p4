@@ -316,7 +316,7 @@ impl <'a> PipelineGenerator<'a> {
         });
 
         quote! {
-            fn add_table_entry(
+            pub fn add_table_entry(
                 &mut self,
                 table_id: u32,
                 action_id: u32,
@@ -441,10 +441,10 @@ impl <'a> PipelineGenerator<'a> {
                         parameter_refs.push(quote!{ #pname.clone() });
                         offset += 1;
                     }
-                    Type::Varbit(n) => { todo!(); }
-                    Type::Int(n) => { todo!(); }
+                    Type::Varbit(_n) => { todo!(); }
+                    Type::Int(_n) => { todo!(); }
                     Type::String => { todo!(); }
-                    Type::UserDefined(s) => { todo!(); }
+                    Type::UserDefined(_s) => { todo!(); }
                     Type::ExternFunction => { todo!(); }
                     Type::Table => { todo!(); }
                     Type::Void => { todo!(); }
@@ -506,7 +506,7 @@ impl <'a> PipelineGenerator<'a> {
         quote!{
             // lifetime is due to
             // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
-            fn #name<'a>(
+            pub fn #name<'a>(
                 &mut self,
                 action_id: u32,
                 keyset_data: &'a Vec<u8>,

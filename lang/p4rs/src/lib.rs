@@ -218,9 +218,9 @@ pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
 }
 
 pub fn extract_exact_key(
-    keyset_data: &Vec<u8>,
-    offset: usize,
-    len: usize,
+    _keyset_data: &Vec<u8>,
+    _offset: usize,
+    _len: usize,
 ) -> table::Key {
 
     todo!();
@@ -228,9 +228,9 @@ pub fn extract_exact_key(
 }
 
 pub fn extract_ternary_key(
-    keyset_data: &Vec<u8>,
-    offset: usize,
-    len: usize,
+    _keyset_data: &Vec<u8>,
+    _offset: usize,
+    _len: usize,
 ) -> table::Key {
 
     todo!();
@@ -240,32 +240,32 @@ pub fn extract_ternary_key(
 pub fn extract_lpm_key(
     keyset_data: &Vec<u8>,
     offset: usize,
-    len: usize,
+    _len: usize,
 ) -> table::Key {
 
     let (addr, len) = match keyset_data.len() {
         // IPv4
         5 => {
             let data: [u8; 4] = keyset_data
-                .as_slice()[..4]
+                .as_slice()[offset..offset+4]
                 .try_into()
                 .unwrap();
-            (IpAddr::from(data), keyset_data[4])
+            (IpAddr::from(data), keyset_data[offset+4])
         }
         // IPv6
         17 => {
             let data: [u8; 16] = keyset_data
-                .as_slice()[..16]
+                .as_slice()[offset..offset+16]
                 .try_into()
                 .unwrap();
-            (IpAddr::from(data), keyset_data[16])
+            (IpAddr::from(data), keyset_data[offset+16])
         }
         x => {
             panic!("add router table entry: unknown action id {}, ignoring", x);
         }
     };
 
-    table::Key::Lpm(table::Prefix{ addr, len, })
+    table::Key::Lpm(table::Prefix{ addr, len })
 
 }
 
