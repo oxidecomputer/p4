@@ -218,12 +218,14 @@ pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
 }
 
 pub fn extract_exact_key(
-    _keyset_data: &Vec<u8>,
-    _offset: usize,
-    _len: usize,
+    keyset_data: &Vec<u8>,
+    offset: usize,
+    len: usize,
 ) -> table::Key {
 
-    todo!();
+    table::Key::Exact(
+        num::BigUint::from_bytes_be(&keyset_data[offset..offset+len])
+    )
 
 }
 
@@ -232,9 +234,7 @@ pub fn extract_ternary_key(
     _offset: usize,
     _len: usize,
 ) -> table::Key {
-
     todo!();
-
 }
 
 pub fn extract_lpm_key(
