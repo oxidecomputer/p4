@@ -159,9 +159,10 @@ impl <'a> PipelineGenerator<'a> {
                     println!("parser drop");
                     return None
                 }
-                println!("{}", "parser accepted".green());
-                println!("{}", parsed.dump());
-                dtrace_provider::parser_accepted!(||());
+                println!("{}", "parser accepted".green()); //XXX
+                let dump = parsed.dump();
+                println!("{}", &dump); //XXX
+                dtrace_provider::parser_accepted!(||(&dump));
 
                 //
                 // 4. Calculate parsed header size
@@ -197,7 +198,7 @@ impl <'a> PipelineGenerator<'a> {
                 //
 
                 let port = if egress_metadata.port.is_empty() {
-                    dtrace_provider::control_dropped!(||());
+                    dtrace_provider::control_dropped!(||(&dump));
                     println!("{}", "no match".red());
                     println!("{}", "---".dimmed());
                     return None;
@@ -205,7 +206,7 @@ impl <'a> PipelineGenerator<'a> {
                     egress_metadata.port.as_raw_slice()[0]
                 };
 
-                dtrace_provider::control_accepted!(||());
+                dtrace_provider::control_accepted!(||(&dump));
                 println!("{}", "control pass".green());
                 println!("{}", "---".dimmed());
 

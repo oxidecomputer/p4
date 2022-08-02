@@ -138,10 +138,10 @@ fn dtrace_probes() -> TokenStream {
     quote!{
         #[usdt::provider]
         mod dtrace_provider {
-            fn parser_accepted() {}
+            fn parser_accepted(_: &str) {}
             fn parser_dropped() {}
-            fn control_dropped() {}
-            fn control_accepted() {}
+            fn control_dropped(_: &str) {}
+            fn control_accepted(_: &str) {}
         }
     }
 }
