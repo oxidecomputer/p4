@@ -112,6 +112,9 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
         use bitvec::prelude::*;
     };
 
+    // dtrace probes
+    tokens.extend(dtrace_probes());
+
     // structs
     for s in ctx.structs.values() {
         tokens.extend(s.clone());
@@ -127,7 +130,20 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
         tokens.extend(p.clone());
     }
 
+
     tokens
+}
+
+fn dtrace_probes() -> TokenStream {
+    quote!{
+        #[usdt::provider]
+        mod dtrace_provider {
+            fn parser_accepted() {}
+            fn parser_dropped() {}
+            fn control_dropped() {}
+            fn control_accepted() {}
+        }
+    }
 }
 
 #[allow(dead_code)]
