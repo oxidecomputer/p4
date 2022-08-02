@@ -11,3 +11,4 @@ slog-async = "2.7"
 slog-envlogger = "2.2"
 bitvec = "1.0"
 colored = "2.0"
+usdt = { git = "https://github.com/oxidecomputer/usdt" }

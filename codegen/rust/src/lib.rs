@@ -112,7 +112,7 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
         use bitvec::prelude::*;
     };
 
-    // dtrace probes
+    //to lib dtrace probes
     tokens.extend(dtrace_probes());
 
     // structs

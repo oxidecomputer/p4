@@ -37,6 +37,7 @@ p4_macro::use_p4!("test/src/p4/dynamic_router.p4");
 #[test]
 fn dynamic_router() -> Result<(), anyhow::Error> {
 
+
     let fb = Arc::new(FrameBuffer::<N, F>::new());
 
     // ingress rings

@@ -155,13 +155,13 @@ impl <'a> PipelineGenerator<'a> {
                 let accept = (self.parse)(pkt, &mut parsed);
                 if !accept {
                     // drop the packet
-                    dtrace_provider::parser_dropped!();
+                    dtrace_provider::parser_dropped!(||());
                     println!("parser drop");
                     return None
                 }
                 println!("{}", "parser accepted".green());
                 println!("{}", parsed.dump());
-                dtrace_provider::parser_accepted!();
+                dtrace_provider::parser_accepted!(||());
 
                 //
                 // 4. Calculate parsed header size
@@ -197,7 +197,7 @@ impl <'a> PipelineGenerator<'a> {
                 //
 
                 let port = if egress_metadata.port.is_empty() {
-                    dtrace_provider::control_dropped!();
+                    dtrace_provider::control_dropped!(||());
                     println!("{}", "no match".red());
                     println!("{}", "---".dimmed());
                     return None;
@@ -205,7 +205,7 @@ impl <'a> PipelineGenerator<'a> {
                     egress_metadata.port.as_raw_slice()[0]
                 };
 
-                dtrace_provider::control_accepted!();
+                dtrace_provider::control_accepted!(||());
                 println!("{}", "control pass".green());
                 println!("{}", "---".dimmed());
 
