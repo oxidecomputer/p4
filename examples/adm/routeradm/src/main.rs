@@ -1,8 +1,14 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::net::IpAddr;
+use std::io::Read;
 
-use propolis::hw::virtio::softnpu::{ManagementMessage, ManagementFunction};
+use propolis::hw::virtio::softnpu::{
+    ManagementMessage,
+    ManagementFunction,
+    ManagementMessageInfo,
+    TableModifier,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -46,7 +52,10 @@ enum Commands {
     RemoveAddress {
         /// Address to add.
         address: IpAddr,
-    }
+    },
+
+    /// Show port count,
+    PortCount,
 
 }
 
@@ -67,10 +76,12 @@ fn main() {
 
             send(ManagementMessage{
                 function: ManagementFunction::TableAdd,
-                table: 1,
-                action: 1,
-                keyset_data,
-                parameter_data,
+                info: ManagementMessageInfo::TableModifier(TableModifier{
+                    table: 1,
+                    action: 1,
+                    keyset_data,
+                    parameter_data,
+                })
             });
 
         }
@@ -83,9 +94,11 @@ fn main() {
 
             send(ManagementMessage{
                 function: ManagementFunction::TableRemove,
-                table: 1,
-                keyset_data,
-                .. Default::default()
+                info: ManagementMessageInfo::TableModifier(TableModifier{
+                    table: 1,
+                    keyset_data,
+                    .. Default::default()
+                })
             });
         }
         Commands::AddAddress{ address } => {
@@ -95,10 +108,12 @@ fn main() {
             };
             send(ManagementMessage{
                 function: ManagementFunction::TableAdd,
-                table: 0,
-                action: 0,
-                keyset_data,
-                .. Default::default()
+                info: ManagementMessageInfo::TableModifier(TableModifier{
+                    table: 0,
+                    action: 0,
+                    keyset_data,
+                    .. Default::default()
+                })
             });
         }
         Commands::RemoveAddress{ address } => {
@@ -108,18 +123,47 @@ fn main() {
             };
             send(ManagementMessage{
                 function: ManagementFunction::TableRemove,
-                table: 0,
-                keyset_data,
-                .. Default::default()
+                info: ManagementMessageInfo::TableModifier(TableModifier{
+                    table: 0,
+                    keyset_data,
+                    .. Default::default()
+                })
             });
         }
+        Commands::PortCount => {
+
+            let mut f = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/tty03")
+                .unwrap();
+
+            let msg = ManagementMessage{
+                function: ManagementFunction::PortCount,
+                .. Default::default()
+            };
+
+            let mut buf = msg.to_wire();
+            buf.push('\n' as u8);
+
+            f.write_all(&buf).unwrap();
+            f.sync_all().unwrap();
+
+            let mut buf = [0u8; 1024];
+            let n = f.read(&mut buf).unwrap();
+            let radix: u16 = std::str::from_utf8(&buf[..n-1]).unwrap().parse().unwrap();
+            println!("{:?}", radix);
+
+        }
+
     }
 
 }
 
 fn send(msg: ManagementMessage) {
 
-    let buf = msg.to_wire();
+    let mut buf = msg.to_wire();
+    buf.push('\n' as u8);
 
     let mut f = OpenOptions::new()
         .write(true)
@@ -127,4 +171,5 @@ fn send(msg: ManagementMessage) {
         .unwrap();
 
     f.write_all(&buf).unwrap();
+    f.sync_all().unwrap();
 }
