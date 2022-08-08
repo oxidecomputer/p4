@@ -149,6 +149,7 @@ impl<'a> ExpressionGenerator<'a> {
             BinOp::Subtract=> quote! { - },
             BinOp::Geq => quote! { >= },
             BinOp::Eq => quote! { == },
+            BinOp::NotEq => quote! { != },
             BinOp::Mask => quote! { & },
         }
     }

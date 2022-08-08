@@ -429,6 +429,7 @@ impl<'a> Parser<'a> {
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
+            lexer::Kind::NotEquals => Ok(Some(BinOp::NotEq)),
             lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
             lexer::Kind::Plus => Ok(Some(BinOp::Add)),
             lexer::Kind::Minus => Ok(Some(BinOp::Subtract)),
@@ -1786,93 +1787,8 @@ impl<'a, 'b> StateParser<'a, 'b> {
     pub fn parse_body(&mut self, state: &mut State) -> Result<(), Error> {
         state.statements = self.parser.parse_statement_block()?;
         Ok(())
-        /*
-        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
-
-        loop {
-            let token = self.parser.next_token()?;
-
-            // check if we've reached the end of the parameters
-            match token.kind {
-                lexer::Kind::CurlyClose => break,
-
-                // variable declaration / initialization
-                lexer::Kind::Bool
-                | lexer::Kind::Error
-                | lexer::Kind::Bit
-                | lexer::Kind::Int
-                | lexer::Kind::String => {
-                    self.parser.backlog.push(token);
-                    let var = self.parser.parse_variable()?;
-                    state.variables.push(var);
-                }
-
-                // constant declaration / initialization
-                lexer::Kind::Const => {
-                    let c = self.parser.parse_constant()?;
-                    state.constants.push(c);
-                }
-
-                lexer::Kind::Identifier(_) => {
-                    // push the identifier token into the backlog and run the
-                    // statement parser
-                    self.parser.backlog.push(token);
-                    let mut sp = StatementParser::new(self.parser);
-                    let stmt = sp.run()?;
-                    state.statements.push(stmt);
-                }
-
-                lexer::Kind::Transition => {
-                    self.parse_transition(state)?;
-                }
-
-                _ => return Err(ParserError {
-                    at: token.clone(),
-                    message: format!(
-                        "Found {}: expected variable, constant, statement or \
-                        instantiation.",
-                        token.kind,
-                    ),
-                    source: self.parser.lexer.lines[token.line].into(),
-                }
-                .into()),
-            }
-        }
-
-        Ok(())
-        */
     }
 
-    /* TODO integrate into statement parsing
-    pub fn parse_transition(&mut self, state: &mut State) -> Result<(), Error> {
-        let token = self.parser.next_token()?;
-
-        match token.kind {
-            lexer::Kind::Select => {
-                let mut sp = SelectParser::new(self.parser);
-                let select = sp.run()?;
-                state.transition = Some(Transition::Select(select));
-            }
-            lexer::Kind::Identifier(name) => {
-                state.transition = Some(Transition::Reference(name));
-                self.parser.expect_token(lexer::Kind::Semicolon)?;
-            }
-            _ => {
-                return Err(ParserError {
-                    at: token.clone(),
-                    message: format!(
-                        "Found {}: expected select or identifier",
-                        token.kind,
-                    ),
-                    source: self.parser.lexer.lines[token.line].into(),
-                }
-                .into())
-            }
-        }
-
-        Ok(())
-    }
-    */
 }
 
 pub struct SelectParser<'a, 'b> {

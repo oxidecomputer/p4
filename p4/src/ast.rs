@@ -249,6 +249,7 @@ pub enum BinOp {
     Geq,
     Eq,
     Mask,
+    NotEq,
 }
 
 impl BinOp {
@@ -258,6 +259,7 @@ impl BinOp {
             BinOp::Subtract => "subtract",
             BinOp::Geq | BinOp::Eq => "compare",
             BinOp::Mask => "mask",
+            BinOp::NotEq => "not equal",
         }
     }
 }

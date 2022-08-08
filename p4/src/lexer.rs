@@ -73,6 +73,7 @@ pub enum Kind {
     // operators
     //
     DoubleEquals,
+    NotEquals,
     Equals,
     Plus,
     Minus,
@@ -197,6 +198,7 @@ impl fmt::Display for Kind {
             // operators
             //
             Kind::DoubleEquals => write!(f, "operator =="),
+            Kind::NotEquals => write!(f, "operator !="),
             Kind::Equals => write!(f, "operator ="),
             Kind::Plus => write!(f, "operator +"),
             Kind::Minus => write!(f, "operator -"),
@@ -396,6 +398,11 @@ impl<'a> Lexer<'a> {
         }
 
         match self.match_token("==", Kind::DoubleEquals) {
+            Some(t) => return Ok(t),
+            None => {}
+        }
+
+        match self.match_token("!=", Kind::NotEquals) {
             Some(t) => return Ok(t),
             None => {}
         }
@@ -968,12 +975,15 @@ impl<'a> Lexer<'a> {
             Some('.') => return &self.cursor[..1],
             Some(':') => return &self.cursor[..1],
             Some('*') => return &self.cursor[..1],
-            Some('!') => return &self.cursor[..1],
             Some('|') => return &self.cursor[..1],
             Some('~') => return &self.cursor[..1],
             Some('^') => return &self.cursor[..1],
             Some('\\') => return &self.cursor[..1],
             Some('/') => return &self.cursor[..1],
+            Some('!') => match chars.next() {
+                Some('=') => return &self.cursor[..2],
+                _ => return &self.cursor[..1],
+            },
             Some('=') => match chars.next() {
                 Some('=') => return &self.cursor[..2],
                 _ => return &self.cursor[..1],
