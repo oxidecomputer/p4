@@ -19,6 +19,7 @@ struct IngressMetadata {
 struct EgressMetadata {
     bit<8> port;
     bit<128> nexthop;
+    bool drop;
 }
 
 SoftNPU(
@@ -138,12 +139,16 @@ control resolver(
         hdr.ethernet.dst = dst;
     }
 
+    action drop() {
+        egress.drop = true;
+    }
+
     table resolver {
         key = {
             egress.nexthop: exact;
         }
-        actions = { rewrite_dst; NoAction; }
-        default_action = NoAction;
+        actions = { rewrite_dst; drop; }
+        default_action = drop;
     }
 
     apply {

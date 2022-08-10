@@ -479,12 +479,20 @@ impl<'a> StatementGenerator<'a> {
             }
 
         }
+        let default_action = format_ident!(
+            "{}_action_{}",
+            control.name,
+            table.default_action,
+        );
         tokens.extend(quote! {
             let matches = #table_name.match_selector(
                 &[#(#selector_components),*]
             );
             if matches.len() > 0 { 
                 (matches[0].action)(#(#action_args),*)
+            }
+            else {
+                #default_action(#(#action_args),*);
             }
         });
     }

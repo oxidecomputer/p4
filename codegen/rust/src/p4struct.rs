@@ -71,6 +71,9 @@ impl<'a> StructGenerator<'a> {
                 Type::Bit(_size) => {
                     members.push(quote! { pub #name: BitVec::<u8, Msb0> });
                 }
+                Type::Bool => {
+                    members.push(quote! { pub #name: bool });
+                }
                 x => {
                     todo!("struct member {}", x)
                 }

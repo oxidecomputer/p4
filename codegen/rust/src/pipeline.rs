@@ -208,7 +208,8 @@ impl <'a> PipelineGenerator<'a> {
                 // 6. Determine egress port
                 //
 
-                let port = if egress_metadata.port.is_empty() {
+                let port = if egress_metadata.port.is_empty() 
+                    || egress_metadata.drop {
                     dtrace_provider::control_dropped!(||(&dump));
                     println!("{}", "no match".red());
                     println!("{}", "---".dimmed());

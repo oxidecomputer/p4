@@ -18,6 +18,8 @@ struct IngressMetadata {
 }
 struct EgressMetadata {
     bit<8> port;
+    bit<128> nexthop;
+    bool drop;
 }
 
 SoftNPU(
