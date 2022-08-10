@@ -11,7 +11,7 @@ const R: usize = 1024;
 const N: usize = 4096;
 const F: usize = 1500;
 
-p4_macro::use_p4!("test/src/p4/dynamic_router.p4");
+p4_macro::use_p4!("test/src/p4/dynamic_router_noaddr_nbr.p4");
 
 ///
 ///   ~~~~~~~~~~                 
@@ -35,7 +35,7 @@ p4_macro::use_p4!("test/src/p4/dynamic_router.p4");
 ///   *========*                 
 ///
 #[test]
-fn dynamic_router() -> Result<(), anyhow::Error> {
+fn mac_rewrite() -> Result<(), anyhow::Error> {
 
 
     let fb = Arc::new(FrameBuffer::<N, F>::new());
@@ -71,6 +71,50 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
 
         let mut pipeline = main_pipeline::new();
 
+        // local address entries
+
+        let addr_c: Ipv6Addr = "fe80::aae1:deff:fe01:701c".parse().unwrap();
+        let addr_d: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
+        let addr_e: Ipv6Addr = "fe80::aae1:deff:fe01:701e".parse().unwrap();
+
+        pipeline.add_local_table_entry(
+            0,
+            &addr_c.octets().to_vec(),
+            &Vec::new(),
+        );
+        pipeline.add_local_table_entry(
+            0,
+            &addr_d.octets().to_vec(),
+            &Vec::new(),
+        );
+        pipeline.add_local_table_entry(
+            0,
+            &addr_e.octets().to_vec(),
+            &Vec::new(),
+        );
+
+        // resolver table entries
+        
+        pipeline.add_resolver_table_entry(
+            0,
+            &addr_c.octets().to_vec(),
+            &vec![0x44,0x44,0x44,0x44,0x44,0x44],
+        );
+
+        pipeline.add_resolver_table_entry(
+            0,
+            &addr_d.octets().to_vec(),
+            &vec![0x33,0x33,0x33,0x33,0x33,0x33],
+        );
+
+        pipeline.add_resolver_table_entry(
+            0,
+            &addr_e.octets().to_vec(),
+            &vec![0x22,0x22,0x22,0x22,0x22,0x22],
+        );
+
+        // routing table entries
+
         add_router_table_entry_forward(
             p4rs::table::Key::Lpm(p4rs::table::Prefix {
                 addr: "fd00:1000::".parse().unwrap(),
@@ -79,6 +123,11 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
             {
                 let mut x = bitvec![mut u8, Msb0; 0; 8];
                 x.store(1u8);
+                x
+            },
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; 128];
+                x.extend_from_raw_slice(&addr_c.octets());
                 x
             },
             0,
@@ -96,6 +145,11 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
                 x.store(2u8);
                 x
             },
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; 128];
+                x.extend_from_raw_slice(&addr_d.octets());
+                x
+            },
             0,
             "control plane rule 2".into(),
             &mut pipeline.router_table_router,
@@ -109,6 +163,11 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
             {
                 let mut x = bitvec![mut u8, Msb0; 0; 8];
                 x.store(3u8);
+                x
+            },
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; 128];
+                x.extend_from_raw_slice(&addr_e.octets());
                 x
             },
             0,
@@ -286,6 +345,7 @@ fn phy3_egress(frame: &[u8]) {
 fn add_router_table_entry_forward(
     key: p4rs::table::Key,
     port: BitVec<u8, Msb0>,
+    nexthop: BitVec<u8, Msb0>,
     priority: u32,
     name: String,
     table: &mut p4rs::table::Table::<
@@ -308,6 +368,7 @@ fn add_router_table_entry_forward(
             ingress,
             egress,
             port.clone(),
+            nexthop.clone(),
         );
     });
 

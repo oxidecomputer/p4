@@ -172,6 +172,7 @@ impl <'a> PipelineGenerator<'a> {
                 }
                 println!("{}", "parser accepted".green()); //XXX
                 let dump = parsed.dump();
+                println!("{}", "<<<".dimmed());
                 println!("{}", &dump); //XXX
                 dtrace_provider::parser_accepted!(||(&dump));
 
@@ -215,6 +216,10 @@ impl <'a> PipelineGenerator<'a> {
                 } else {
                     egress_metadata.port.as_raw_slice()[0]
                 };
+
+                let dump = parsed.dump();
+                println!("{}", ">>>".dimmed());
+                println!("{}", &dump); //XXX
 
                 dtrace_provider::control_accepted!(||(&dump));
                 println!("{}", "control pass".green());

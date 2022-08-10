@@ -194,10 +194,18 @@ impl<'a> ControlGenerator<'a> {
         );
         let body = sg.generate_block(&action.statement_block, &mut names);
 
+        let __name = name.to_string();
+
         self.ctx.functions.insert(
             name.to_string(),
             quote! {
                 pub fn #name(#(#params),*) {
+
+                    //TODO <<<< DTRACE <<<<<<
+                    //Generate dtrace prbes that allow us to trace control
+                    //action flows.
+                    //println!("####{}####", #__name);
+                    
                     #body
                 }
             },

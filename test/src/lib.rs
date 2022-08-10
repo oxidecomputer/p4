@@ -9,6 +9,8 @@ mod disag_router;
 #[cfg(test)]
 mod dynamic_router;
 #[cfg(test)]
+mod mac_rewrite;
+#[cfg(test)]
 mod softnpu;
 //#[cfg(test)]
 //mod headers;
