@@ -39,55 +39,43 @@ impl<'a> ControlGenerator<'a> {
         &mut self,
         control: &Control,
     ) -> (TokenStream, TokenStream) {
-        let (mut params, param_types) = self.control_parameters(control);
+        let (mut params, _param_types) = self.control_parameters(control);
 
         for action in &control.actions {
             self.generate_control_action(control, action);
         }
 
-        // local tables
-        for table in &control.tables {
-            let (type_tokens, table_tokens) =
-                self.generate_control_table(control, table, &param_types);
-
+        let tables = control.tables(self.ast);
+        for (c, table) in tables {
+            let (_, param_types) = self.control_parameters(c);
+            let n = table.key.len() as usize;
+            let table_type = quote! {
+                p4rs::table::Table::<
+                    #n,
+                    std::sync::Arc<dyn Fn(#(#param_types),*)>
+                    > 
+            };
             let name = format_ident!(
                 "{}_table_{}",
-                control.name,
+                c.name,
                 table.name
             );
-            self.ctx.functions.insert(
-                name.to_string(),
-                quote! {
-                    pub fn #name() -> #type_tokens {
-                        #table_tokens
-                    }
-                },
-            );
-            let name = format_ident!("{}", table.name);
             params.push(quote! {
-                #name: &#type_tokens
+                #name: &#table_type
             });
-        }
 
-        // control instances as variables
-        for v in &control.variables {
-            if let Type::UserDefined(name) = &v.ty {
-                if let Some(control_inst) = self.ast.get_control(name) {
-                    let (_, param_types) = self.control_parameters(control_inst);
-                    for table in & control_inst.tables {
-                        let n = table.key.len() as usize;
-                        let table_type = quote! {
-                            p4rs::table::Table::<
-                                #n,
-                                std::sync::Arc<dyn Fn(#(#param_types),*)>
-                            > 
-                        };
-                        let name = format_ident!("{}", v.name);
-                        params.push(quote! {
-                            #name: &#table_type
-                        });
-                    }
-                }
+            // for local tables, generate a constructor function
+            if c == control {
+                let (type_tokens, table_tokens) =
+                    self.generate_control_table(control, table, &param_types);
+                self.ctx.functions.insert(
+                    name.to_string(),
+                    quote! {
+                        pub fn #name() -> #type_tokens {
+                            #table_tokens
+                        }
+                    },
+                );
             }
         }
 

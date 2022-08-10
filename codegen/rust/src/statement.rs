@@ -398,8 +398,20 @@ impl<'a> StatementGenerator<'a> {
                     }
                 }
             }
+
+            let tables = control_instance.tables(self.ast);
+            for (control, table) in tables {
+                let name = format_ident!("{}_table_{}",
+                    control.name,
+                    table.name,
+                );
+                args.push(quote!{ #name });
+            }
+
+            /*XXX
             let tbl_arg = format_ident!("{}", root);
             args.push(quote!{#tbl_arg});
+            */
 
             tokens.extend(quote!{
                 #call(#(#args),*);
@@ -425,14 +437,11 @@ impl<'a> StatementGenerator<'a> {
         // match an action based on the key material
         //
 
-        // TODO only supporting direct matches right now and implicitly
-        // assuming all match kinds are direct
-        let table_name: Vec<TokenStream> = table
-            .name
-            .split(".")
-            .map(|x| format_ident!("{}", x))
-            .map(|x| quote! { #x })
-            .collect();
+        let table_name = format_ident!(
+            "{}_table_{}",
+            control_instance.name,
+            table.name,
+        );
 
         let mut action_args = Vec::new();
         for p in &control.parameters {
@@ -471,7 +480,7 @@ impl<'a> StatementGenerator<'a> {
 
         }
         tokens.extend(quote! {
-            let matches = #(#table_name).*.match_selector(
+            let matches = #table_name.match_selector(
                 &[#(#selector_components),*]
             );
             if matches.len() > 0 { 
@@ -486,36 +495,6 @@ impl<'a> StatementGenerator<'a> {
         tokens: &mut TokenStream,
         valid: bool,
     ) {
-
-        /* TODO XXX do this check in the checker
-        let name_info = self
-            .hlir
-            .lvalue_decls
-            .get(&c.lval.pop_right()).expect(&format!(
-                "codegen: lval root for {:#?} not found in hlir",
-                c.lval
-            ));
-
-        let header = match &name_info.ty {
-            Type::UserDefined(name) => {
-                self.ast
-                    .get_header(name)
-                    .expect(&format!(
-                        "codegen: setValid called on type {} \
-                        whic is not a header: {:#?}",
-                        name,
-                        c
-                    ))
-            }
-            _ => {
-                panic!(
-                    "codegen: setValid called on non-header: {:#?} : {:#?}", 
-                    c.lval,
-                    name_info,
-                );
-            }
-        };
-        */
 
         let lhs: Vec<TokenStream> = c.lval.pop_right()
             .name

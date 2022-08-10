@@ -381,6 +381,25 @@ impl Control {
         None
     }
 
+    /// Return all the tables in this control block, recursively expanding local
+    /// control block variables and including their tables. In the returned
+    /// vector, the table in the second element of the tuple belongs to the
+    /// control in the first element.
+    pub fn tables<'a>(&'a self, ast: &'a AST) -> Vec<(&Control, &Table)> {
+        let mut result = Vec::new();
+        for table in &self.tables {
+            result.push((self, table));
+        }
+        for v in &self.variables {
+            if let Type::UserDefined(name) = &v.ty {
+                if let Some(control_inst) = ast.get_control(name) {
+                    result.extend_from_slice(&control_inst.tables(ast));
+                }
+            }
+        }
+        result 
+    }
+
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
             if t == name {
@@ -417,6 +436,12 @@ impl Control {
             });
         }
         names
+    }
+}
+
+impl PartialEq for Control {
+    fn eq(&self, other: &Control) -> bool {
+        self.name == other.name
     }
 }
 
