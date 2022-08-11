@@ -62,6 +62,14 @@ impl<const D: usize, A: Clone> Table<D, A> {
         sorted 
 
     }
+
+    pub fn dump(&self) -> String {
+        let mut s = String::new();
+        for e in &self.entries {
+            s += &format!("{:?}\n", e.key)
+        }
+        s
+    }
 }
 
 pub fn sort_entries<const D: usize, A: Clone>(

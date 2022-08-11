@@ -324,29 +324,18 @@ impl <'a> PipelineGenerator<'a> {
         control: &Control,
     ) -> TokenStream {
 
+        let mut body = TokenStream::new();
         let mut i: u32 = 0;
 
-        let mut body = TokenStream::new();
-        for table in &control.tables {
+        let tables = control.tables(self.ast);
+        for (_control, table) in tables {
+            //TODO probably a conflict with the same table name in multiple control
+            //blocks
             let call = format_ident!("remove_{}_table_entry", table.name);
             body.extend(quote!{
                 #i => self.#call(keyset_data),
             });
             i += 1;
-        }
-
-        for v in &control.variables {
-            if let Type::UserDefined(name) = &v.ty {
-                if let Some(control_inst) = self.ast.get_control(name) {
-                    for table in & control_inst.tables {
-                        let call = format_ident!("remove_{}_table_entry", table.name);
-                        body.extend(quote!{
-                            #i => self.#call(keyset_data),
-                        });
-                        i += 1;
-                    }
-                }
-            }
         }
 
         body.extend(quote!{
@@ -381,33 +370,6 @@ impl <'a> PipelineGenerator<'a> {
                 self.remove_table_entry_function(table, control)
             );
         }
-
-
-        /*XXX
-        for table in &control.tables {
-            tokens.extend(
-                self.add_table_entry_function(table, control)
-            );
-            tokens.extend(
-                self.remove_table_entry_function(table, control)
-            );
-        }
-
-        for v in &control.variables {
-            if let Type::UserDefined(name) = &v.ty {
-                if let Some(control_inst) = self.ast.get_control(name) {
-                    for table in & control_inst.tables {
-                        tokens.extend(
-                            self.add_table_entry_function(table, control_inst)
-                        );
-                        tokens.extend(
-                            self.remove_table_entry_function(table, control_inst)
-                        );
-                    }
-                }
-            }
-        }
-        */
 
         tokens
     }

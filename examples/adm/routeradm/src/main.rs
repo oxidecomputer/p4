@@ -69,7 +69,9 @@ enum Commands {
     /// Remove a static NDP entry
     RemoveNdpEntry {
         l3: Ipv6Addr,
-    }
+    },
+
+    DumpState,
 
 }
 
@@ -225,6 +227,37 @@ fn main() {
                     .. Default::default()
                 })
             });
+        }
+        Commands::DumpState => {
+            let mut f = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open("/dev/tty03")
+                .unwrap();
+
+            let msg = ManagementMessage{
+                function: ManagementFunction::DumpState,
+                .. Default::default()
+            };
+
+            let mut buf = msg.to_wire();
+            buf.push('\n' as u8);
+
+            f.write_all(&buf).unwrap();
+            f.sync_all().unwrap();
+
+            loop {
+                let mut buf = [0u8; 1024];
+                let n = f.read(&mut buf).unwrap();
+                if n == 0 {
+                    continue
+                }
+                if buf[0] == 0x4 {
+                    break;
+                }
+                let s = String::from_utf8_lossy(&buf[..n-1]);
+                println!("{}", s.to_string());
+            }
         }
 
     }
