@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+p4rs = { path = "../../../lang/p4rs" }
 clap = { version = "3.2.16", features = ["derive"] }
 propolis = { path = "/home/ry/src/propolis/propolis", features = ["falcon"] }
+serde = "1.0"
+serde_json = "1.0"

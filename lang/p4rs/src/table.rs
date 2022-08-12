@@ -3,9 +3,10 @@ use std::collections::HashSet;
 
 use num::bigint::BigUint;
 use num::ToPrimitive;
+use serde::{Deserialize, Serialize};
 
 // TODO transition from BigUint to BitVec<u8, Msb0>
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Key {
     Exact(BigUint),
     Range(BigUint, BigUint),
@@ -19,7 +20,7 @@ impl Default for Key {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Ternary {
     DontCare,
     Value(BigUint),
@@ -32,7 +33,7 @@ impl Default for Ternary {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct Prefix {
     pub addr: IpAddr,
     pub len: u8,

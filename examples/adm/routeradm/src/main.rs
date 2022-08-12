@@ -8,7 +8,9 @@ use propolis::hw::virtio::softnpu::{
     ManagementFunction,
     ManagementMessageInfo,
     TableModifier,
+    TableDump,
 };
+use p4rs::table::{Key, Ternary};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -246,22 +248,61 @@ fn main() {
             f.write_all(&buf).unwrap();
             f.sync_all().unwrap();
 
-            loop {
-                let mut buf = [0u8; 1024];
-                let n = f.read(&mut buf).unwrap();
-                if n == 0 {
-                    continue
-                }
-                if buf[0] == 0x4 {
-                    break;
-                }
-                let s = String::from_utf8_lossy(&buf[..n-1]);
-                println!("{}", s.to_string());
-            }
+            let mut buf = [0u8; 10240];
+            let n = f.read(&mut buf).unwrap();
+            let s = String::from_utf8_lossy(&buf[..n-1]).to_string();
+            //println!("{}", s.to_string());
+
+            let d: TableDump = serde_json::from_str(&s).unwrap();
+            //println!("{:#x?}", d);
+
+            println!("Local:");
+            dump_table(&d.local);
+
+            println!("Router:");
+            dump_table(&d.router);
+
+            println!("Resolver:");
+            dump_table(&d.resolver);
+
         }
 
     }
 
+}
+
+fn dump_table(table: &Vec<Vec<Key>>) {
+
+    for keyset in table {
+        let mut v = Vec::new();
+        for key in keyset {
+            match key {
+                Key::Exact(x) => {
+                    v.push(format!("Exact({:x})", x));
+                }
+                Key::Range(x, y) => {
+                    v.push(format!("Range({:x},{:x})", x, y));
+                }
+                Key::Ternary(t) => {
+                    match t {
+                        Ternary::DontCare => {
+                            v.push(format!("Ternary(_)"));
+                        }
+                        Ternary::Value(x) => {
+                            v.push(format!("Ternary({:x})", x));
+                        }
+                        Ternary::Masked(x, y) => {
+                            v.push(format!("Ternary({:x} & {:x})", x, y));
+                        }
+                    }
+                }
+                Key::Lpm(p) => {
+                    v.push(format!("Prefix({}/{})", p.addr, p.len))
+                }
+            }
+        }
+        println!("{}", v.join(","));
+    }
 }
 
 fn send(msg: ManagementMessage) {

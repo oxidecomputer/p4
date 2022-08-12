@@ -605,6 +605,7 @@ dependencies = [
  "autocfg",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -614,6 +615,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fbc387afefefd5e9e39493299f3069e14a140dd34dc19b4c1c1a8fddb6a790"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -647,6 +649,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -773,6 +776,8 @@ dependencies = [
  "bitvec",
  "colored",
  "num",
+ "serde",
+ "serde_json",
  "slog",
  "slog-async",
  "slog-envlogger",
@@ -1180,7 +1185,10 @@ name = "routeradm"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "p4rs",
  "propolis",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
