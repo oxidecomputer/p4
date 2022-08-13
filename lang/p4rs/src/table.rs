@@ -239,6 +239,7 @@ mod tests {
 
     use super::*;
     use std::net::Ipv6Addr;
+    use std::sync::Arc;
 
     fn contains_entry<const D: usize, A: Clone>(
         entries: &Vec<TableEntry<D, A>>,

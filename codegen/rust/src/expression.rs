@@ -93,43 +93,43 @@ impl<'a> ExpressionGenerator<'a> {
 
         if width <= 8 {
             let v = value as u8;
-            return quote! { #v.view_bits::<Msb0>().to_bitvec() };
+            quote! { #v.view_bits::<Msb0>().to_bitvec() }
         } else if width <= 16 {
             let v = (value as u16).to_be();
-            return quote! {
+            quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 16];
                     x.store(#v);
                     x
                 }
-            };
+            }
         } else if width <= 32 {
             let v = value as u32;
-            return quote! {
+            quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 32];
                     x.store(#v);
                     x
                 }
-            };
+            }
         } else if width <= 64 {
             let v = value as u64;
-            return quote! {
+            quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 64];
                     x.store(#v);
                     x
                 }
-            };
+            }
         } else if width <= 128 {
             let v = value as u128;
-            return quote! {
+            quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 128];
                     x.store(#v);
                     x
                 }
-            };
+            }
         } else {
             todo!("bit<x> where x > 128");
         }

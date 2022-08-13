@@ -36,6 +36,9 @@ cargo clippy
 cargo check
 
 banner "test"
+
+cargo test
+
 pushd test
 
 banner "mac rewrite"

@@ -135,7 +135,7 @@ impl PackageParameter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Bool,
     Error,
@@ -515,7 +515,7 @@ pub struct ControlParameter {
     pub name_token: Token,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     In,
     Out,
@@ -813,7 +813,7 @@ pub struct ExternMethod {
     pub parameters: Vec<ControlParameter>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeclarationInfo {
     Parameter(Direction),
     Method,
