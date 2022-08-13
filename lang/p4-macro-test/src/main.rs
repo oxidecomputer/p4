@@ -10,8 +10,8 @@ fn main() {
     let mut eth = ethernet_t::new();
     eth.set(&buf).unwrap();
 
-    println!("dst: {:x?}", eth.dst_addr);
-    println!("src: {:x?}", eth.src_addr);
+    println!("dst: {:x?}", eth.dst_addr.as_raw_slice());
+    println!("src: {:x?}", eth.src_addr.as_raw_slice());
     let ethertype =
         u16::from_be_bytes(eth.ether_type.as_raw_slice().try_into().unwrap());
     println!("ethertype: {:x?}", ethertype);
