@@ -31,6 +31,7 @@ done
 banner "check"
 cargo fmt -- --check
 cargo clippy
+cargo check
 
 banner "test"
 pushd test
