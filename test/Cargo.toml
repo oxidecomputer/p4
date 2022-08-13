@@ -4,10 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+num = "0.4"
 p4-macro = { path = "../lang/p4-macro" }
 p4rs = { path = "../lang/p4rs" }
 xfr = { git = "https://github.com/oxidecomputer/xfr" }
 #xfr = { path = "/Users/ry/src/xfr" }
+bitvec = "1.0"
+pnet = "0.31"
+colored = "2.0"
+usdt = { git = "https://github.com/oxidecomputer/usdt" }
 
 [dev-dependencies]
 anyhow = "1"

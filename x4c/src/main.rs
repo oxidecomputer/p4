@@ -7,21 +7,36 @@ use std::fs;
 #[derive(Parser)]
 #[clap(version = "0.1")]
 struct Opts {
+    /// Show parsed lexical tokens.
     #[clap(long)]
     show_tokens: bool,
 
+    /// Show parsed abstract syntax tree.
     #[clap(long)]
     show_ast: bool,
 
+    /// Show parsed preprocessor info.
     #[clap(long)]
     show_pre: bool,
 
-    /// File to compile
+    /// Show high-level intermediate representation info.
+    #[clap(long)]
+    show_hlir: bool,
+
+    /// File to compile.
     filename: String,
 
-    /// What target to generate code for
-    #[clap(arg_enum)]
+    /// What target to generate code for.
+    #[clap(arg_enum, default_value_t = Target::Rust)]
     target: Target,
+
+    /// Just check code, do not compile.
+    #[clap(long)]
+    check: bool,
+
+    /// Filename to write generated code to.
+    #[clap(short, long, default_value = "out.rs")]
+    out: String,
 }
 
 #[derive(clap::ArgEnum, Clone)]
@@ -54,13 +69,20 @@ fn main() -> Result<()> {
         println!("{:#?}", ast);
     }
 
-    let static_diags = check::all(&ast);
-    check(&lines, &static_diags)?;
+    let (hlir, diags) = check::all(&ast);
+    check(&lines, &diags)?;
+
+    if opts.show_hlir {
+        println!("{:#?}", hlir);
+    }
+
+    if opts.check {
+        return Ok(());
+    }
 
     match opts.target {
         Target::Rust => {
-            let diags = p4_rust::emit(&ast)?;
-            check(&lines, &diags)?;
+            p4_rust::emit(&ast, &hlir, &opts.out)?;
         }
         Target::RedHawk => {
             todo!("RedHawk code generator");
@@ -73,7 +95,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn check(lines: &Vec<&str>, diagnostics: &Diagnostics) -> Result<()> {
+fn check(lines: &[&str], diagnostics: &Diagnostics) -> Result<()> {
     let errors = diagnostics.errors();
     if !errors.is_empty() {
         let mut err = Vec::new();

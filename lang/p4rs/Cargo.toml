@@ -4,8 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-num = "0.4"
+num = { version = "0.4", features = ["serde"] }
 slog = { version = "2.7", features = ["max_level_trace"] }
 slog-term = "2.9"
 slog-async = "2.7"
 slog-envlogger = "2.2"
+bitvec = "1.0"
+colored = "2.0"
+usdt = { git = "https://github.com/oxidecomputer/usdt" }
+serde = "1.0"
+serde_json = "1.0"

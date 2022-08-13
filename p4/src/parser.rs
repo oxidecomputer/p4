@@ -1,10 +1,11 @@
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
-    Constant, Control, ControlParameter, Direction, Expression, Extern,
-    ExternMethod, Header, HeaderMember, KeySetElement, KeySetElementValue,
-    Lvalue, MatchKind, Package, PackageInstance, PackageParameter, Select,
-    SelectElement, State, Statement, StatementBlock, Struct, StructMember,
-    Table, Transition, Type, Typedef, Variable, AST,
+    Constant, Control, ControlParameter, Direction, ElseIfBlock, Expression,
+    ExpressionKind, Extern, ExternMethod, Header, HeaderMember, IfBlock,
+    KeySetElement, KeySetElementValue, Lvalue, MatchKind, Package,
+    PackageInstance, PackageParameter, Select, SelectElement, State, Statement,
+    StatementBlock, Struct, StructMember, Table, Transition, Type, Typedef,
+    Variable, AST,
 };
 use crate::error::{Error, ParserError};
 /// This is a recurisve descent parser for the P4 language.
@@ -108,7 +109,7 @@ impl<'a> Parser<'a> {
             name = name + &ident;
             let token = self.next_token()?;
             match token.kind {
-                lexer::Kind::Dot => name = name + ".",
+                lexer::Kind::Dot => name += ".",
                 _ => {
                     self.backlog.push(token);
                     break;
@@ -210,17 +211,40 @@ impl<'a> Parser<'a> {
 
     pub fn parse_variable(&mut self) -> Result<Variable, Error> {
         let (ty, _) = self.parse_type()?;
+        let token = self.next_token()?;
+
+        // check for constructor
+        let parameters = if token.kind == lexer::Kind::ParenOpen {
+            self.backlog.push(token);
+            self.parse_parameters()?
+        } else {
+            self.backlog.push(token);
+            Vec::new()
+        };
+
         let (name, _) = self.parse_identifier()?;
-        self.expect_token(lexer::Kind::Equals)?;
-        loop {
-            //TODO for now just skipping to initializer terminating semicolon,
-            //need to parse initializer.
-            let token = self.next_token()?;
-            if token.kind == lexer::Kind::Semicolon {
-                break;
-            }
+
+        let token = self.next_token()?;
+        // check for initializer
+        if token.kind == lexer::Kind::Equals {
+            let initializer = self.parse_expression()?;
+            self.expect_token(lexer::Kind::Semicolon)?;
+            Ok(Variable {
+                ty,
+                name,
+                initializer: Some(initializer),
+                parameters,
+            })
+        } else {
+            self.backlog.push(token);
+            self.expect_token(lexer::Kind::Semicolon)?;
+            Ok(Variable {
+                ty,
+                name,
+                initializer: None,
+                parameters,
+            })
         }
-        Ok(Variable { ty, name })
     }
 
     pub fn parse_constant(&mut self) -> Result<Constant, Error> {
@@ -238,7 +262,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expression(&mut self) -> Result<Box<Expression>, Error> {
         let mut ep = ExpressionParser::new(self);
-        Ok(ep.run()?)
+        ep.run()
     }
 
     pub fn parse_keyset(&mut self) -> Result<Vec<KeySetElement>, Error> {
@@ -248,18 +272,18 @@ impl<'a> Parser<'a> {
                 // handle tuple set below
             }
             lexer::Kind::Underscore => {
-                return Ok(vec![KeySetElement{
+                return Ok(vec![KeySetElement {
                     value: KeySetElementValue::DontCare,
-                    token: token.clone(),
+                    token,
                 }]);
             }
             _ => {
                 self.backlog.push(token.clone());
                 let mut ep = ExpressionParser::new(self);
                 let expr = ep.run()?;
-                return Ok(vec![KeySetElement{
+                return Ok(vec![KeySetElement {
                     value: KeySetElementValue::Expression(expr),
-                    token: token.clone(),
+                    token,
                 }]);
             }
         }
@@ -271,7 +295,7 @@ impl<'a> Parser<'a> {
             // handle dont-care special case
             match token.kind {
                 lexer::Kind::Underscore => {
-                    elements.push(KeySetElement{
+                    elements.push(KeySetElement {
                         value: KeySetElementValue::DontCare,
                         token: token.clone(),
                     });
@@ -303,23 +327,23 @@ impl<'a> Parser<'a> {
             let token = self.next_token()?;
             match token.kind {
                 lexer::Kind::Comma => {
-                    elements.push(KeySetElement{
+                    elements.push(KeySetElement {
                         value: KeySetElementValue::Expression(expr),
                         token: token.clone(),
                     });
                     continue;
                 }
                 lexer::Kind::ParenClose => {
-                    elements.push(KeySetElement{
+                    elements.push(KeySetElement {
                         value: KeySetElementValue::Expression(expr),
-                        token: token.clone(),
+                        token,
                     });
                     return Ok(elements);
                 }
                 lexer::Kind::Mask => {
                     let mut ep = ExpressionParser::new(self);
                     let mask_expr = ep.run()?;
-                    elements.push(KeySetElement{
+                    elements.push(KeySetElement {
                         value: KeySetElementValue::Masked(expr, mask_expr),
                         token: token.clone(),
                     });
@@ -404,6 +428,7 @@ impl<'a> Parser<'a> {
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
+            lexer::Kind::NotEquals => Ok(Some(BinOp::NotEq)),
             lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
             lexer::Kind::Plus => Ok(Some(BinOp::Add)),
             lexer::Kind::Minus => Ok(Some(BinOp::Subtract)),
@@ -424,7 +449,7 @@ impl<'a> Parser<'a> {
         loop {
             let token = self.next_token()?;
 
-            // check if we've reached the end of the parameters
+            // check if we've reached the end of the statements
             match token.kind {
                 lexer::Kind::CurlyClose => break,
 
@@ -436,16 +461,19 @@ impl<'a> Parser<'a> {
                 | lexer::Kind::String => {
                     self.backlog.push(token);
                     let var = self.parse_variable()?;
-                    result.variables.push(var);
+                    result.statements.push(Statement::Variable(var));
                 }
 
                 // constant declaration / initialization
                 lexer::Kind::Const => {
                     let c = self.parse_constant()?;
-                    result.constants.push(c);
+                    //result.constants.push(c);
+                    result.statements.push(Statement::Constant(c));
                 }
 
-                lexer::Kind::Identifier(_) => {
+                lexer::Kind::Identifier(_)
+                | lexer::Kind::If
+                | lexer::Kind::Return => {
                     // push the identifier token into the backlog and run the
                     // statement parser
                     self.backlog.push(token);
@@ -453,21 +481,54 @@ impl<'a> Parser<'a> {
                     let stmt = sp.run()?;
                     result.statements.push(stmt);
                 }
+                lexer::Kind::Transition => {
+                    result
+                        .statements
+                        .push(Statement::Transition(self.parse_transition()?));
+                }
 
-                _ => return Err(ParserError {
-                    at: token.clone(),
-                    message: format!(
+                _ => {
+                    return Err(ParserError {
+                        at: token.clone(),
+                        message: format!(
                         "Found {} expected variable, constant, statement or \
-                            instantiation.",
+                        instantiation.",
                         token.kind,
                     ),
-                    source: self.lexer.lines[token.line].into(),
+                        source: self.lexer.lines[token.line].into(),
+                    }
+                    .into())
                 }
-                .into()),
             }
         }
 
         Ok(result)
+    }
+
+    pub fn parse_transition(&mut self) -> Result<Transition, Error> {
+        let token = self.next_token()?;
+
+        match token.kind {
+            lexer::Kind::Select => {
+                let mut sp = SelectParser::new(self);
+                let select = sp.run()?;
+                Ok(Transition::Select(select))
+            }
+            lexer::Kind::Identifier(name) => {
+                let result = Transition::Reference(name);
+                self.expect_token(lexer::Kind::Semicolon)?;
+                Ok(result)
+            }
+            _ => Err(ParserError {
+                at: token.clone(),
+                message: format!(
+                    "Found {}: expected select or identifier",
+                    token.kind,
+                ),
+                source: self.lexer.lines[token.line].into(),
+            }
+            .into()),
+        }
     }
 
     pub fn parse_parameters(&mut self) -> Result<Vec<ControlParameter>, Error> {
@@ -808,12 +869,9 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
                     let mut parameter = PackageParameter::new(type_name);
                     let token = self.parser.next_token()?;
                     self.parser.backlog.push(token.clone());
-                    match token.kind {
-                        lexer::Kind::AngleOpen => {
-                            parameter.type_parameters =
-                                self.parser.parse_type_parameters()?;
-                        }
-                        _ => {}
+                    if token.kind == lexer::Kind::AngleOpen {
+                        parameter.type_parameters =
+                            self.parser.parse_type_parameters()?;
                     }
                     let (name, _) = self.parser.parse_identifier()?;
                     parameter.name = name;
@@ -883,6 +941,10 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         let (name, _) = self.parser.parse_identifier()?;
         let mut control = Control::new(name);
 
+        //
+        // check for type parameters
+        //
+
         let token = self.parser.next_token()?;
         match token.kind {
             lexer::Kind::AngleOpen => {
@@ -895,7 +957,15 @@ impl<'a, 'b> ControlParser<'a, 'b> {
             }
         }
 
+        //
+        // control parameters
+        //
+
         control.parameters = self.parser.parse_parameters()?;
+
+        //
+        // check for declaration only (e.g. no body)
+        //
 
         let token = self.parser.next_token()?;
         match token.kind {
@@ -904,6 +974,10 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                 self.parser.backlog.push(token);
             }
         }
+
+        //
+        // parse body of the control
+        //
 
         self.parse_body(&mut control)?;
 
@@ -922,6 +996,15 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                 lexer::Kind::Action => self.parse_action(control)?,
                 lexer::Kind::Table => self.parse_table(control)?,
                 lexer::Kind::Apply => self.parse_apply(control)?,
+                lexer::Kind::Const => {
+                    let c = self.parser.parse_constant()?;
+                    control.constants.push(c);
+                }
+                lexer::Kind::Identifier(_) => {
+                    self.parser.backlog.push(token);
+                    let v = self.parser.parse_variable()?;
+                    control.variables.push(v);
+                }
                 _ => {
                     return Err(ParserError {
                         at: token.clone(),
@@ -1002,11 +1085,16 @@ impl<'a, 'b> ActionParser<'a, 'b> {
             self.parser.backlog.push(token);
 
             // parse a parameter
+            let direction = match self.parser.parse_direction() {
+                Ok((dir, _)) => dir,
+                Err(_) => Direction::Unspecified,
+            };
             let (ty, ty_token) = self.parser.parse_type()?;
             let (name, name_token) = self.parser.parse_identifier()?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
                 action.parameters.push(ActionParameter {
+                    direction,
                     ty,
                     name,
                     ty_token,
@@ -1018,6 +1106,7 @@ impl<'a, 'b> ActionParser<'a, 'b> {
             self.parser.expect_token(lexer::Kind::Comma)?;
 
             action.parameters.push(ActionParameter {
+                direction,
                 ty,
                 name,
                 ty_token,
@@ -1106,16 +1195,18 @@ impl<'a, 'b> TableParser<'a, 'b> {
                         }
                     }
                 }
-                _ => return Err(ParserError {
-                    at: token.clone(),
-                    message: format!(
+                _ => {
+                    return Err(ParserError {
+                        at: token.clone(),
+                        message: format!(
                         "Found {} expected: key, actions, entries or end of \
                             table",
                         token.kind,
                     ),
-                    source: self.parser.lexer.lines[token.line].into(),
+                        source: self.parser.lexer.lines[token.line].into(),
+                    }
+                    .into())
                 }
-                .into()),
             }
         }
 
@@ -1226,10 +1317,16 @@ impl<'a, 'b> TableParser<'a, 'b> {
     pub fn parse_actionref(&mut self) -> Result<ActionRef, Error> {
         let (name, aref_tk) = self.parser.parse_identifier()?;
         let token = self.parser.next_token()?;
-        let mut actionref = ActionRef::new(name, aref_tk.clone());
+        let mut actionref = ActionRef::new(name, aref_tk);
         match token.kind {
             lexer::Kind::Semicolon => Ok(actionref),
             lexer::Kind::ParenOpen => {
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::ParenClose {
+                    return Ok(actionref);
+                } else {
+                    self.parser.backlog.push(token);
+                }
                 let mut args = Vec::new();
                 loop {
                     let mut ep = ExpressionParser::new(self.parser);
@@ -1284,6 +1381,27 @@ impl<'a, 'b> StatementParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Statement, Error> {
+        let token = self.parser.next_token()?;
+        match token.kind {
+            lexer::Kind::If => {
+                let mut iep = IfElseParser::new(self.parser);
+                return iep.run();
+            }
+            lexer::Kind::Return => {
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::Semicolon {
+                    return Ok(Statement::Return(None));
+                } else {
+                    self.parser.backlog.push(token);
+                    let mut ep = ExpressionParser::new(self.parser);
+                    return Ok(Statement::Return(Some(ep.run()?)));
+                }
+            }
+            _ => {
+                self.parser.backlog.push(token);
+            }
+        }
+
         // wrap the identifier as an lvalue, consuming any dot
         // concatenated references
         let lval = self.parser.parse_lvalue()?;
@@ -1335,6 +1453,60 @@ impl<'a, 'b> StatementParser<'a, 'b> {
     }
 }
 
+pub struct IfElseParser<'a, 'b> {
+    parser: &'b mut Parser<'a>,
+}
+
+impl<'a, 'b> IfElseParser<'a, 'b> {
+    pub fn new(parser: &'b mut Parser<'a>) -> Self {
+        Self { parser }
+    }
+
+    pub fn run(&mut self) -> Result<Statement, Error> {
+        let predicate = self.parse_predicate()?;
+        let block = self.parser.parse_statement_block()?;
+        let mut blk = IfBlock {
+            predicate,
+            block,
+            else_ifs: Vec::new(),
+            else_block: None,
+        };
+
+        // check for else / else if
+        loop {
+            let token = self.parser.next_token()?;
+            if token.kind == lexer::Kind::Else {
+                let token = self.parser.next_token()?;
+                if token.kind == lexer::Kind::If {
+                    // else if
+                    let predicate = self.parse_predicate()?;
+                    let block = self.parser.parse_statement_block()?;
+                    blk.else_ifs.push(ElseIfBlock { predicate, block });
+                } else {
+                    // else
+                    self.parser.backlog.push(token);
+                    let block = self.parser.parse_statement_block()?;
+                    blk.else_block = Some(block);
+                    break;
+                }
+            } else {
+                self.parser.backlog.push(token);
+                break;
+            }
+        }
+
+        Ok(Statement::If(blk))
+    }
+
+    fn parse_predicate(&mut self) -> Result<Box<Expression>, Error> {
+        self.parser.expect_token(lexer::Kind::ParenOpen)?;
+        let mut ep = ExpressionParser::new(self.parser);
+        let xpr = ep.run()?;
+        self.parser.expect_token(lexer::Kind::ParenClose)?;
+        Ok(xpr)
+    }
+}
+
 pub struct ExpressionParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
 }
@@ -1347,17 +1519,70 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
     pub fn run(&mut self) -> Result<Box<Expression>, Error> {
         let token = self.parser.next_token()?;
         let lhs = match token.kind {
-            lexer::Kind::IntLiteral(value) => Expression::IntegerLit(value),
-            lexer::Kind::BitLiteral(width, value) => {
-                Expression::BitLit(width, value)
+            lexer::Kind::TrueLiteral => {
+                Expression::new(token.clone(), ExpressionKind::BoolLit(true))
             }
-            lexer::Kind::SignedLiteral(width, value) => {
-                Expression::SignedLit(width, value)
+            lexer::Kind::FalseLiteral => {
+                Expression::new(token.clone(), ExpressionKind::BoolLit(false))
             }
+            lexer::Kind::IntLiteral(value) => Expression::new(
+                token.clone(),
+                ExpressionKind::IntegerLit(value),
+            ),
+            lexer::Kind::BitLiteral(width, value) => Expression::new(
+                token.clone(),
+                ExpressionKind::BitLit(width, value),
+            ),
+            lexer::Kind::SignedLiteral(width, value) => Expression::new(
+                token.clone(),
+                ExpressionKind::SignedLit(width, value),
+            ),
             lexer::Kind::Identifier(_) => {
-                self.parser.backlog.push(token);
+                self.parser.backlog.push(token.clone());
                 let lval = self.parser.parse_lvalue()?;
-                Expression::Lvalue(lval)
+
+                let token = self.parser.next_token()?;
+
+                // check for index
+                if token.kind == lexer::Kind::SquareOpen {
+                    let mut xp = ExpressionParser::new(self.parser);
+                    let xpr = xp.run()?;
+                    // check for slice
+                    let slice_token = self.parser.next_token()?;
+                    if slice_token.kind == lexer::Kind::Colon {
+                        let mut xp = ExpressionParser::new(self.parser);
+                        let slice_xpr = xp.run()?;
+                        self.parser.expect_token(lexer::Kind::SquareClose)?;
+                        Expression::new(
+                            token,
+                            ExpressionKind::Index(
+                                lval,
+                                Expression::new(
+                                    slice_token,
+                                    ExpressionKind::Slice(xpr, slice_xpr),
+                                ),
+                            ),
+                        )
+                    } else {
+                        self.parser.backlog.push(token.clone());
+                        self.parser.expect_token(lexer::Kind::SquareClose)?;
+                        Expression::new(token, ExpressionKind::Index(lval, xpr))
+                    }
+                }
+                // check for call
+                else if token.kind == lexer::Kind::ParenOpen {
+                    self.parser.backlog.push(token.clone());
+                    let args = self.parser.parse_expr_parameters()?;
+                    Expression::new(
+                        token,
+                        ExpressionKind::Call(Call { lval, args }),
+                    )
+                }
+                // if it's not an index and it's not a call, it's an lvalue
+                else {
+                    self.parser.backlog.push(token.clone());
+                    Expression::new(token, ExpressionKind::Lvalue(lval))
+                }
             }
             _ => {
                 return Err(ParserError {
@@ -1378,9 +1603,9 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 // recurse to rhs
                 let mut ep = ExpressionParser::new(self.parser);
                 let rhs = ep.run()?;
-                Ok(Box::new(Expression::Binary(Box::new(lhs), op, rhs)))
+                Ok(Expression::new(token, ExpressionKind::Binary(lhs, op, rhs)))
             }
-            None => Ok(Box::new(lhs)),
+            None => Ok(lhs),
         }
     }
 }
@@ -1415,7 +1640,10 @@ impl<'a, 'b> ParserParser<'a, 'b> {
 
         let token = self.parser.next_token()?;
         match token.kind {
-            lexer::Kind::Semicolon => return Ok(parser),
+            lexer::Kind::Semicolon => {
+                parser.decl_only = true;
+                return Ok(parser);
+            }
             _ => {
                 self.parser.backlog.push(token);
             }
@@ -1537,87 +1765,7 @@ impl<'a, 'b> StateParser<'a, 'b> {
     }
 
     pub fn parse_body(&mut self, state: &mut State) -> Result<(), Error> {
-        self.parser.expect_token(lexer::Kind::CurlyOpen)?;
-
-        loop {
-            let token = self.parser.next_token()?;
-
-            // check if we've reached the end of the parameters
-            match token.kind {
-                lexer::Kind::CurlyClose => break,
-
-                // variable declaration / initialization
-                lexer::Kind::Bool
-                | lexer::Kind::Error
-                | lexer::Kind::Bit
-                | lexer::Kind::Int
-                | lexer::Kind::String => {
-                    self.parser.backlog.push(token);
-                    let var = self.parser.parse_variable()?;
-                    state.variables.push(var);
-                }
-
-                // constant declaration / initialization
-                lexer::Kind::Const => {
-                    let c = self.parser.parse_constant()?;
-                    state.constants.push(c);
-                }
-
-                lexer::Kind::Identifier(_) => {
-                    // push the identifier token into the backlog and run the
-                    // statement parser
-                    self.parser.backlog.push(token);
-                    let mut sp = StatementParser::new(self.parser);
-                    let stmt = sp.run()?;
-                    state.statements.push(stmt);
-                }
-
-                lexer::Kind::Transition => {
-                    self.parse_transition(state)?;
-                }
-
-                _ => return Err(ParserError {
-                    at: token.clone(),
-                    message: format!(
-                        "Found {}: expected variable, constant, statement or \
-                            instantiation.",
-                        token.kind,
-                    ),
-                    source: self.parser.lexer.lines[token.line].into(),
-                }
-                .into()),
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn parse_transition(&mut self, state: &mut State) -> Result<(), Error> {
-        let token = self.parser.next_token()?;
-
-        match token.kind {
-            lexer::Kind::Select => {
-                let mut sp = SelectParser::new(self.parser);
-                let select = sp.run()?;
-                state.transition = Some(Transition::Select(select));
-            }
-            lexer::Kind::Identifier(name) => {
-                state.transition = Some(Transition::Reference(name));
-                self.parser.expect_token(lexer::Kind::Semicolon)?;
-            }
-            _ => {
-                return Err(ParserError {
-                    at: token.clone(),
-                    message: format!(
-                        "Found {}: expected select or identifier",
-                        token.kind,
-                    ),
-                    source: self.parser.lexer.lines[token.line].into(),
-                }
-                .into())
-            }
-        }
-
+        state.statements = self.parser.parse_statement_block()?;
         Ok(())
     }
 }
@@ -1632,10 +1780,11 @@ impl<'a, 'b> SelectParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Select, Error> {
-        let mut select = Select::default();
-        select.parameters = self.parser.parse_expr_parameters()?;
+        let mut select = Select {
+            parameters: self.parser.parse_expr_parameters()?,
+            ..Default::default()
+        };
         self.parse_body(&mut select)?;
-
         Ok(select)
     }
 

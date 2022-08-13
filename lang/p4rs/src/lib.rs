@@ -1,15 +1,13 @@
 #![allow(incomplete_features)]
 #![allow(non_camel_case_types)]
-#![feature(generic_const_exprs)]
 
 use std::fmt;
-use std::ptr::slice_from_raw_parts_mut;
+use std::net::IpAddr;
 
-pub use bits::bit;
-pub use bits::bit_slice;
 pub use error::TryFromSliceError;
 
-pub mod bits;
+use bitvec::prelude::*;
+
 pub mod error;
 //pub mod hicuts;
 //pub mod rice;
@@ -41,9 +39,9 @@ impl<'a, const N: usize> fmt::LowerHex for Bit<'a, N> {
 }
 
 // TODO more of these for other sizes
-impl<'a> Into<u16> for Bit<'a, 16> {
-    fn into(self) -> u16 {
-        u16::from_be_bytes([self.0[0], self.0[1]])
+impl<'a> From<Bit<'a, 16>> for u16 {
+    fn from(b: Bit<'a, 16>) -> u16 {
+        u16::from_be_bytes([b.0[0], b.0[1]])
     }
 }
 
@@ -67,7 +65,7 @@ impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 /// is ultimately rooted in a memory mapped region containing a ring of packets.
 pub struct packet_in<'a> {
     /// The underlying data. Owned by an external, memory-mapped packet ring.
-    pub data: &'a mut [u8],
+    pub data: &'a [u8],
 
     /// Extraction index. Everything before `index` has been extracted already.
     /// Only data after `index` is eligble for extraction. Extraction is always
@@ -75,63 +73,34 @@ pub struct packet_in<'a> {
     pub index: usize,
 }
 
-#[derive(Debug)]
-pub struct Ethernet<'a> {
-    pub dst: Option<&'a mut [u8]>,
-    pub src: Option<&'a mut [u8]>,
-    pub ethertype: Option<&'a mut [u8]>,
+pub struct packet_out<'a> {
+    pub header_data: Vec<u8>,
+    pub payload_data: &'a [u8],
+}
+
+pub trait Pipeline {
+    /// Process a packet for the specified port optionally producing an output
+    /// packet and output port number.
+    fn process_packet<'a>(
+        &mut self,
+        port: u8,
+        pkt: &mut packet_in<'a>,
+    ) -> Option<(packet_out<'a>, u8)>;
 }
 
 /// A fixed length header trait.
-pub trait Header<'a> {
+pub trait Header {
     fn new() -> Self;
     fn size() -> usize;
-    fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError>;
-}
-
-/// A variable length header trait.
-pub trait VarHeader<'a> {
-    fn new(buf: &'a mut [u8]) -> Result<Self, TryFromSliceError>
-    where
-        Self: Sized;
-    fn set(&mut self, buf: &'a mut [u8]) -> Result<usize, TryFromSliceError>;
-}
-
-impl<'a> Header<'a> for Ethernet<'a> {
-    fn new() -> Self {
-        Self {
-            src: None,
-            dst: None,
-            ethertype: None,
-        }
-    }
-
-    fn size() -> usize {
-        14
-    }
-
-    fn set(&mut self, buf: &'a mut [u8]) -> Result<(), TryFromSliceError> {
-        if buf.len() < 14 {
-            return Err(TryFromSliceError(buf.len()));
-        }
-        unsafe {
-            self.dst =
-                Some(&mut *slice_from_raw_parts_mut(buf.as_mut_ptr(), 6));
-            self.src = Some(&mut *slice_from_raw_parts_mut(
-                buf.as_mut_ptr().add(6),
-                6,
-            ));
-            self.ethertype = Some(&mut *slice_from_raw_parts_mut(
-                buf.as_mut_ptr().add(12),
-                2,
-            ));
-        }
-        Ok(())
-    }
+    fn set(&mut self, buf: &[u8]) -> Result<(), TryFromSliceError>;
+    fn set_valid(&mut self);
+    fn set_invalid(&mut self);
+    fn is_valid(&self) -> bool;
+    fn to_bitvec(&self) -> BitVec<u8, Msb0>;
 }
 
 impl<'a> packet_in<'a> {
-    pub fn new(data: &'a mut [u8]) -> Self {
+    pub fn new(data: &'a [u8]) -> Self {
         Self { data, index: 0 }
     }
 
@@ -143,75 +112,145 @@ impl<'a> packet_in<'a> {
     // standard library requires the return type to be `void`, so this signature
     // cannot return a result without the compiler having special knowledge of
     // functions that happen to be called "extract".
-    pub fn extract<H: Header<'a>>(
-        &mut self,
-        h: &mut H,
-    ) {
-        // The crux of the situation here is we have a reference to mutable
-        // data, and we (packet_in) do not own that mutable data, so the only
-        // way we can give someone else a mutable reference to that data is by
-        // moving it. However, we cannot move a reference out of ourself. So the
-        // following does not work.
-        //
-        //   h.set(self.0);
-        //
-        // The outcome we are after here is giving the Header (h) shared mutable
-        // access to the underlying `packet_in` data. This is not allowed with
-        // references. Only one mutable reference to the same data can exist at
-        // a time. This is a foundational Rust memory saftey rule to prevent
-        // data races.
-        //
-        //
-        // ... but the following trick works, this is what the `slice::split_at`
-        // method does. And what we are doing here is actually quite similar. We
-        // split the underlying buffer at `self.index + H::size()` and give the
-        // caller a mutable reference to the segment `[self.index..H::size()]`
-        // retaining `[H::size()..]` ourselves. Anything before `self.index` has
-        // already been given out to some other `H` instance.
-        //
+    pub fn extract<H: Header>(&mut self, h: &mut H) {
+        //TODO what if a header does not end on a byte boundary?
         let n = H::size();
-        let shared_mut = unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(
-                self.data.as_mut_ptr(),
-                self.index + n,
-            )
-        };
-        match h.set(shared_mut) {
-            Ok(_) => { },
+        let start = if self.index > 0 { self.index >> 3 } else { 0 };
+        match h.set(&self.data[start..start + (n >> 3)]) {
+            Ok(_) => {}
             Err(e) => {
                 //TODO better than this
                 println!("packet extraction failed: {}", e);
             }
         }
         self.index += n;
-        //
-        // Maybe a Cell is better here? Can we move a reference with a Cell? I
-        // don't want to use a RefCell and take the locking hit. This is a hot
-        // data path, locking on every packet is not an option.
-        //
-        // The thought to just use split_at_mut comes up. However, that hits
-        // similar lifetime issues as we would need to borrow Self::data for 'a.
-        //
-        //   let (extracted, remaining) = self.data.split_at_mut(n);
-        //   self.data = remaining;
-        //   h.set(shared_mut);
+        h.set_valid();
     }
 
     // This is the same as extract except we return a new header instead of
     // modifying an existing one.
-    pub fn extract_new<H: Header<'a>>(
-        &mut self,
-    ) -> Result<H, TryFromSliceError> {
+    pub fn extract_new<H: Header>(&mut self) -> Result<H, TryFromSliceError> {
         let n = H::size();
-        let shared_mut = unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(
-                self.data.as_mut_ptr(),
-                self.index + n,
-            )
-        };
+        let start = if self.index > 0 { self.index >> 3 } else { 0 };
         self.index += n;
         let mut x = H::new();
-        x.set(shared_mut)?;
+        x.set(&self.data[start..start + (n >> 3)])?;
         Ok(x)
     }
+}
+
+//XXX: remove once classifier defined in terms of bitvecs
+pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> num::BigUint {
+    let u = num::BigUint::from_bytes_be(bv.as_raw_slice());
+    //println!("{:x?} -> {:x}", bv.as_raw_slice(), u);
+    u
+}
+
+pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
+    let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
+    std::net::IpAddr::V6(std::net::Ipv6Addr::from(arr))
+}
+
+#[repr(C, align(16))]
+pub struct AlignedU128(pub u128);
+
+pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
+    //let mut bv = BitVec::<u8, Msb0>::new();
+    let mut bv = bitvec![mut u8, Msb0; 0; 128];
+    bv.store(x);
+    bv
+}
+
+pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
+    let mut aligned = x.clone();
+    aligned.force_align();
+    let buf = aligned.as_raw_slice();
+    match buf.len() {
+        0 => "∅".into(),
+        1 => {
+            let v = buf[0];
+            format!("0x{:02x}", v)
+        }
+        2 => {
+            let v = u16::from_be_bytes(buf.try_into().unwrap());
+            format!("0x{:04x}", v)
+        }
+        4 => {
+            let v = u32::from_be_bytes(buf.try_into().unwrap());
+            format!("0x{:08x}", v)
+        }
+        8 => {
+            let v = u64::from_be_bytes(buf.try_into().unwrap());
+            format!("0x{:016x}", v)
+        }
+        16 => {
+            let v = u128::from_be_bytes(buf.try_into().unwrap());
+            format!("{:032x}", v)
+        }
+        _ => buf
+            .iter()
+            .map(|x| format!("{:02x}", x))
+            .collect::<Vec<String>>()
+            .join(""),
+    }
+}
+
+pub fn extract_exact_key(
+    keyset_data: &[u8],
+    offset: usize,
+    len: usize,
+) -> table::Key {
+    table::Key::Exact(num::BigUint::from_bytes_be(
+        &keyset_data[offset..offset + len],
+    ))
+}
+
+pub fn extract_ternary_key(
+    _keyset_data: &[u8],
+    _offset: usize,
+    _len: usize,
+) -> table::Key {
+    todo!();
+}
+
+pub fn extract_lpm_key(
+    keyset_data: &[u8],
+    offset: usize,
+    _len: usize,
+) -> table::Key {
+    let (addr, len) = match keyset_data.len() {
+        // IPv4
+        5 => {
+            let data: [u8; 4] =
+                keyset_data[offset..offset + 4].try_into().unwrap();
+            (IpAddr::from(data), keyset_data[offset + 4])
+        }
+        // IPv6
+        17 => {
+            let data: [u8; 16] =
+                keyset_data[offset..offset + 16].try_into().unwrap();
+            (IpAddr::from(data), keyset_data[offset + 16])
+        }
+        x => {
+            panic!("add router table entry: unknown action id {}, ignoring", x);
+        }
+    };
+
+    table::Key::Lpm(table::Prefix { addr, len })
+}
+
+pub fn extract_bool_action_parameter(
+    parameter_data: &[u8],
+    offset: usize,
+) -> bool {
+    parameter_data[offset] == 1
+}
+
+pub fn extract_bit_action_parameter(
+    parameter_data: &[u8],
+    offset: usize,
+    size: usize,
+) -> BitVec<u8, Msb0> {
+    let size = size >> 3;
+    BitVec::from_slice(&parameter_data[offset..offset + size])
 }

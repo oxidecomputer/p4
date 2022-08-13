@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 p4-macro = { path = "../p4-macro" }
 p4rs = { path = "../p4rs" }
+bitvec = "1.0"
+colored = "2.0"
+usdt = { git = "https://github.com/oxidecomputer/usdt" }

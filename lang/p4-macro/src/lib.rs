@@ -15,11 +15,9 @@ pub fn use_p4(item: TokenStream) -> TokenStream {
 }
 
 fn do_use_p4(item: TokenStream) -> Result<TokenStream, syn::Error> {
-    match parse::<LitStr>(item.clone()) {
+    match parse::<LitStr>(item) {
         Ok(filename) => generate_rs(filename.value()),
-        Err(e) => {
-            return Err(syn::Error::new(e.span(), "expected filename"));
-        }
+        Err(e) => Err(syn::Error::new(e.span(), "expected filename")),
     }
 }
 
@@ -33,16 +31,15 @@ fn generate_rs(filename: String) -> Result<TokenStream, syn::Error> {
     let lxr = lexer::Lexer::new(lines.clone());
     let mut psr = parser::Parser::new(lxr);
     let ast = psr.run().unwrap();
-    let static_diags = check::all(&ast);
-    check(&lines, &static_diags);
-    let (tokens, diags) = p4_rust::emit_tokens(&ast);
+    let (hlir, diags) = check::all(&ast);
     check(&lines, &diags);
+    let tokens = p4_rust::emit_tokens(&ast, &hlir);
 
     Ok(tokens.into())
 }
 
 // TODO copy pasta from x4c
-fn check(lines: &Vec<&str>, diagnostics: &Diagnostics) {
+fn check(lines: &[&str], diagnostics: &Diagnostics) {
     let errors = diagnostics.errors();
     if !errors.is_empty() {
         let mut err = Vec::new();

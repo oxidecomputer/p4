@@ -1,9 +1,11 @@
-use std::collections::BTreeMap;
+use std::cmp::{Eq, PartialEq};
+use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 use crate::lexer::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AST {
     pub constants: Vec<Constant>,
     pub headers: Vec<Header>,
@@ -14,22 +16,6 @@ pub struct AST {
     pub packages: Vec<Package>,
     pub package_instance: Option<PackageInstance>,
     pub externs: Vec<Extern>,
-}
-
-impl Default for AST {
-    fn default() -> Self {
-        Self {
-            constants: Vec::new(),
-            headers: Vec::new(),
-            structs: Vec::new(),
-            typedefs: Vec::new(),
-            controls: Vec::new(),
-            parsers: Vec::new(),
-            packages: Vec::new(),
-            package_instance: None,
-            externs: Vec::new(),
-        }
-    }
 }
 
 pub enum UserDefinedType<'a> {
@@ -61,6 +47,24 @@ impl AST {
         for e in &self.externs {
             if e.name == name {
                 return Some(e);
+            }
+        }
+        None
+    }
+
+    pub fn get_control(&self, name: &str) -> Option<&Control> {
+        for c in &self.controls {
+            if c.name == name {
+                return Some(c);
+            }
+        }
+        None
+    }
+
+    pub fn get_parser(&self, name: &str) -> Option<&Parser> {
+        for p in &self.parsers {
+            if p.name == name {
+                return Some(p);
             }
         }
         None
@@ -131,7 +135,7 @@ impl PackageParameter {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Bool,
     Error,
@@ -140,6 +144,9 @@ pub enum Type {
     Int(usize),
     String,
     UserDefined(String),
+    ExternFunction, //TODO actual signature
+    Table,
+    Void,
 }
 
 impl fmt::Display for Type {
@@ -152,6 +159,9 @@ impl fmt::Display for Type {
             Type::Int(size) => write!(f, "int<{}>", size),
             Type::String => write!(f, "string"),
             Type::UserDefined(name) => write!(f, "{}", name),
+            Type::ExternFunction => write!(f, "extern function"),
+            Type::Table => write!(f, "table"),
+            Type::Void => write!(f, "void"),
         }
     }
 }
@@ -173,16 +183,47 @@ pub struct Constant {
 pub struct Variable {
     pub ty: Type,
     pub name: String,
-    //TODO initializer: Expression,
+    pub initializer: Option<Box<Expression>>,
+    pub parameters: Vec<ControlParameter>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression {
+pub struct Expression {
+    pub token: Token,
+    pub kind: ExpressionKind,
+}
+
+impl Expression {
+    pub fn new(token: Token, kind: ExpressionKind) -> Box<Self> {
+        Box::new(Self { token, kind })
+    }
+}
+
+impl Hash for Expression {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.token.hash(state);
+    }
+}
+
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
+}
+
+impl Eq for Expression {}
+
+#[derive(Debug, Clone)]
+pub enum ExpressionKind {
+    BoolLit(bool),
     IntegerLit(i128),
     BitLit(u16, u128),
     SignedLit(u16, i128),
     Lvalue(Lvalue),
     Binary(Box<Expression>, BinOp, Box<Expression>),
+    Index(Lvalue, Box<Expression>),
+    Slice(Box<Expression>, Box<Expression>),
+    Call(Call),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -192,6 +233,19 @@ pub enum BinOp {
     Geq,
     Eq,
     Mask,
+    NotEq,
+}
+
+impl BinOp {
+    pub fn english_verb(&self) -> &str {
+        match self {
+            BinOp::Add => "add",
+            BinOp::Subtract => "subtract",
+            BinOp::Geq | BinOp::Eq => "compare",
+            BinOp::Mask => "mask",
+            BinOp::NotEq => "not equal",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +260,19 @@ impl Header {
             name,
             members: Vec::new(),
         }
+    }
+    pub fn names(&self) -> HashMap<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.members {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::HeaderMember,
+                },
+            );
+        }
+        names
     }
 }
 
@@ -228,6 +295,20 @@ impl Struct {
             members: Vec::new(),
         }
     }
+
+    pub fn names(&self) -> HashMap<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.members {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::StructMember,
+                },
+            );
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -240,6 +321,8 @@ pub struct StructMember {
 #[derive(Debug, Clone)]
 pub struct Control {
     pub name: String,
+    pub variables: Vec<Variable>,
+    pub constants: Vec<Constant>,
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
     pub actions: Vec<Action>,
@@ -251,6 +334,8 @@ impl Control {
     pub fn new(name: String) -> Self {
         Self {
             name,
+            variables: Vec::new(),
+            constants: Vec::new(),
             type_parameters: Vec::new(),
             parameters: Vec::new(),
             actions: Vec::new(),
@@ -285,6 +370,81 @@ impl Control {
         }
         None
     }
+
+    /// Return all the tables in this control block, recursively expanding local
+    /// control block variables and including their tables. In the returned
+    /// vector, the table in the second element of the tuple belongs to the
+    /// control in the first element.
+    pub fn tables<'a>(&'a self, ast: &'a AST) -> Vec<(&Control, &Table)> {
+        let mut result = Vec::new();
+        for table in &self.tables {
+            result.push((self, table));
+        }
+        for v in &self.variables {
+            if let Type::UserDefined(name) = &v.ty {
+                if let Some(control_inst) = ast.get_control(name) {
+                    result.extend_from_slice(&control_inst.tables(ast));
+                }
+            }
+        }
+        result
+    }
+
+    pub fn is_type_parameter(&self, name: &str) -> bool {
+        for t in &self.type_parameters {
+            if t == name {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn names(&self) -> HashMap<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.parameters {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
+        }
+        for t in &self.tables {
+            names.insert(
+                t.name.clone(),
+                NameInfo {
+                    ty: Type::Table,
+                    decl: DeclarationInfo::ControlTable,
+                },
+            );
+        }
+        for v in &self.variables {
+            names.insert(
+                v.name.clone(),
+                NameInfo {
+                    ty: v.ty.clone(),
+                    decl: DeclarationInfo::ControlMember,
+                },
+            );
+        }
+        for c in &self.constants {
+            names.insert(
+                c.name.clone(),
+                NameInfo {
+                    ty: c.ty.clone(),
+                    decl: DeclarationInfo::ControlMember,
+                },
+            );
+        }
+        names
+    }
+}
+
+impl PartialEq for Control {
+    fn eq(&self, other: &Control) -> bool {
+        self.name == other.name
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -293,6 +453,7 @@ pub struct Parser {
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
     pub states: Vec<State>,
+    pub decl_only: bool,
 
     /// The first token of this parser, used for error reporting.
     pub token: Token,
@@ -305,8 +466,41 @@ impl Parser {
             type_parameters: Vec::new(),
             parameters: Vec::new(),
             states: Vec::new(),
+            decl_only: false,
             token,
         }
+    }
+
+    pub fn is_type_parameter(&self, name: &str) -> bool {
+        for t in &self.type_parameters {
+            if t == name {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn names(&self) -> HashMap<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.parameters {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
+        }
+        names
+    }
+
+    pub fn get_start_state(&self) -> Option<&State> {
+        for s in &self.states {
+            if s.name == "start" {
+                return Some(s);
+            }
+        }
+        None
     }
 }
 
@@ -321,7 +515,7 @@ pub struct ControlParameter {
     pub name_token: Token,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Direction {
     In,
     Out,
@@ -331,9 +525,15 @@ pub enum Direction {
 
 #[derive(Debug, Clone, Default)]
 pub struct StatementBlock {
-    pub variables: Vec<Variable>,
-    pub constants: Vec<Constant>,
     pub statements: Vec<Statement>,
+}
+
+impl StatementBlock {
+    fn new() -> Self {
+        Self {
+            statements: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -351,10 +551,25 @@ impl Action {
             statement_block: StatementBlock::default(),
         }
     }
+
+    pub fn names(&self) -> HashMap<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.parameters {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ActionParameter {
+    pub direction: Direction,
     pub ty: Type,
     pub name: String,
 
@@ -436,7 +651,26 @@ pub enum Statement {
     Empty,
     Assignment(Lvalue, Box<Expression>),
     Call(Call),
+    If(IfBlock),
+    Variable(Variable),
+    Constant(Constant),
+    Transition(Transition),
+    Return(Option<Box<Expression>>),
     // TODO ...
+}
+
+#[derive(Debug, Clone)]
+pub struct IfBlock {
+    pub predicate: Box<Expression>,
+    pub block: StatementBlock,
+    pub else_ifs: Vec<ElseIfBlock>,
+    pub else_block: Option<StatementBlock>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ElseIfBlock {
+    pub predicate: Box<Expression>,
+    pub block: StatementBlock,
 }
 
 /// A function or method call
@@ -450,6 +684,44 @@ pub struct Call {
 pub struct Lvalue {
     pub name: String,
     pub token: Token,
+}
+
+impl Lvalue {
+    pub fn parts(&self) -> Vec<&str> {
+        self.name.split('.').collect()
+    }
+    pub fn root(&self) -> &str {
+        self.parts()[0]
+    }
+    pub fn leaf(&self) -> &str {
+        let parts = self.parts();
+        parts[parts.len() - 1]
+    }
+    pub fn degree(&self) -> usize {
+        self.parts().len()
+    }
+    pub fn pop_left(&self) -> Self {
+        let parts = self.parts();
+        Lvalue {
+            name: parts[1..].join("."),
+            token: Token {
+                kind: self.token.kind.clone(),
+                line: self.token.line,
+                col: self.token.col + parts[0].len() + 1,
+            },
+        }
+    }
+    pub fn pop_right(&self) -> Self {
+        let parts = self.parts();
+        Lvalue {
+            name: parts[..parts.len() - 1].join("."),
+            token: Token {
+                kind: self.token.kind.clone(),
+                line: self.token.line,
+                col: self.token.col,
+            },
+        }
+    }
 }
 
 impl std::hash::Hash for Lvalue {
@@ -480,20 +752,14 @@ impl Ord for Lvalue {
 #[derive(Debug, Clone)]
 pub struct State {
     pub name: String,
-    pub variables: Vec<Variable>,
-    pub constants: Vec<Constant>,
-    pub statements: Vec<Statement>,
-    pub transition: Option<Transition>,
+    pub statements: StatementBlock,
 }
 
 impl State {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            variables: Vec::new(),
-            constants: Vec::new(),
-            statements: Vec::new(),
-            transition: None,
+            statements: StatementBlock::new(),
         }
     }
 }
@@ -523,10 +789,43 @@ pub struct Extern {
     pub token: Token,
 }
 
+impl Extern {
+    pub fn names(&self) -> HashMap<String, NameInfo> {
+        let mut names = HashMap::new();
+        for p in &self.methods {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: Type::ExternFunction,
+                    decl: DeclarationInfo::Method,
+                },
+            );
+        }
+        names
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ExternMethod {
     pub return_type: Type,
     pub name: String,
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeclarationInfo {
+    Parameter(Direction),
+    Method,
+    StructMember,
+    HeaderMember,
+    Local,
+    ControlTable,
+    ControlMember,
+}
+
+#[derive(Debug, Clone)]
+pub struct NameInfo {
+    pub ty: Type,
+    pub decl: DeclarationInfo,
 }

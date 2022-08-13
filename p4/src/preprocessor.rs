@@ -1,4 +1,5 @@
 use crate::error::PreprocessorError;
+use std::fmt::Write;
 
 #[derive(Clone, Debug)]
 struct Macro {
@@ -6,32 +7,15 @@ struct Macro {
     pub body: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PreprocessorResult {
     pub elements: PreprocessorElements,
     pub lines: Vec<String>,
 }
 
-impl Default for PreprocessorResult {
-    fn default() -> Self {
-        Self {
-            elements: PreprocessorElements::default(),
-            lines: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PreprocessorElements {
     pub includes: Vec<String>,
-}
-
-impl Default for PreprocessorElements {
-    fn default() -> Self {
-        Self {
-            includes: Vec::new(),
-        }
-    }
 }
 
 pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
@@ -59,12 +43,13 @@ pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
         match current_macro {
             None => {}
             Some(ref mut m) => {
-                if !line.ends_with(r"\") {
-                    m.body += &format!("\n{}", line);
+                if !line.ends_with('\\') {
+                    //m.body += &format!("\n{}", line);
+                    write!(m.body, "\n{}", line).unwrap();
                     macros_to_process.push(m.clone());
                     current_macro = None;
                 } else {
-                    m.body += &format!("\n{}", &line[..line.len() - 1]);
+                    write!(m.body, "\n{}", &line[..line.len() - 1]).unwrap();
                 }
                 continue;
             }
@@ -85,11 +70,8 @@ pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
 
         if line.starts_with("#define") {
             let (name, value) = process_macro_begin(i, line)?;
-            let m = Macro {
-                name: name,
-                body: value,
-            };
-            if !line.ends_with(r"\") {
+            let m = Macro { name, body: value };
+            if !line.ends_with('\\') {
                 macros_to_process.push(m.clone());
                 current_macro = None;
             } else {

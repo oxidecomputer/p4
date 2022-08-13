@@ -1,10 +1,13 @@
-use std::net::IpAddr;
 use std::collections::HashSet;
+use std::fmt::Write;
+use std::net::IpAddr;
 
 use num::bigint::BigUint;
 use num::ToPrimitive;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+// TODO transition from BigUint to BitVec<u8, Msb0>
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Key {
     Exact(BigUint),
     Range(BigUint, BigUint),
@@ -18,7 +21,7 @@ impl Default for Key {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Ternary {
     DontCare,
     Value(BigUint),
@@ -31,7 +34,7 @@ impl Default for Ternary {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct Prefix {
     pub addr: IpAddr,
     pub len: u8,
@@ -41,27 +44,44 @@ pub struct Table<const D: usize, A: Clone> {
     pub entries: HashSet<TableEntry<D, A>>,
 }
 
+impl<const D: usize, A: Clone> Default for Table<D, A> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const D: usize, A: Clone> Table<D, A> {
     pub fn new() -> Self {
-        Self{ entries: HashSet::new() }
+        Self {
+            entries: HashSet::new(),
+        }
     }
 
-    pub fn match_selector(&self, keyset: &[BigUint; D]) -> Vec<TableEntry<D, A>> {
+    pub fn match_selector(
+        &self,
+        keyset: &[BigUint; D],
+    ) -> Vec<TableEntry<D, A>> {
         let mut result = Vec::new();
         for entry in &self.entries {
             if keyset_matches(keyset, &entry.key) {
                 result.push(entry.clone());
             }
         }
-        let sorted = sort_entries(result);
-        sorted 
+        sort_entries(result)
+    }
+
+    pub fn dump(&self) -> String {
+        let mut s = String::new();
+        for e in &self.entries {
+            writeln!(s, "{:?}", e.key).unwrap();
+        }
+        s
     }
 }
 
 pub fn sort_entries<const D: usize, A: Clone>(
-    mut entries: Vec<TableEntry<D, A>>
+    mut entries: Vec<TableEntry<D, A>>,
 ) -> Vec<TableEntry<D, A>> {
-
     if entries.is_empty() {
         return entries;
     }
@@ -76,7 +96,7 @@ pub fn sort_entries<const D: usize, A: Clone>(
     // Notes:
     //
     // It's assumed that multiple lpm keys do not exist in a single keyset.
-    // This is an implicit assumption in BVM2 
+    // This is an implicit assumption in BVM2
     //
     //      https://github.com/p4lang/behavioral-model/issues/698
     //
@@ -93,8 +113,6 @@ pub fn sort_entries<const D: usize, A: Clone>(
 
     sort_entries_by_priority(&mut entries);
     entries
-
-
 }
 
 // TODO - the data structures here are quite dumb. The point of this table
@@ -106,94 +124,78 @@ pub fn prune_entries_by_lpm<const D: usize, A: Clone>(
     d: usize,
     entries: &Vec<TableEntry<D, A>>,
 ) -> Vec<TableEntry<D, A>> {
-
     let mut longest_prefix = 0u8;
 
     for e in entries {
-        match &e.key[d] {
-            Key::Lpm(x) => {
-                if x.len > longest_prefix {
-                    longest_prefix = x.len
-                }
+        if let Key::Lpm(x) = &e.key[d] {
+            if x.len > longest_prefix {
+                longest_prefix = x.len
             }
-            _ => {}
         }
     }
 
     let mut result = Vec::new();
     for e in entries {
-        match &e.key[d] {
-            Key::Lpm(x) => {
-                if x.len == longest_prefix {
-                    result.push(e.clone())
-                }
+        if let Key::Lpm(x) = &e.key[d] {
+            if x.len == longest_prefix {
+                result.push(e.clone())
             }
-            _ => {}
         }
     }
 
     result
-
 }
 
 pub fn sort_entries_by_priority<const D: usize, A: Clone>(
-    entries: &mut Vec<TableEntry<D, A>>,
+    entries: &mut [TableEntry<D, A>],
 ) {
-
-    entries.sort_by(|a, b| -> std::cmp::Ordering {
-        b.priority.cmp(&a.priority)
-    });
-
+    entries
+        .sort_by(|a, b| -> std::cmp::Ordering { b.priority.cmp(&a.priority) });
 }
 
 pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     match key {
-        Key::Exact(x) => {
-            selector == x
-        }
-        Key::Range(begin, end) => {
-            selector >= begin && selector <= end
-        }
-        Key::Ternary(t) => {
-            match t {
-                Ternary::DontCare => true,
-                Ternary::Value(x) => selector == x,
-                Ternary::Masked(x, m) => selector & m == x & m
+        Key::Exact(x) => selector == x,
+        Key::Range(begin, end) => selector >= begin && selector <= end,
+        Key::Ternary(t) => match t {
+            Ternary::DontCare => true,
+            Ternary::Value(x) => selector == x,
+            Ternary::Masked(x, m) => selector & m == x & m,
+        },
+        Key::Lpm(p) => match p.addr {
+            IpAddr::V6(addr) => {
+                assert!(p.len <= 128);
+                let key: u128 = addr.into();
+                let mask = if p.len == 128 {
+                    u128::MAX
+                } else {
+                    ((1u128 << p.len) - 1) << (128 - p.len)
+                };
+                let selector_v6 = selector.to_u128().unwrap();
+                selector_v6 & mask == key & mask
             }
-        }
-        Key::Lpm(p) => {
-            match p.addr {
-                IpAddr::V6(addr) => {
-                    assert!(p.len <= 128);
-                    let key: u128 = addr.into();
-                    let mask = if p.len == 128 {
-                        u128::MAX
-                    } else {
-                        ((1u128 << p.len) - 1) << (128 - p.len)
-                    };
-                    let selector_v6 = selector.to_u128().unwrap();
-                    selector_v6 & mask == key & mask
-                }
-                IpAddr::V4(addr) => {
-                    assert!(p.len <= 32);
-                    let key: u32 = addr.into();
-                    let mask = if p.len == 32 {
-                        u32::MAX
-                    } else {
-                        ((1u32 << p.len) - 1) << (32 - p.len)
-                    };
-                    let selector_v4: u32 = selector.to_u32().unwrap();
-                    selector_v4 & mask == key & mask
-                }
+            IpAddr::V4(addr) => {
+                assert!(p.len <= 32);
+                let key: u32 = addr.into();
+                let mask = if p.len == 32 {
+                    u32::MAX
+                } else {
+                    ((1u32 << p.len) - 1) << (32 - p.len)
+                };
+                let selector_v4: u32 = selector.to_u32().unwrap();
+                selector_v4 & mask == key & mask
             }
-        }
+        },
     }
 }
 
-pub fn keyset_matches<const D: usize>(selector: &[BigUint; D], key: &[Key; D]) -> bool {
+pub fn keyset_matches<const D: usize>(
+    selector: &[BigUint; D],
+    key: &[Key; D],
+) -> bool {
     for i in 0..D {
         if !key_matches(&selector[i], &key[i]) {
-            return false
+            return false;
         }
     }
     true
@@ -207,6 +209,7 @@ pub struct TableEntry<const D: usize, A: Clone> {
     pub name: String,
 }
 
+// TODO: Cannot hash on just the key, this does not work for multipath.
 impl<const D: usize, A: Clone> std::hash::Hash for TableEntry<D, A> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.key.hash(state);
@@ -229,7 +232,7 @@ impl<const D: usize, A: Clone> std::fmt::Debug for TableEntry<D, A> {
     }
 }
 
-impl<const D: usize, A: Clone> std::cmp::Eq for TableEntry<D, A> { }
+impl<const D: usize, A: Clone> std::cmp::Eq for TableEntry<D, A> {}
 
 #[cfg(test)]
 mod tests {
@@ -239,7 +242,7 @@ mod tests {
 
     fn contains_entry<const D: usize, A: Clone>(
         entries: &Vec<TableEntry<D, A>>,
-        name: &str
+        name: &str,
     ) -> bool {
         for e in entries {
             if e.name.as_str() == name {
@@ -249,16 +252,14 @@ mod tests {
         false
     }
 
-
     fn tk(
         name: &str,
         addr: Ternary,
         ingress: Ternary,
         icmp: Ternary,
-        priority: u32
-    ) ->
-    TableEntry::<3, ()> {
-        TableEntry::<3, ()>{
+        priority: u32,
+    ) -> TableEntry<3, ()> {
+        TableEntry::<3, ()> {
             key: [
                 Key::Ternary(addr),
                 Key::Ternary(ingress),
@@ -286,69 +287,78 @@ mod tests {
     /// | a7     | _           | 47           | _       |
     /// +--------+-------------+--------------+---------+
     fn match_ternary_1() {
-
-        let table = Table::<3, ()>{
+        let table = Table::<3, ()> {
             entries: HashSet::from([
-                 tk("a0",
+                tk(
+                    "a0",
                     Ternary::Value(1u8.into()),
                     Ternary::DontCare,
                     Ternary::Value(1u8.into()),
                     10,
-                 ),
-                 tk("a1",
+                ),
+                tk(
+                    "a1",
                     Ternary::Value(1u8.into()),
                     Ternary::DontCare,
                     Ternary::Value(0u8.into()),
                     1,
-                 ),
-                 tk("a2",
+                ),
+                tk(
+                    "a2",
                     Ternary::DontCare,
                     Ternary::Value(2u8.into()),
                     Ternary::DontCare,
                     1,
-                 ),
-                 tk("a3",
+                ),
+                tk(
+                    "a3",
                     Ternary::DontCare,
                     Ternary::Value(4u8.into()),
                     Ternary::DontCare,
                     1,
-                 ),
-                 tk("a4",
+                ),
+                tk(
+                    "a4",
                     Ternary::DontCare,
                     Ternary::Value(7u8.into()),
                     Ternary::DontCare,
                     1,
-                 ),
-                 tk("a5",
+                ),
+                tk(
+                    "a5",
                     Ternary::DontCare,
                     Ternary::Value(19u8.into()),
                     Ternary::DontCare,
                     1,
-                 ),
-                 tk("a6",
+                ),
+                tk(
+                    "a6",
                     Ternary::DontCare,
                     Ternary::Value(33u8.into()),
                     Ternary::DontCare,
                     1,
-                 ),
-                 tk("a7",
+                ),
+                tk(
+                    "a7",
                     Ternary::DontCare,
                     Ternary::Value(47u8.into()),
                     Ternary::DontCare,
                     1,
-                 ),
-            ])
+                ),
+            ]),
         };
 
         //println!("M1 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-        let selector = [BigUint::from(1u8), BigUint::from(99u16), BigUint::from(1u8)];
+        let selector =
+            [BigUint::from(1u8), BigUint::from(99u16), BigUint::from(1u8)];
         let matches = table.match_selector(&selector);
         //println!("{:#?}", matches);
         assert_eq!(matches.len(), 1);
         assert!(contains_entry(&matches, "a0"));
 
         //println!("M2 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-        let selector = [BigUint::from(1u8), BigUint::from(47u16), BigUint::from(1u8)];
+        let selector =
+            [BigUint::from(1u8), BigUint::from(47u16), BigUint::from(1u8)];
         let matches = table.match_selector(&selector);
         //println!("{:#?}", matches);
         assert_eq!(matches.len(), 2);
@@ -356,12 +366,14 @@ mod tests {
         assert!(contains_entry(&matches, "a7"));
         // check priority
         assert_eq!(matches[0].name.as_str(), "a0");
-
     }
 
-    fn lpm(name: &str, addr: &str, len: u8) -> TableEntry::<1, ()> {
-        TableEntry::<1, ()>{
-            key: [ Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }) ],
+    fn lpm(name: &str, addr: &str, len: u8) -> TableEntry<1, ()> {
+        TableEntry::<1, ()> {
+            key: [Key::Lpm(Prefix {
+                addr: addr.parse().unwrap(),
+                len: len,
+            })],
             priority: 1,
             name: name.into(),
             action: (),
@@ -392,7 +404,6 @@ mod tests {
     /// | a15    | fd00:1701::/32           |
     /// +--------+----------------+---------+
     fn match_lpm_1() {
-
         let mut table = Table::<1, ()>::new();
         table.entries.insert(lpm("a0", "fd00:4700::", 24));
         table.entries.insert(lpm("a1", "fd00:4701::", 32));
@@ -404,11 +415,21 @@ mod tests {
         table.entries.insert(lpm("a7", "fd00:4701:0001:0001::", 64));
         table.entries.insert(lpm("a8", "fd00:4701:0001:0002::", 64));
         table.entries.insert(lpm("a9", "fd00:4702:0001:0001::", 64));
-        table.entries.insert(lpm("a10", "fd00:4702:0001:0002::", 64));
-        table.entries.insert(lpm("a11", "fd00:4701:0002:0001::", 64));
-        table.entries.insert(lpm("a12", "fd00:4701:0002:0002::", 64));
-        table.entries.insert(lpm("a13", "fd00:4702:0002:0001::", 64));
-        table.entries.insert(lpm("a14", "fd00:4702:0002:0002::", 64));
+        table
+            .entries
+            .insert(lpm("a10", "fd00:4702:0001:0002::", 64));
+        table
+            .entries
+            .insert(lpm("a11", "fd00:4701:0002:0001::", 64));
+        table
+            .entries
+            .insert(lpm("a12", "fd00:4701:0002:0002::", 64));
+        table
+            .entries
+            .insert(lpm("a13", "fd00:4702:0002:0001::", 64));
+        table
+            .entries
+            .insert(lpm("a14", "fd00:4702:0002:0002::", 64));
         table.entries.insert(lpm("a15", "fd00:1701::", 32));
 
         let addr: Ipv6Addr = "fd00:4700::1".parse().unwrap();
@@ -432,7 +453,6 @@ mod tests {
         assert!(contains_entry(&matches, "a14"));
         // longest prefix first
         assert_eq!(matches[0].name.as_str(), "a14");
-
     }
 
     fn tlpm(
@@ -441,10 +461,13 @@ mod tests {
         len: u8,
         zone: Ternary,
         priority: u32,
-    ) -> TableEntry::<2, ()> {
-        TableEntry::<2, ()>{
+    ) -> TableEntry<2, ()> {
+        TableEntry::<2, ()> {
             key: [
-                Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }),
+                Key::Lpm(Prefix {
+                    addr: addr.parse().unwrap(),
+                    len: len,
+                }),
                 Key::Ternary(zone),
             ],
             priority,
@@ -455,14 +478,13 @@ mod tests {
 
     #[test]
     fn match_lpm_ternary_1() {
-
-        let table = Table::<2, ()>{
+        let table = Table::<2, ()> {
             entries: HashSet::from([
-                 tlpm("a0", "fd00:1::", 64, Ternary::DontCare, 1),
-                 tlpm("a1", "fd00:1::", 64, Ternary::Value(1u16.into()), 10),
-                 tlpm("a2", "fd00:1::", 64, Ternary::Value(2u16.into()), 10),
-                 tlpm("a3", "fd00:1::", 64, Ternary::Value(3u16.into()), 10),
-            ])
+                tlpm("a0", "fd00:1::", 64, Ternary::DontCare, 1),
+                tlpm("a1", "fd00:1::", 64, Ternary::Value(1u16.into()), 10),
+                tlpm("a2", "fd00:1::", 64, Ternary::Value(2u16.into()), 10),
+                tlpm("a3", "fd00:1::", 64, Ternary::Value(3u16.into()), 10),
+            ]),
         };
 
         let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
@@ -478,7 +500,6 @@ mod tests {
         ];
         let matches = table.match_selector(&selector);
         println!("zone-2: {:#?}", matches);
-
     }
 
     fn lpre(
@@ -489,10 +510,13 @@ mod tests {
         range: (u32, u32),
         tag: u64,
         priority: u32,
-    ) -> TableEntry::<4, ()> {
-        TableEntry::<4, ()>{
+    ) -> TableEntry<4, ()> {
+        TableEntry::<4, ()> {
             key: [
-                Key::Lpm(Prefix{ addr: addr.parse().unwrap(), len: len }),
+                Key::Lpm(Prefix {
+                    addr: addr.parse().unwrap(),
+                    len: len,
+                }),
                 Key::Ternary(zone),
                 Key::Range(range.0.into(), range.1.into()),
                 Key::Exact(tag.into()),
@@ -509,22 +533,38 @@ mod tests {
 
     #[test]
     fn match_lpm_ternary_range() {
-        let table = Table::<4, ()>{
+        let table = Table::<4, ()> {
             entries: HashSet::from([
-                 lpre("a0", "fd00:1::", 64, Ternary::DontCare, (80, 80), 100, 1),
-                 lpre("a1", "fd00:1::", 64, Ternary::DontCare, (443, 443), 100, 1),
-                 lpre("a2", "fd00:1::", 64, Ternary::DontCare, (80, 80), 200, 1),
-                 lpre("a3", "fd00:1::", 64, Ternary::DontCare, (443, 443), 200, 1),
-                 lpre(
-                     "a4", 
-                     "fd00:1::",
-                     64, 
-                     Ternary::Value(99u16.into()),
-                     (443, 443),
-                     200,
-                     10
-                 ),
-            ])
+                lpre("a0", "fd00:1::", 64, Ternary::DontCare, (80, 80), 100, 1),
+                lpre(
+                    "a1",
+                    "fd00:1::",
+                    64,
+                    Ternary::DontCare,
+                    (443, 443),
+                    100,
+                    1,
+                ),
+                lpre("a2", "fd00:1::", 64, Ternary::DontCare, (80, 80), 200, 1),
+                lpre(
+                    "a3",
+                    "fd00:1::",
+                    64,
+                    Ternary::DontCare,
+                    (443, 443),
+                    200,
+                    1,
+                ),
+                lpre(
+                    "a4",
+                    "fd00:1::",
+                    64,
+                    Ternary::Value(99u16.into()),
+                    (443, 443),
+                    200,
+                    10,
+                ),
+            ]),
         };
         let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
         let selector = [
@@ -566,33 +606,27 @@ mod tests {
 
     #[test]
     fn match_with_action() {
+        let mut data = ActionData { value: 47 };
 
-        let mut data = ActionData{
-            value: 47,
-        };
-
-        let table = Table::<1, fn(&mut ActionData)> {
+        let table = Table::<1, Arc<dyn Fn(&mut ActionData)>> {
             entries: HashSet::from([
-
-                 TableEntry::<1, fn(&mut ActionData)>{
-                     key: [ Key::Exact(1u8.into()) ],
-                     priority: 0,
-                     name: "a0".into(),
-                     action: |a: &mut ActionData| {
-                         a.value += 10;
-                     },
-                 },
-
-                 TableEntry::<1, fn(&mut ActionData)>{
-                     key: [ Key::Exact(2u8.into()) ],
-                     priority: 0,
-                     name: "a1".into(),
-                     action: |a: &mut ActionData| {
-                         a.value -= 10;
-                     },
-                 }
-
-            ])
+                TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
+                    key: [Key::Exact(1u8.into())],
+                    priority: 0,
+                    name: "a0".into(),
+                    action: Arc::new(|a: &mut ActionData| {
+                        a.value += 10;
+                    }),
+                },
+                TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
+                    key: [Key::Exact(2u8.into())],
+                    priority: 0,
+                    name: "a1".into(),
+                    action: Arc::new(|a: &mut ActionData| {
+                        a.value -= 10;
+                    }),
+                },
+            ]),
         };
 
         let selector = [BigUint::from(1u8)];
@@ -602,5 +636,4 @@ mod tests {
         (matches[0].action)(&mut data);
         assert_eq!(data.value, 57);
     }
-
 }
