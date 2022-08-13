@@ -303,6 +303,15 @@ fn phy0_egress(frame: &[u8]) {
         sc,
         String::from_utf8_lossy(&frame[75..]),
     );
+
+    let ip3: Ipv6Addr = "fe80::aae1:deff:fe01:701c".parse().unwrap();
+    let ip4: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
+    let mc1: Ipv6Addr = "ff02::1:ff01:701c".parse().unwrap();
+    let dst = pkt.get_destination();
+    if dst != ip3 && dst != ip4 && dst != mc1 {
+        panic!("non local packet showing up on port 0: {}", dst);
+    }
+
     //println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
 }
 
@@ -315,6 +324,7 @@ fn phy1_egress(frame: &[u8]) {
         String::from_utf8_lossy(&frame[54..]),
     );
     //println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
+    //
 }
 
 #[cfg(test)]
@@ -326,6 +336,14 @@ fn phy2_egress(frame: &[u8]) {
         String::from_utf8_lossy(&frame[54..]),
     );
     //println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
+    let ip1: Ipv6Addr = "fd00:1000::1".parse().unwrap();
+    let ip2: Ipv6Addr = "fd00:2000::1".parse().unwrap();
+    let src = pkt.get_source();
+    let dst = pkt.get_destination();
+    if src == ip1 && dst == ip2 {
+        // check rewrite
+        assert_eq!(&frame[0..6], &[0x33,0x33,0x33,0x33,0x33,0x33]);
+    }
 }
 
 #[cfg(test)]
