@@ -153,20 +153,13 @@ fn get_parser_arg<'a>(
     None
 }
 
-/// Return the rust type for a given P4 type. To support zero copy pipelines,
-/// a P4 type such as `bit<N>` may be one of two types. If it's in a header,
-/// then it's a reference type like `bit_slice`. If it's not in a header than
-/// it's a value type like `bit`.
-fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
+/// Return the rust type for a given P4 type.
+fn rust_type(ty: &Type) -> TokenStream {
     match ty {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
         Type::Bit(_size) => {
-            if header_member {
-                quote! { BitVec<u8, Msb0> }
-            } else {
-                quote! { BitVec<u8, Msb0> }
-            }
+            quote! { BitVec<u8, Msb0> }
         }
         Type::Int(_size) => todo!("generate int type"),
         Type::Varbit(_size) => todo!("generate varbit type"),
@@ -197,9 +190,9 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         Type::String => todo!("generate string size"),
         Type::UserDefined(name) => {
             let mut sz: usize = 0;
-            let udt = ast
-                .get_user_defined_type(name)
-                .expect(&format!("expect user defined type: {}", name));
+            let udt = ast.get_user_defined_type(name).unwrap_or_else(|| {
+                panic!("expect user defined type: {}", name)
+            });
 
             match udt {
                 UserDefinedType::Struct(s) => {
@@ -235,7 +228,7 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
 //
 // where b is an integer literal interpret b as a prefix mask based on the
 // number of leading ones
-fn try_extract_prefix_len(expr: &Box<Expression>) -> Option<u8> {
+fn try_extract_prefix_len(expr: &Expression) -> Option<u8> {
     match &expr.kind {
         ExpressionKind::Binary(_lhs, _op, rhs) => match &rhs.kind {
             ExpressionKind::IntegerLit(v) => Some(v.trailing_ones() as u8),
@@ -259,10 +252,7 @@ fn is_header(
         Type::UserDefined(name) => name,
         _ => return false,
     };
-    match ast.get_header(&typename) {
-        Some(_) => true,
-        None => false,
-    }
+    ast.get_header(&typename).is_some()
 }
 
 fn is_header_member(lval: &Lvalue, hlir: &Hlir) -> bool {
@@ -270,12 +260,9 @@ fn is_header_member(lval: &Lvalue, hlir: &Hlir) -> bool {
         let name_info = hlir
             .lvalue_decls
             .get(lval)
-            .expect(&format!("name for lval {:#?}", lval));
+            .unwrap_or_else(|| panic!("name for lval {:#?}", lval));
 
-        match name_info.decl {
-            DeclarationInfo::HeaderMember => true,
-            _ => false,
-        }
+        matches!(name_info.decl, DeclarationInfo::HeaderMember)
     } else {
         false
     }
@@ -286,7 +273,7 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
     if lval.degree() == 1 {
         let name_info = names
             .get(lval.root())
-            .expect(&format!("name for lval {:#?}", lval));
+            .unwrap_or_else(|| panic!("name for lval {:#?}", lval));
 
         match name_info.decl {
             DeclarationInfo::Parameter(Direction::Unspecified) => false,

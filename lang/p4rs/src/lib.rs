@@ -39,9 +39,9 @@ impl<'a, const N: usize> fmt::LowerHex for Bit<'a, N> {
 }
 
 // TODO more of these for other sizes
-impl<'a> Into<u16> for Bit<'a, 16> {
-    fn into(self) -> u16 {
-        u16::from_be_bytes([self.0[0], self.0[1]])
+impl<'a> From<Bit<'a, 16>> for u16 {
+    fn from(b: Bit<'a, 16>) -> u16 {
+        u16::from_be_bytes([b.0[0], b.0[1]])
     }
 }
 
@@ -187,19 +187,16 @@ pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
             let v = u128::from_be_bytes(buf.try_into().unwrap());
             format!("{:032x}", v)
         }
-        _ => {
-            let v = buf
-                .iter()
-                .map(|x| format!("{:02x}", x))
-                .collect::<Vec<String>>()
-                .join("");
-            format!("{}", v)
-        }
+        _ => buf
+            .iter()
+            .map(|x| format!("{:02x}", x))
+            .collect::<Vec<String>>()
+            .join(""),
     }
 }
 
 pub fn extract_exact_key(
-    keyset_data: &Vec<u8>,
+    keyset_data: &[u8],
     offset: usize,
     len: usize,
 ) -> table::Key {
@@ -209,7 +206,7 @@ pub fn extract_exact_key(
 }
 
 pub fn extract_ternary_key(
-    _keyset_data: &Vec<u8>,
+    _keyset_data: &[u8],
     _offset: usize,
     _len: usize,
 ) -> table::Key {
@@ -217,23 +214,21 @@ pub fn extract_ternary_key(
 }
 
 pub fn extract_lpm_key(
-    keyset_data: &Vec<u8>,
+    keyset_data: &[u8],
     offset: usize,
     _len: usize,
 ) -> table::Key {
     let (addr, len) = match keyset_data.len() {
         // IPv4
         5 => {
-            let data: [u8; 4] = keyset_data.as_slice()[offset..offset + 4]
-                .try_into()
-                .unwrap();
+            let data: [u8; 4] =
+                keyset_data[offset..offset + 4].try_into().unwrap();
             (IpAddr::from(data), keyset_data[offset + 4])
         }
         // IPv6
         17 => {
-            let data: [u8; 16] = keyset_data.as_slice()[offset..offset + 16]
-                .try_into()
-                .unwrap();
+            let data: [u8; 16] =
+                keyset_data[offset..offset + 16].try_into().unwrap();
             (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
@@ -245,14 +240,14 @@ pub fn extract_lpm_key(
 }
 
 pub fn extract_bool_action_parameter(
-    parameter_data: &Vec<u8>,
+    parameter_data: &[u8],
     offset: usize,
 ) -> bool {
     parameter_data[offset] == 1
 }
 
 pub fn extract_bit_action_parameter(
-    parameter_data: &Vec<u8>,
+    parameter_data: &[u8],
     offset: usize,
     size: usize,
 ) -> BitVec<u8, Msb0> {

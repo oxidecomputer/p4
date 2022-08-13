@@ -104,7 +104,7 @@ impl<'a> ControlGenerator<'a> {
                     match self.ast.get_user_defined_type(typename) {
                         Some(_udt) => {
                             let name = format_ident!("{}", arg.name);
-                            let ty = rust_type(&arg.ty, false, 0);
+                            let ty = rust_type(&arg.ty);
                             match &arg.direction {
                                 Direction::Out | Direction::InOut => {
                                     params.push(quote! {
@@ -131,7 +131,7 @@ impl<'a> ControlGenerator<'a> {
                 }
                 _ => {
                     let name = format_ident!("{}", arg.name);
-                    let ty = rust_type(&arg.ty, false, 0);
+                    let ty = rust_type(&arg.ty);
                     match &arg.direction {
                         Direction::Out | Direction::InOut => {
                             params.push(quote! { #name: &mut #ty });
@@ -159,7 +159,7 @@ impl<'a> ControlGenerator<'a> {
                 match self.ast.get_user_defined_type(typename) {
                     Some(_) => {
                         let name = format_ident!("{}", arg.name);
-                        let ty = rust_type(&arg.ty, false, 0);
+                        let ty = rust_type(&arg.ty);
                         params.push(quote! { #name: #ty });
                     }
                     None => {
@@ -171,7 +171,7 @@ impl<'a> ControlGenerator<'a> {
                 }
             } else {
                 let name = format_ident!("{}", arg.name);
-                let ty = rust_type(&arg.ty, false, 0);
+                let ty = rust_type(&arg.ty);
                 params.push(quote! { #name: #ty });
             }
         }
@@ -212,7 +212,7 @@ impl<'a> ControlGenerator<'a> {
         let mut key_types: Vec<Type> = Vec::new();
 
         for (k, _) in &table.key {
-            let parts: Vec<&str> = k.name.split(".").collect();
+            let parts: Vec<&str> = k.name.split('.').collect();
             let root = parts[0];
 
             // try to find the root of the key as an argument to the control block.
@@ -222,9 +222,9 @@ impl<'a> ControlGenerator<'a> {
                     if parts.len() > 1 {
                         let tm = control.names();
                         //TODO: use hlir?
-                        let ty = resolve_lvalue(&k, self.ast, &tm).unwrap().ty;
+                        let ty = resolve_lvalue(k, self.ast, &tm).unwrap().ty;
                         key_types.push(ty.clone());
-                        key_type_tokens.push(rust_type(&ty, false, 0));
+                        key_type_tokens.push(rust_type(&ty));
                     }
                 }
                 None => {

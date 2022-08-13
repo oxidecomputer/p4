@@ -113,7 +113,7 @@ impl<'a> PipelineGenerator<'a> {
         parser: &Parser,
         control: &Control,
     ) -> TokenStream {
-        let parsed_type = rust_type(&parser.parameters[1].ty, false, 0);
+        let parsed_type = rust_type(&parser.parameters[1].ty);
 
         // determine table arguments
         let tables = control.tables(self.ast);
@@ -267,12 +267,11 @@ impl<'a> PipelineGenerator<'a> {
     }
 
     fn add_table_entry_method(&mut self, control: &Control) -> TokenStream {
-        let mut i: u32 = 0;
-
         let mut body = TokenStream::new();
 
         let tables = control.tables(self.ast);
-        for (_control, table) in tables {
+        for (i, (_control, table)) in tables.iter().enumerate() {
+            let i = i as u32;
             let call = format_ident!("add_{}_table_entry", table.name);
             body.extend(quote! {
                 #i => self.#call(
@@ -281,7 +280,6 @@ impl<'a> PipelineGenerator<'a> {
                     parameter_data,
                 ),
             });
-            i += 1;
         }
 
         body.extend(quote! {
@@ -305,17 +303,16 @@ impl<'a> PipelineGenerator<'a> {
 
     fn remove_table_entry_method(&mut self, control: &Control) -> TokenStream {
         let mut body = TokenStream::new();
-        let mut i: u32 = 0;
 
         let tables = control.tables(self.ast);
-        for (_control, table) in tables {
+        for (i, (_control, table)) in tables.iter().enumerate() {
+            let i = i as u32;
             //TODO probably a conflict with the same table name in multiple control
             //blocks
             let call = format_ident!("remove_{}_table_entry", table.name);
             body.extend(quote! {
                 #i => self.#call(keyset_data),
             });
-            i += 1;
         }
 
         body.extend(quote!{
@@ -350,11 +347,10 @@ impl<'a> PipelineGenerator<'a> {
         let mut keys = TokenStream::new();
         let mut offset: usize = 0;
         for (lval, match_kind) in &table.key {
-            let name_info = self
-                .hlir
-                .lvalue_decls
-                .get(lval)
-                .expect(&format!("declaration info for {:#?}", lval,));
+            let name_info =
+                self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
+                    panic!("declaration info for {:#?}", lval,)
+                });
             let sz = type_size(&name_info.ty, self.ast) >> 3;
             match match_kind {
                 MatchKind::Exact => keys.extend(quote! {
@@ -401,10 +397,9 @@ impl<'a> PipelineGenerator<'a> {
             if action == "NoAction" {
                 continue;
             }
-            let a = control.get_action(action).expect(&format!(
-                "control {} must have action {}",
-                control.name, action,
-            ));
+            let a = control.get_action(action).unwrap_or_else(|| {
+                panic!("control {} must have action {}", control.name, action,)
+            });
             let mut parameter_tokens = Vec::new();
             let mut parameter_refs = Vec::new();
             let mut offset: usize = 0;
@@ -464,13 +459,13 @@ impl<'a> PipelineGenerator<'a> {
             for p in &control.parameters {
                 let name = format_ident!("{}", p.name);
                 control_params.push(quote! { #name });
-                let ty = rust_type(&p.ty, false, 0);
+                let ty = rust_type(&p.ty);
                 control_param_types.push(quote! { &mut #ty });
             }
             for p in &a.parameters {
                 let name = format_ident!("{}", p.name);
                 action_params.push(quote! { #name });
-                let ty = rust_type(&p.ty, false, 0);
+                let ty = rust_type(&p.ty);
                 action_param_types.push(quote! { #ty });
             }
             //XXX let tname = format_ident!("{}", table.name);
@@ -505,7 +500,7 @@ impl<'a> PipelineGenerator<'a> {
                 }
             });
         }
-        let name = format!("{}", control.name);
+        let name = &control.name;
         action_match_body.extend(quote! {
             x => panic!("unknown {} action id {}", #name, x),
         });
@@ -548,7 +543,7 @@ impl<'a> PipelineGenerator<'a> {
         for p in &control.parameters {
             let name = format_ident!("{}", p.name);
             control_params.push(quote! { #name });
-            let ty = rust_type(&p.ty, false, 0);
+            let ty = rust_type(&p.ty);
             control_param_types.push(quote! { &mut #ty });
         }
 

@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::lexer::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AST {
     pub constants: Vec<Constant>,
     pub headers: Vec<Header>,
@@ -16,22 +16,6 @@ pub struct AST {
     pub packages: Vec<Package>,
     pub package_instance: Option<PackageInstance>,
     pub externs: Vec<Extern>,
-}
-
-impl Default for AST {
-    fn default() -> Self {
-        Self {
-            constants: Vec::new(),
-            headers: Vec::new(),
-            structs: Vec::new(),
-            typedefs: Vec::new(),
-            controls: Vec::new(),
-            parsers: Vec::new(),
-            packages: Vec::new(),
-            package_instance: None,
-            externs: Vec::new(),
-        }
-    }
 }
 
 pub enum UserDefinedType<'a> {
@@ -412,7 +396,7 @@ impl Control {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     pub fn names(&self) -> HashMap<String, NameInfo> {
@@ -493,7 +477,7 @@ impl Parser {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     pub fn names(&self) -> HashMap<String, NameInfo> {
@@ -704,7 +688,7 @@ pub struct Lvalue {
 
 impl Lvalue {
     pub fn parts(&self) -> Vec<&str> {
-        self.name.split(".").collect()
+        self.name.split('.').collect()
     }
     pub fn root(&self) -> &str {
         self.parts()[0]

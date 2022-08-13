@@ -95,7 +95,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn check(lines: &Vec<&str>, diagnostics: &Diagnostics) -> Result<()> {
+fn check(lines: &[&str], diagnostics: &Diagnostics) -> Result<()> {
     let errors = diagnostics.errors();
     if !errors.is_empty() {
         let mut err = Vec::new();

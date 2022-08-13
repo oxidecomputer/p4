@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Write;
 use std::net::IpAddr;
 
 use num::bigint::BigUint;
@@ -43,6 +44,12 @@ pub struct Table<const D: usize, A: Clone> {
     pub entries: HashSet<TableEntry<D, A>>,
 }
 
+impl<const D: usize, A: Clone> Default for Table<D, A> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const D: usize, A: Clone> Table<D, A> {
     pub fn new() -> Self {
         Self {
@@ -60,14 +67,13 @@ impl<const D: usize, A: Clone> Table<D, A> {
                 result.push(entry.clone());
             }
         }
-        let sorted = sort_entries(result);
-        sorted
+        sort_entries(result)
     }
 
     pub fn dump(&self) -> String {
         let mut s = String::new();
         for e in &self.entries {
-            s += &format!("{:?}\n", e.key)
+            writeln!(s, "{:?}", e.key).unwrap();
         }
         s
     }
@@ -121,25 +127,19 @@ pub fn prune_entries_by_lpm<const D: usize, A: Clone>(
     let mut longest_prefix = 0u8;
 
     for e in entries {
-        match &e.key[d] {
-            Key::Lpm(x) => {
-                if x.len > longest_prefix {
-                    longest_prefix = x.len
-                }
+        if let Key::Lpm(x) = &e.key[d] {
+            if x.len > longest_prefix {
+                longest_prefix = x.len
             }
-            _ => {}
         }
     }
 
     let mut result = Vec::new();
     for e in entries {
-        match &e.key[d] {
-            Key::Lpm(x) => {
-                if x.len == longest_prefix {
-                    result.push(e.clone())
-                }
+        if let Key::Lpm(x) = &e.key[d] {
+            if x.len == longest_prefix {
+                result.push(e.clone())
             }
-            _ => {}
         }
     }
 
@@ -147,7 +147,7 @@ pub fn prune_entries_by_lpm<const D: usize, A: Clone>(
 }
 
 pub fn sort_entries_by_priority<const D: usize, A: Clone>(
-    entries: &mut Vec<TableEntry<D, A>>,
+    entries: &mut [TableEntry<D, A>],
 ) {
     entries
         .sort_by(|a, b| -> std::cmp::Ordering { b.priority.cmp(&a.priority) });
@@ -155,48 +155,37 @@ pub fn sort_entries_by_priority<const D: usize, A: Clone>(
 
 pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     match key {
-        Key::Exact(x) => {
-            //println!("{:x} =?= {:x}", selector, x);
-            selector == x
-        }
+        Key::Exact(x) => selector == x,
         Key::Range(begin, end) => selector >= begin && selector <= end,
         Key::Ternary(t) => match t {
             Ternary::DontCare => true,
             Ternary::Value(x) => selector == x,
             Ternary::Masked(x, m) => selector & m == x & m,
         },
-        Key::Lpm(p) => {
-            match p.addr {
-                IpAddr::V6(addr) => {
-                    assert!(p.len <= 128);
-                    let key: u128 = addr.into();
-                    //let key = key.to_be();
-                    let mask = if p.len == 128 {
-                        u128::MAX
-                    } else {
-                        ((1u128 << p.len) - 1) << (128 - p.len)
-                    };
-                    let selector_v6 = selector.to_u128().unwrap();
-                    //let selector_v6 = selector_v6.to_be();
-                    let result = selector_v6 & mask == key & mask;
-                    //println!("{:x} & {:x} =?= {:x} & {:x}", selector_v6, mask, key, mask);
-                    //println!("{:x} =?= {:x}", selector_v6 & mask, key & mask);
-                    //println!("{}", result);
-                    result
-                }
-                IpAddr::V4(addr) => {
-                    assert!(p.len <= 32);
-                    let key: u32 = addr.into();
-                    let mask = if p.len == 32 {
-                        u32::MAX
-                    } else {
-                        ((1u32 << p.len) - 1) << (32 - p.len)
-                    };
-                    let selector_v4: u32 = selector.to_u32().unwrap();
-                    selector_v4 & mask == key & mask
-                }
+        Key::Lpm(p) => match p.addr {
+            IpAddr::V6(addr) => {
+                assert!(p.len <= 128);
+                let key: u128 = addr.into();
+                let mask = if p.len == 128 {
+                    u128::MAX
+                } else {
+                    ((1u128 << p.len) - 1) << (128 - p.len)
+                };
+                let selector_v6 = selector.to_u128().unwrap();
+                selector_v6 & mask == key & mask
             }
-        }
+            IpAddr::V4(addr) => {
+                assert!(p.len <= 32);
+                let key: u32 = addr.into();
+                let mask = if p.len == 32 {
+                    u32::MAX
+                } else {
+                    ((1u32 << p.len) - 1) << (32 - p.len)
+                };
+                let selector_v4: u32 = selector.to_u32().unwrap();
+                selector_v4 & mask == key & mask
+            }
+        },
     }
 }
 

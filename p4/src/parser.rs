@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
             name = name + &ident;
             let token = self.next_token()?;
             match token.kind {
-                lexer::Kind::Dot => name = name + ".",
+                lexer::Kind::Dot => name += ".",
                 _ => {
                     self.backlog.push(token);
                     break;
@@ -215,10 +215,10 @@ impl<'a> Parser<'a> {
 
         // check for constructor
         let parameters = if token.kind == lexer::Kind::ParenOpen {
-            self.backlog.push(token.clone());
+            self.backlog.push(token);
             self.parse_parameters()?
         } else {
-            self.backlog.push(token.clone());
+            self.backlog.push(token);
             Vec::new()
         };
 
@@ -262,7 +262,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expression(&mut self) -> Result<Box<Expression>, Error> {
         let mut ep = ExpressionParser::new(self);
-        Ok(ep.run()?)
+        ep.run()
     }
 
     pub fn parse_keyset(&mut self) -> Result<Vec<KeySetElement>, Error> {
@@ -274,7 +274,7 @@ impl<'a> Parser<'a> {
             lexer::Kind::Underscore => {
                 return Ok(vec![KeySetElement {
                     value: KeySetElementValue::DontCare,
-                    token: token.clone(),
+                    token,
                 }]);
             }
             _ => {
@@ -283,7 +283,7 @@ impl<'a> Parser<'a> {
                 let expr = ep.run()?;
                 return Ok(vec![KeySetElement {
                     value: KeySetElementValue::Expression(expr),
-                    token: token.clone(),
+                    token,
                 }]);
             }
         }
@@ -336,7 +336,7 @@ impl<'a> Parser<'a> {
                 lexer::Kind::ParenClose => {
                     elements.push(KeySetElement {
                         value: KeySetElementValue::Expression(expr),
-                        token: token.clone(),
+                        token,
                     });
                     return Ok(elements);
                 }
@@ -869,12 +869,9 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
                     let mut parameter = PackageParameter::new(type_name);
                     let token = self.parser.next_token()?;
                     self.parser.backlog.push(token.clone());
-                    match token.kind {
-                        lexer::Kind::AngleOpen => {
-                            parameter.type_parameters =
-                                self.parser.parse_type_parameters()?;
-                        }
-                        _ => {}
+                    if token.kind == lexer::Kind::AngleOpen {
+                        parameter.type_parameters =
+                            self.parser.parse_type_parameters()?;
                     }
                     let (name, _) = self.parser.parse_identifier()?;
                     parameter.name = name;
@@ -1320,7 +1317,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
     pub fn parse_actionref(&mut self) -> Result<ActionRef, Error> {
         let (name, aref_tk) = self.parser.parse_identifier()?;
         let token = self.parser.next_token()?;
-        let mut actionref = ActionRef::new(name, aref_tk.clone());
+        let mut actionref = ActionRef::new(name, aref_tk);
         match token.kind {
             lexer::Kind::Semicolon => Ok(actionref),
             lexer::Kind::ParenOpen => {
@@ -1395,7 +1392,7 @@ impl<'a, 'b> StatementParser<'a, 'b> {
                 if token.kind == lexer::Kind::Semicolon {
                     return Ok(Statement::Return(None));
                 } else {
-                    self.parser.backlog.push(token.clone());
+                    self.parser.backlog.push(token);
                     let mut ep = ExpressionParser::new(self.parser);
                     return Ok(Statement::Return(Some(ep.run()?)));
                 }
@@ -1557,7 +1554,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                         let slice_xpr = xp.run()?;
                         self.parser.expect_token(lexer::Kind::SquareClose)?;
                         Expression::new(
-                            token.clone(),
+                            token,
                             ExpressionKind::Index(
                                 lval,
                                 Expression::new(
@@ -1606,10 +1603,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 // recurse to rhs
                 let mut ep = ExpressionParser::new(self.parser);
                 let rhs = ep.run()?;
-                Ok(Expression::new(
-                    token.clone(),
-                    ExpressionKind::Binary(lhs, op, rhs),
-                ))
+                Ok(Expression::new(token, ExpressionKind::Binary(lhs, op, rhs)))
             }
             None => Ok(lhs),
         }
@@ -1786,10 +1780,11 @@ impl<'a, 'b> SelectParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Select, Error> {
-        let mut select = Select::default();
-        select.parameters = self.parser.parse_expr_parameters()?;
+        let mut select = Select {
+            parameters: self.parser.parse_expr_parameters()?,
+            ..Default::default()
+        };
         self.parse_body(&mut select)?;
-
         Ok(select)
     }
 

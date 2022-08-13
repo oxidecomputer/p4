@@ -78,7 +78,7 @@ struct MacAddr(pub [u8; 6]);
 impl std::str::FromStr for MacAddr {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split(":").collect();
+        let parts: Vec<&str> = s.split(':').collect();
         if parts.len() != 6 {
             return Err("Expected mac in the form aa:bb:cc:dd:ee:ff".into());
         }
@@ -188,7 +188,7 @@ fn main() {
             };
 
             let mut buf = msg.to_wire();
-            buf.push('\n' as u8);
+            buf.push(b'\n');
 
             f.write_all(&buf).unwrap();
             f.sync_all().unwrap();
@@ -236,7 +236,7 @@ fn main() {
             };
 
             let mut buf = msg.to_wire();
-            buf.push('\n' as u8);
+            buf.push(b'\n');
 
             f.write_all(&buf).unwrap();
             f.sync_all().unwrap();
@@ -274,7 +274,7 @@ fn dump_table(table: &Vec<Vec<Key>>) {
                 }
                 Key::Ternary(t) => match t {
                     Ternary::DontCare => {
-                        v.push(format!("Ternary(_)"));
+                        v.push("Ternary(_)".into());
                     }
                     Ternary::Value(x) => {
                         v.push(format!("Ternary({:x})", x));
@@ -292,7 +292,7 @@ fn dump_table(table: &Vec<Vec<Key>>) {
 
 fn send(msg: ManagementMessage) {
     let mut buf = msg.to_wire();
-    buf.push('\n' as u8);
+    buf.push(b'\n');
 
     let mut f = OpenOptions::new().write(true).open("/dev/tty03").unwrap();
 

@@ -28,6 +28,10 @@ do
     cp target/$x/routeradm /work/$x/routeradm
 done
 
+banner "check"
+cargo fmt -- --check
+cargo clippy
+
 banner "test"
 pushd test
 

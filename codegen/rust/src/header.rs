@@ -27,13 +27,10 @@ impl<'a> HeaderGenerator<'a> {
 
         // generate struct members
         let mut members = Vec::new();
-        let mut offset = 0;
         for member in &h.members {
-            let size = type_size(&member.ty, self.ast);
             let name = format_ident!("{}", member.name);
-            let ty = rust_type(&member.ty, true, offset);
+            let ty = rust_type(&member.ty);
             members.push(quote! { pub #name: #ty });
-            offset += size;
         }
 
         let mut generated = quote! {

@@ -19,8 +19,8 @@ impl fmt::Display for SemanticError {
         let loc = format!("\n[{}:{}]", self.at.line + 1, self.at.col + 1)
             .as_str()
             .bright_red();
-        write!(f, "{} {}\n\n", loc, self.message.bright_white())?;
-        write!(f, "  {}\n", self.source)?;
+        writeln!(f, "{} {}\n", loc, self.message.bright_white())?;
+        writeln!(f, "  {}", self.source)?;
 
         // The presence of tabs makes presenting error indicators purely based
         // on column position impossible, so here we iterrate over the existing
@@ -35,9 +35,9 @@ impl fmt::Display for SemanticError {
                     return '^';
                 }
                 if x.is_whitespace() {
-                    return x;
+                    x
                 } else {
-                    return ' ';
+                    ' '
                 }
             })
             .collect();
@@ -64,8 +64,8 @@ impl fmt::Display for ParserError {
         let loc = format!("[{}:{}]", self.at.line + 1, self.at.col + 1)
             .as_str()
             .bright_red();
-        write!(f, "{} {}\n\n", loc, self.message.bright_white())?;
-        write!(f, "  {}\n", self.source)?;
+        writeln!(f, "{} {}\n", loc, self.message.bright_white())?;
+        writeln!(f, "  {}", self.source)?;
 
         // The presence of tabs makes presenting error indicators purely based
         // on column position impossible, so here we iterrate over the existing
@@ -80,9 +80,9 @@ impl fmt::Display for ParserError {
                     return '^';
                 }
                 if x.is_whitespace() {
-                    return x;
+                    x
                 } else {
-                    return ' ';
+                    ' '
                 }
             })
             .collect();
@@ -112,8 +112,8 @@ impl fmt::Display for TokenError {
         let loc = format!("[{}:{}]", self.line + 1, self.col + 1)
             .as_str()
             .bright_red();
-        write!(f, "{} {}\n\n", loc, "unrecognized token".bright_white())?;
-        write!(f, "  {}\n", self.source)?;
+        writeln!(f, "{} {}\n", loc, "unrecognized token".bright_white())?;
+        writeln!(f, "  {}", self.source)?;
 
         // The presence of tabs makes presenting error indicators purely based
         // on column position impossible, so here we iterrate over the existing
@@ -128,9 +128,9 @@ impl fmt::Display for TokenError {
                     return '^';
                 }
                 if x.is_whitespace() {
-                    return x;
+                    x
                 } else {
-                    return ' ';
+                    ' '
                 }
             })
             .collect();
@@ -197,14 +197,14 @@ pub struct PreprocessorError {
 impl fmt::Display for PreprocessorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let loc = format!("[{}]", self.line + 1).as_str().bright_red();
-        write!(
+        writeln!(
             f,
-            "{} {}: {}\n\n",
+            "{} {}: {}\n",
             loc,
             "preporcessor error".bright_white(),
             self.message.bright_white(),
         )?;
-        write!(f, "  {}\n", self.source)
+        writeln!(f, "  {}", self.source)
     }
 }
 

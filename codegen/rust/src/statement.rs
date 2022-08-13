@@ -58,16 +58,20 @@ impl<'a> StatementGenerator<'a> {
                 let lhs = eg.generate_lvalue(lval);
 
                 let rhs = eg.generate_expression(xpr.as_ref());
-                let rhs_ty =
-                    self.hlir.expression_types.get(xpr.as_ref()).expect(
-                        &format!("codegen type not found for {:#?}", xpr),
-                    );
+                let rhs_ty = self
+                    .hlir
+                    .expression_types
+                    .get(xpr.as_ref())
+                    .unwrap_or_else(|| {
+                        panic!("codegen type not found for {:#?}", xpr)
+                    });
 
-                let name_info = self.hlir.lvalue_decls.get(lval).expect(
-                    &format!("codegen name not resolved for {:#?}", lval),
-                );
+                let name_info =
+                    self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
+                        panic!("codegen name not resolved for {:#?}", lval)
+                    });
 
-                if is_header_member(&lval, self.hlir) {
+                if is_header_member(lval, self.hlir) {
                     return quote! { #lhs = #rhs.clone(); };
                 }
 
@@ -84,7 +88,7 @@ impl<'a> StatementGenerator<'a> {
                     rhs
                 };
 
-                if is_rust_reference(&lval, names) {
+                if is_rust_reference(lval, names) {
                     quote! { *#lhs = #rhs; }
                 } else {
                     quote! { #lhs = #rhs; }
@@ -116,24 +120,24 @@ impl<'a> StatementGenerator<'a> {
                     ts.extend(quote! {else if #predicate { #block }})
                 }
                 if let Some(eb) = &ifb.else_block {
-                    let block = self.generate_block(&eb, names);
+                    let block = self.generate_block(eb, names);
                     ts.extend(quote! {else { #block }})
                 }
                 ts
             }
             Statement::Variable(v) => {
                 let name = format_ident!("{}", v.name);
-                let ty = rust_type(&v.ty, false, 0);
+                let ty = rust_type(&v.ty);
                 let initializer = match &v.initializer {
                     Some(xpr) => {
                         let eg = ExpressionGenerator::new(self.hlir);
                         let ini = eg.generate_expression(xpr.as_ref());
                         let ini_ty =
-                            self.hlir.expression_types.get(xpr).expect(
-                                &format!("type for expression {:#?}", xpr),
+                            self.hlir.expression_types.get(xpr).unwrap_or_else(
+                                || panic!("type for expression {:#?}", xpr),
                             );
                         if ini_ty != &v.ty {
-                            let converter = self.converter(&ini_ty, &v.ty);
+                            let converter = self.converter(ini_ty, &v.ty);
                             quote! { #converter(#ini) }
                         } else {
                             ini
@@ -164,7 +168,7 @@ impl<'a> StatementGenerator<'a> {
             }
             Statement::Constant(c) => {
                 let name = format_ident!("{}", c.name);
-                let ty = rust_type(&c.ty, false, 0);
+                let ty = rust_type(&c.ty);
                 let eg = ExpressionGenerator::new(self.hlir);
                 let initializer =
                     eg.generate_expression(c.initializer.as_ref());
@@ -228,7 +232,7 @@ impl<'a> StatementGenerator<'a> {
         let lval: Vec<TokenStream> = c
             .lval
             .name
-            .split(".")
+            .split('.')
             .map(|x| format_ident!("{}", x))
             .map(|x| quote! { #x })
             .collect();
@@ -237,7 +241,7 @@ impl<'a> StatementGenerator<'a> {
         for a in &c.args {
             match &a.kind {
                 ExpressionKind::Lvalue(lvarg) => {
-                    let parts: Vec<&str> = lvarg.name.split(".").collect();
+                    let parts: Vec<&str> = lvarg.name.split('.').collect();
                     let root = parts[0];
                     let mut mut_arg = false;
                     for parg in &parser.parameters {
@@ -278,8 +282,7 @@ impl<'a> StatementGenerator<'a> {
         //
         // get the lval reference to the thing being called
         //
-        let parts: Vec<&str> = c.lval.name.split(".").collect();
-        if parts.len() < 2 {
+        if c.lval.name.split('.').count() < 2 {
             panic!(
                 "codegen: bare calls not supported, \
                 only <ref>.apply() calls are: {:#?}",
@@ -316,19 +319,20 @@ impl<'a> StatementGenerator<'a> {
         c: &Call,
         tokens: &mut TokenStream,
     ) {
-        let name_info =
-            self.hlir
-                .lvalue_decls
-                .get(&c.lval.pop_right())
-                .expect(&format!(
-                    "codegen: lval root for {:#?} not found in hlir",
-                    c.lval
-                ));
+        let name_info = self
+            .hlir
+            .lvalue_decls
+            .get(&c.lval.pop_right())
+            .unwrap_or_else(|| {
+                panic!("codegen: lval root for {:#?} not found in hlir", c.lval)
+            });
 
         let control_instance = match &name_info.ty {
-            Type::UserDefined(name) => self.ast.get_control(name).expect(
-                &format!("codegen: control {} not found in AST", name,),
-            ),
+            Type::UserDefined(name) => {
+                self.ast.get_control(name).unwrap_or_else(|| {
+                    panic!("codegen: control {} not found in AST", name,)
+                })
+            }
             Type::Table => control,
             t => panic!("call references non-user-defined type {:#?}", t),
         };
@@ -346,13 +350,16 @@ impl<'a> StatementGenerator<'a> {
                     Direction::Out | Direction::InOut => {
                         match &a.as_ref().kind {
                             ExpressionKind::Lvalue(lval) => {
-                                let name_info =
-                                    self.hlir.lvalue_decls.get(lval).expect(
-                                        &format!(
+                                let name_info = self
+                                    .hlir
+                                    .lvalue_decls
+                                    .get(lval)
+                                    .unwrap_or_else(|| {
+                                        panic!(
                                         "codegen: lvalue resolve fail {:#?}",
                                         lval
-                                    ),
-                                    );
+                                    )
+                                    });
                                 match name_info.decl {
                                     DeclarationInfo::Parameter(_) => {
                                         args.push(arg_xpr);
@@ -419,7 +426,7 @@ impl<'a> StatementGenerator<'a> {
         for (lval, _match_kind) in &table.key {
             let lvref: Vec<TokenStream> = lval
                 .name
-                .split(".")
+                .split('.')
                 .map(|x| format_ident!("{}", x))
                 .map(|x| quote! { #x })
                 .collect();
@@ -468,7 +475,7 @@ impl<'a> StatementGenerator<'a> {
             .lval
             .pop_right()
             .name
-            .split(".")
+            .split('.')
             .map(|x| format_ident!("{}", x))
             .map(|x| quote! { #x })
             .collect();
@@ -488,7 +495,7 @@ impl<'a> StatementGenerator<'a> {
             .lval
             .pop_right()
             .name
-            .split(".")
+            .split('.')
             .map(|x| format_ident!("{}", x))
             .map(|x| quote! { #x })
             .collect();

@@ -146,7 +146,7 @@ fn check_statement_lvalues(
                     diags.extend(&check_expression_lvalues(
                         expr.as_ref(),
                         ast,
-                        &names,
+                        names,
                     ));
                 }
                 None => {}
@@ -163,20 +163,20 @@ fn check_statement_lvalues(
             diags.extend(&check_expression_lvalues(
                 c.initializer.as_ref(),
                 ast,
-                &names,
+                names,
             ));
         }
         Statement::Assignment(lval, expr) => {
-            diags.extend(&check_lvalue(lval, ast, &names, None));
-            diags.extend(&check_expression_lvalues(expr, ast, &names));
+            diags.extend(&check_lvalue(lval, ast, names, None));
+            diags.extend(&check_expression_lvalues(expr, ast, names));
         }
         Statement::Call(call) => {
-            diags.extend(&check_lvalue(&call.lval, ast, &names, None));
+            diags.extend(&check_lvalue(&call.lval, ast, names, None));
             for arg in &call.args {
                 diags.extend(&check_expression_lvalues(
                     arg.as_ref(),
                     ast,
-                    &names,
+                    names,
                 ));
             }
         }
@@ -184,30 +184,28 @@ fn check_statement_lvalues(
             diags.extend(&check_expression_lvalues(
                 if_block.predicate.as_ref(),
                 ast,
-                &names,
+                names,
             ));
             diags.extend(&check_statement_block_lvalues(
                 &if_block.block,
                 ast,
-                &names,
+                names,
             ));
             for elif in &if_block.else_ifs {
                 diags.extend(&check_expression_lvalues(
                     elif.predicate.as_ref(),
                     ast,
-                    &names,
+                    names,
                 ));
                 diags.extend(&check_statement_block_lvalues(
                     &elif.block,
                     ast,
-                    &names,
+                    names,
                 ));
             }
             if let Some(ref else_block) = if_block.else_block {
                 diags.extend(&check_statement_block_lvalues(
-                    &else_block,
-                    ast,
-                    &names,
+                    else_block, ast, names,
                 ));
             }
         }
@@ -219,7 +217,7 @@ fn check_statement_lvalues(
                 diags.extend(&check_expression_lvalues(
                     xpr.as_ref(),
                     ast,
-                    &names,
+                    names,
                 ));
             }
         }
@@ -361,7 +359,7 @@ fn check_lvalue(
             if parts.len() > 1 {
                 diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("extern functions do not have members",),
+                    message: "extern functions do not have members".into(),
                     token: lval.token.clone(),
                 });
             }
@@ -401,7 +399,7 @@ fn check_lvalue(
                     token.col += parts[0].len() + 1;
                     let sub_lval = Lvalue {
                         name: parts[1..].join("."),
-                        token: token,
+                        token,
                     };
                     let sub_diags = check_lvalue(
                         &sub_lval,
@@ -419,7 +417,7 @@ fn check_lvalue(
                     token.col += parts[0].len() + 1;
                     let sub_lval = Lvalue {
                         name: parts[1..].join("."),
-                        token: token,
+                        token,
                     };
                     let sub_diags = check_lvalue(
                         &sub_lval,
@@ -437,7 +435,7 @@ fn check_lvalue(
                     token.col += parts[0].len() + 1;
                     let sub_lval = Lvalue {
                         name: parts[1..].join("."),
-                        token: token,
+                        token,
                     };
                     let sub_diags = check_lvalue(
                         &sub_lval,

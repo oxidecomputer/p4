@@ -31,7 +31,7 @@ impl<'a> StructGenerator<'a> {
             let name_s = &member.name;
             match &member.ty {
                 Type::UserDefined(ref typename) => {
-                    if let Some(_) = self.ast.get_header(typename) {
+                    if self.ast.get_header(typename).is_some() {
                         let ty = format_ident!("{}", typename);
 
                         // member generation

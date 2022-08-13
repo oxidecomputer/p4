@@ -41,7 +41,7 @@ impl<'a> ParserGenerator<'a> {
         let mut args = Vec::new();
         for arg in &parser.parameters {
             let name = format_ident!("{}", arg.name);
-            let typename = rust_type(&arg.ty, false, 0);
+            let typename = rust_type(&arg.ty);
             match arg.direction {
                 Direction::Out | Direction::InOut => {
                     args.push(quote! { #name: &mut #typename });

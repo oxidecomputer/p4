@@ -64,7 +64,7 @@ impl<'a> ExpressionGenerator<'a> {
                 let lv: Vec<TokenStream> = call
                     .lval
                     .name
-                    .split(".")
+                    .split('.')
                     .map(|x| format_ident!("{}", x))
                     .map(|x| quote! { #x })
                     .collect();
@@ -72,7 +72,7 @@ impl<'a> ExpressionGenerator<'a> {
                 let lvalue = quote! { #(#lv).* };
                 let mut args = Vec::new();
                 for arg in &call.args {
-                    args.push(self.generate_expression(&arg));
+                    args.push(self.generate_expression(arg));
                 }
                 quote! {
                     #lvalue(#(#args),*)
@@ -149,7 +149,7 @@ impl<'a> ExpressionGenerator<'a> {
     pub(crate) fn generate_lvalue(&self, lval: &Lvalue) -> TokenStream {
         let lv: Vec<TokenStream> = lval
             .name
-            .split(".")
+            .split('.')
             .map(|x| format_ident!("{}", x))
             .map(|x| quote! { #x })
             .collect();
@@ -160,7 +160,7 @@ impl<'a> ExpressionGenerator<'a> {
             .hlir
             .lvalue_decls
             .get(lval)
-            .expect(&format!("declaration info for {:#?}", lval,));
+            .unwrap_or_else(|| panic!("declaration info for {:#?}", lval));
 
         match name_info.decl {
             DeclarationInfo::HeaderMember => quote! {

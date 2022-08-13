@@ -175,8 +175,8 @@ impl fmt::Display for Kind {
             //
             Kind::AngleOpen => write!(f, "<"),
             Kind::AngleClose => write!(f, ">"),
-            Kind::CurlyOpen => write!(f, "{}", "{"),
-            Kind::CurlyClose => write!(f, "{}", "}"),
+            Kind::CurlyOpen => write!(f, "{{"),
+            Kind::CurlyClose => write!(f, "}}"),
             Kind::ParenOpen => write!(f, "("),
             Kind::ParenClose => write!(f, ")"),
             Kind::SquareOpen => write!(f, "["),
@@ -266,7 +266,7 @@ impl<'a> Lexer<'a> {
                 cursor: "",
                 line: 0,
                 col: 0,
-                lines: lines,
+                lines,
                 show_tokens: false,
             };
         }
@@ -277,11 +277,12 @@ impl<'a> Lexer<'a> {
             cursor: start,
             line: 0,
             col: 0,
-            lines: lines,
+            lines,
             show_tokens: false,
         }
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Token, TokenError> {
         let token = self.do_next()?;
         if self.show_tokens {
@@ -665,7 +666,7 @@ impl<'a> Lexer<'a> {
     fn match_identifier(&mut self) -> Option<Token> {
         let tok = self.peek_token();
         let len = tok.len();
-        if tok.len() == 0 {
+        if tok.is_empty() {
             return None;
         }
         let mut chars = tok.chars();
@@ -707,7 +708,7 @@ impl<'a> Lexer<'a> {
                 Err(_) => return None,
             }
         } else {
-            match u128::from_str_radix(&tok[n + 1..], 10) {
+            match (&tok[n + 1..]).parse::<u128>() {
                 Ok(n) => n,
                 Err(_) => return None,
             }
@@ -717,7 +718,7 @@ impl<'a> Lexer<'a> {
             col: self.col,
             line: self.line,
         };
-        return Some(token);
+        Some(token)
     }
 
     // TODO copy pasta from parse_bitsized, but no trait to hold on to for
@@ -738,7 +739,7 @@ impl<'a> Lexer<'a> {
                 Err(_) => return None,
             }
         } else {
-            match i128::from_str_radix(&tok[n + 1..], 10) {
+            match (&tok[n + 1..]).parse::<i128>() {
                 Ok(n) => n,
                 Err(_) => return None,
             }
@@ -748,13 +749,13 @@ impl<'a> Lexer<'a> {
             col: self.col,
             line: self.line,
         };
-        return Some(token);
+        Some(token)
     }
 
     fn match_integer(&mut self) -> Option<Token> {
         let tok = self.peek_token();
         let len = tok.len();
-        if tok.len() == 0 {
+        if tok.is_empty() {
             return None;
         }
 
@@ -804,8 +805,7 @@ impl<'a> Lexer<'a> {
             None => {}
         }
 
-        let value = if tok.starts_with("0x") {
-            let tok = &tok[2..];
+        let value = if let Some(tok) = tok.strip_prefix("0x") {
             let chars = tok.chars();
             for c in chars {
                 if !c.is_ascii_hexdigit() {
@@ -833,7 +833,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn check_end_of_line(&mut self) {
-        while self.cursor.len() == 0 {
+        while self.cursor.is_empty() {
             self.line += 1;
             self.col = 0;
             if self.line < self.lines.len() {
@@ -890,7 +890,7 @@ impl<'a> Lexer<'a> {
         let mut len = 0;
         loop {
             match chars.next() {
-                Some('*') => loop {
+                Some('*') => {
                     len += 1;
                     match chars.next() {
                         Some('/') => {
@@ -902,11 +902,10 @@ impl<'a> Lexer<'a> {
                             return;
                         }
                         _ => {
-                            len += 1;
                             break;
                         }
                     }
-                },
+                }
                 _ => {
                     len += 1;
                     continue;
@@ -926,12 +925,7 @@ impl<'a> Lexer<'a> {
             _ => return,
         }
         let mut len = 2;
-        while match chars.next() {
-            Some('\r') => false,
-            Some('\n') => false,
-            None => false,
-            _ => true,
-        } {
+        while !matches!(chars.next(), Some('\r') | Some('\n') | None) {
             len += 1
         }
         self.col += len;
@@ -945,7 +939,7 @@ impl<'a> Lexer<'a> {
         let len = text.len();
         if tok.to_lowercase() == text.to_lowercase() {
             let token = Token {
-                kind: kind,
+                kind,
                 col: self.col,
                 line: self.line,
             };
@@ -1090,6 +1084,6 @@ impl<'a> Lexer<'a> {
         if c == '/' {
             return true;
         }
-        return false;
+        false
     }
 }

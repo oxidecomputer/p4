@@ -165,7 +165,7 @@ impl<'a> HlirGenerator<'a> {
             ExpressionKind::Slice(end, _begin) => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("slice cannot occur outside of an index"),
+                    message: "slice cannot occur outside of an index".into(),
                     token: end.token.clone(),
                 });
                 None
@@ -198,7 +198,7 @@ impl<'a> HlirGenerator<'a> {
             Type::Bool => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index a bool"),
+                    message: "cannot index a bool".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -206,7 +206,7 @@ impl<'a> HlirGenerator<'a> {
             Type::Error => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index an error"),
+                    message: "cannot index an error".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -214,7 +214,7 @@ impl<'a> HlirGenerator<'a> {
             Type::Void => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index a void"),
+                    message: "cannot index a void".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -228,9 +228,8 @@ impl<'a> HlirGenerator<'a> {
                 _ => {
                     self.diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!(
-                            "only slices supported as index arguments"
-                        ),
+                        message: "only slices supported as index arguments"
+                            .into(),
                         token: lval.token.clone(),
                     });
                     None
@@ -245,9 +244,8 @@ impl<'a> HlirGenerator<'a> {
                 _ => {
                     self.diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!(
-                            "only slices supported as index arguments"
-                        ),
+                        message: "only slices supported as index arguments"
+                            .into(),
                         token: lval.token.clone(),
                     });
                     None
@@ -262,9 +260,8 @@ impl<'a> HlirGenerator<'a> {
                 _ => {
                     self.diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!(
-                            "only slices supported as index arguments"
-                        ),
+                        message: "only slices supported as index arguments"
+                            .into(),
                         token: lval.token.clone(),
                     });
                     None
@@ -273,7 +270,7 @@ impl<'a> HlirGenerator<'a> {
             Type::String => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index a string"),
+                    message: "cannot index a string".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -281,7 +278,7 @@ impl<'a> HlirGenerator<'a> {
             Type::UserDefined(_) => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index a user defined type"),
+                    message: "cannot index a user defined type".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -289,7 +286,7 @@ impl<'a> HlirGenerator<'a> {
             Type::ExternFunction => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index an external function"),
+                    message: "cannot index an external function".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -297,7 +294,7 @@ impl<'a> HlirGenerator<'a> {
             Type::Table => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("cannot index a table"),
+                    message: "cannot index a table".into(),
                     token: lval.token.clone(),
                 });
                 None
@@ -320,9 +317,9 @@ impl<'a> HlirGenerator<'a> {
             _ => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!(
+                    message:
                         "only interger literals are supported as slice bounds"
-                    ),
+                            .into(),
                     token: begin.token.clone(),
                 });
                 return None;
@@ -333,9 +330,9 @@ impl<'a> HlirGenerator<'a> {
             _ => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!(
+                    message:
                         "only interger literals are supported as slice bounds"
-                    ),
+                            .into(),
                     token: begin.token.clone(),
                 });
                 return None;
@@ -345,7 +342,7 @@ impl<'a> HlirGenerator<'a> {
         if begin_val < 0 || begin_val >= w {
             self.diags.push(Diagnostic {
                 level: Level::Error,
-                message: format!("slice begin value out of bounds"),
+                message: "slice begin value out of bounds".into(),
                 token: begin.token.clone(),
             });
             return None;
@@ -353,7 +350,7 @@ impl<'a> HlirGenerator<'a> {
         if end_val < 0 || end_val >= w {
             self.diags.push(Diagnostic {
                 level: Level::Error,
-                message: format!("slice end value out of bounds"),
+                message: "slice end value out of bounds".into(),
                 token: begin.token.clone(),
             });
             return None;
@@ -361,10 +358,9 @@ impl<'a> HlirGenerator<'a> {
         if begin_val >= end_val {
             self.diags.push(Diagnostic {
                 level: Level::Error,
-                message: format!(
-                    "slice upper bound must be \
+                message: "slice upper bound must be \
                     greater than the lower bound"
-                ),
+                    .into(),
                 token: begin.token.clone(),
             });
             return None;
@@ -377,7 +373,7 @@ impl<'a> HlirGenerator<'a> {
         lval: &Lvalue,
         names: &mut HashMap<String, NameInfo>,
     ) -> Option<Type> {
-        match resolve_lvalue(lval, self.ast, &names) {
+        match resolve_lvalue(lval, self.ast, names) {
             Ok(name_info) => {
                 self.hlir
                     .lvalue_decls
