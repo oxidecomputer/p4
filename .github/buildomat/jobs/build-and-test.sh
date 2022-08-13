@@ -8,6 +8,9 @@
 #:   "/work/debug/*",
 #:   "/work/release/*",
 #: ]
+#: access_repos = [
+#:   "oxidecomputer/xfr",
+#: ]
 #:
 
 set -o errexit
