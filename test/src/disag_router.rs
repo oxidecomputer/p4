@@ -1,11 +1,11 @@
 use crate::softnpu::{self, Frame, Phy};
+use colored::*;
+use pnet::packet::ipv6::MutableIpv6Packet;
+use std::net::Ipv6Addr;
 use std::sync::Arc;
 use std::thread::{sleep, spawn};
 use std::time::Duration;
-use std::net::Ipv6Addr;
 use xfr::{ring, FrameBuffer};
-use pnet::packet::ipv6::MutableIpv6Packet;
-use colored::*;
 
 const R: usize = 1024;
 const N: usize = 4096;
@@ -36,7 +36,6 @@ p4_macro::use_p4!("test/src/p4/router.p4");
 ///
 #[test]
 fn disag_router() -> Result<(), anyhow::Error> {
-
     let fb = Arc::new(FrameBuffer::<N, F>::new());
 
     // ingress rings
@@ -69,11 +68,7 @@ fn disag_router() -> Result<(), anyhow::Error> {
         let tx = &[tx0_p, tx1_p, tx2_p, tx3_p];
 
         let mut pipeline = main_pipeline::new();
-        softnpu::run_pipeline(
-            rx,
-            tx,
-            &mut pipeline,
-        );
+        softnpu::run_pipeline(rx, tx, &mut pipeline);
     });
 
     // shove some test data through the soft npu
@@ -93,18 +88,70 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let mmc1 = [0x33, 0x33, 0xff, 0x01, 0x70, 0x1c];
 
     let p = b"do you know the muffin man?";
-    write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip2, mac1, mac2, None);
+    write(
+        &phy1,
+        99,
+        1701,
+        p.len(),
+        p,
+        47,
+        23,
+        ip1,
+        ip2,
+        mac1,
+        mac2,
+        None,
+    );
 
     //~~~~
     let p = b"the muffin man?";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, mc1, mac2, mmc1, None);
+    write(
+        &phy2,
+        101,
+        1701,
+        p.len(),
+        p,
+        74,
+        32,
+        ip2,
+        mc1,
+        mac2,
+        mmc1,
+        None,
+    );
     //~~~~~~~
 
     let p = b"the muffin man!";
-    write(&phy1, 99, 1701, p.len(), p, 47, 23, ip1, ip3, mac1, mac3, None);
+    write(
+        &phy1,
+        99,
+        1701,
+        p.len(),
+        p,
+        47,
+        23,
+        ip1,
+        ip3,
+        mac1,
+        mac3,
+        None,
+    );
 
     let p = b"why yes";
-    write(&phy2, 101, 1701, p.len(), p, 74, 32, ip2, ip4, mac2, mac4, None);
+    write(
+        &phy2,
+        101,
+        1701,
+        p.len(),
+        p,
+        74,
+        32,
+        ip2,
+        ip4,
+        mac2,
+        mac4,
+        None,
+    );
 
     let p = b"i know the muffin man";
     let mut sc = [0u8; 21];
@@ -113,11 +160,37 @@ fn disag_router() -> Result<(), anyhow::Error> {
     sc[2] = 2;
     sc[3] = 0x86;
     sc[4] = 0xdd;
-    write(&phy0, 101, 1701, p.len(), p, 74, 32, ip3, ip2, mac3, mac2, Some(sc));
+    write(
+        &phy0,
+        101,
+        1701,
+        p.len(),
+        p,
+        74,
+        32,
+        ip3,
+        ip2,
+        mac3,
+        mac2,
+        Some(sc),
+    );
 
     sc[2] = 1;
     let p = b"the muffin man is me!!!";
-    write(&phy0, 101, 1701, p.len(), p, 74, 32, ip3, ip1, mac3, mac1, Some(sc));
+    write(
+        &phy0,
+        101,
+        1701,
+        p.len(),
+        p,
+        74,
+        32,
+        ip3,
+        ip1,
+        mac3,
+        mac1,
+        Some(sc),
+    );
 
     sleep(Duration::from_secs(2));
 
@@ -126,7 +199,7 @@ fn disag_router() -> Result<(), anyhow::Error> {
 
 #[cfg(test)]
 fn write(
-    phy: &Phy<R,N,F>,
+    phy: &Phy<R, N, F>,
     traffic_class: u8,
     flow_label: u32,
     payload_length: usize,
@@ -135,9 +208,9 @@ fn write(
     hop_limit: u8,
     src: Ipv6Addr,
     dst: Ipv6Addr,
-    smac: [u8;6],
-    dmac: [u8;6],
-    sc: Option<[u8;21]>,
+    smac: [u8; 6],
+    dmac: [u8; 6],
+    sc: Option<[u8; 21]>,
 ) {
     let mut data = [0u8; 256];
     let (index, et) = match sc {
@@ -145,10 +218,10 @@ fn write(
             data[..21].copy_from_slice(&sc);
             (21, 0x0901u16)
         }
-        None => (0, 0x86ddu16)
+        None => (0, 0x86ddu16),
     };
     let _pkt = v6_pkt(
-        &mut data[index..], 
+        &mut data[index..],
         traffic_class,
         flow_label,
         payload_length,
@@ -159,7 +232,8 @@ fn write(
         dst,
     );
     //println!("SEND {:x?}", data);
-    phy.write(&[Frame::new(smac, dmac, et, &data)]).expect("phy write");
+    phy.write(&[Frame::new(smac, dmac, et, &data)])
+        .expect("phy write");
 }
 
 #[cfg(test)]
@@ -192,7 +266,7 @@ fn phy0_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
     let sc = &frame[14..35];
     let dump = format!(
-        "{:#?} | {:x?} | {}", 
+        "{:#?} | {:x?} | {}",
         pkt,
         sc,
         String::from_utf8_lossy(&frame[75..]),
@@ -203,32 +277,23 @@ fn phy0_egress(frame: &[u8]) {
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump = format!(
-        "{:#?} | {}", 
-        pkt,
-        String::from_utf8_lossy(&frame[54..]),
-    );
+    let dump =
+        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
     println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump = format!(
-        "{:#?} | {}", 
-        pkt,
-        String::from_utf8_lossy(&frame[54..]),
-    );
+    let dump =
+        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
     println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump = format!(
-        "{:#?} | {}", 
-        pkt,
-        String::from_utf8_lossy(&frame[54..]),
-    );
+    let dump =
+        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
     println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
 }

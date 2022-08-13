@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     }
 
     if opts.check {
-        return Ok(())
+        return Ok(());
     }
 
     match opts.target {

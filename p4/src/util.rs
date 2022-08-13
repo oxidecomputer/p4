@@ -1,10 +1,10 @@
+use crate::ast::{Lvalue, NameInfo, Type, AST};
 use std::collections::HashMap;
-use crate::ast::{ AST, Lvalue, NameInfo, Type };
 
 pub fn resolve_lvalue(
     lval: &Lvalue,
     ast: &AST,
-    names: &HashMap::<String, NameInfo>,
+    names: &HashMap<String, NameInfo>,
 ) -> Result<NameInfo, String> {
     let root = match names.get(lval.root()) {
         Some(name_info) => name_info,
@@ -24,38 +24,23 @@ pub fn resolve_lvalue(
             if lval.degree() == 1 {
                 root.clone()
                 //Type::UserDefined(name.clone())
-            }
-            else if let Some(parent) = ast.get_struct(name) {
+            } else if let Some(parent) = ast.get_struct(name) {
                 let mut tm = names.clone();
                 tm.extend(parent.names());
-                resolve_lvalue(
-                    &lval.pop_left(),
-                    ast,
-                    &tm,
-                )?
-            }
-            else if let Some(parent) = ast.get_header(name) {
+                resolve_lvalue(&lval.pop_left(), ast, &tm)?
+            } else if let Some(parent) = ast.get_header(name) {
                 let mut tm = names.clone();
                 tm.extend(parent.names());
-                resolve_lvalue(
-                    &lval.pop_left(),
-                    ast,
-                    &tm,
-                )?
-            }
-            else if let Some(parent) = ast.get_extern(name) {
+                resolve_lvalue(&lval.pop_left(), ast, &tm)?
+            } else if let Some(parent) = ast.get_extern(name) {
                 let mut tm = names.clone();
                 tm.extend(parent.names());
-                resolve_lvalue(
-                    &lval.pop_left(),
-                    ast,
-                    &tm,
-                )?
-            }
-            else {
-                return Err(
-                    format!("codegen: User defined name '{}' does not exist", name)
-                );
+                resolve_lvalue(&lval.pop_left(), ast, &tm)?
+            } else {
+                return Err(format!(
+                    "codegen: User defined name '{}' does not exist",
+                    name
+                ));
             }
         }
     };

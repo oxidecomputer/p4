@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::lexer::Token;
 use crate::ast::{
-    AST, DeclarationInfo, Expression, ExpressionKind, Lvalue,
-    NameInfo, Parser, Statement, StatementBlock, Type
+    DeclarationInfo, Expression, ExpressionKind, Lvalue, NameInfo, Parser,
+    Statement, StatementBlock, Type, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
+use crate::lexer::Token;
 
 // TODO Check List
 // This is a running list of things to check
@@ -101,20 +101,21 @@ impl ParserChecker {
             // variables that may get created within parser states to reference
             // locally.
             let names = parser.names();
-            diags.extend(
-                &check_statement_block_lvalues(&state.statements, ast, &names)
-            );
+            diags.extend(&check_statement_block_lvalues(
+                &state.statements,
+                ast,
+                &names,
+            ));
         }
     }
 }
 
 fn check_name(
     name: &str,
-    names: &HashMap::<String, NameInfo>,
+    names: &HashMap<String, NameInfo>,
     token: &Token,
     parent: Option<&str>,
 ) -> (Diagnostics, Option<Type>) {
-
     match names.get(name) {
         Some(name_info) => (Diagnostics::new(), Some(name_info.ty.clone())),
         None => (
@@ -126,57 +127,57 @@ fn check_name(
                 },
                 token: token.clone(),
             }]),
-            None
-        )
+            None,
+        ),
     }
-
 }
 
 fn check_statement_lvalues(
     stmt: &Statement,
     ast: &AST,
-    names: &mut HashMap::<String, NameInfo>
+    names: &mut HashMap<String, NameInfo>,
 ) -> Diagnostics {
     let mut diags = Diagnostics::new();
     match stmt {
-        Statement::Empty => {}, 
+        Statement::Empty => {}
         Statement::Variable(v) => {
             match &v.initializer {
                 Some(expr) => {
                     diags.extend(&check_expression_lvalues(
                         expr.as_ref(),
                         ast,
-                        &names
+                        &names,
                     ));
                 }
                 None => {}
             };
-            names.insert(v.name.clone(), NameInfo{
-                ty: v.ty.clone(),
-                decl: DeclarationInfo::Local,
-            });
+            names.insert(
+                v.name.clone(),
+                NameInfo {
+                    ty: v.ty.clone(),
+                    decl: DeclarationInfo::Local,
+                },
+            );
         }
         Statement::Constant(c) => {
-            diags.extend(
-                &check_expression_lvalues(c.initializer.as_ref(), ast, &names)
-            );
+            diags.extend(&check_expression_lvalues(
+                c.initializer.as_ref(),
+                ast,
+                &names,
+            ));
         }
         Statement::Assignment(lval, expr) => {
             diags.extend(&check_lvalue(lval, ast, &names, None));
-            diags.extend(
-                &check_expression_lvalues(expr, ast, &names)
-            );
+            diags.extend(&check_expression_lvalues(expr, ast, &names));
         }
         Statement::Call(call) => {
             diags.extend(&check_lvalue(&call.lval, ast, &names, None));
             for arg in &call.args {
-                diags.extend(
-                    &check_expression_lvalues(
-                        arg.as_ref(),
-                        ast,
-                        &names,
-                    )
-                );
+                diags.extend(&check_expression_lvalues(
+                    arg.as_ref(),
+                    ast,
+                    &names,
+                ));
             }
         }
         Statement::If(if_block) => {
@@ -218,7 +219,7 @@ fn check_statement_lvalues(
                 diags.extend(&check_expression_lvalues(
                     xpr.as_ref(),
                     ast,
-                    &names
+                    &names,
                 ));
             }
         }
@@ -229,16 +230,12 @@ fn check_statement_lvalues(
 fn check_statement_block_lvalues(
     block: &StatementBlock,
     ast: &AST,
-    names: &HashMap::<String, NameInfo>
+    names: &HashMap<String, NameInfo>,
 ) -> Diagnostics {
     let mut diags = Diagnostics::new();
     let mut block_names = names.clone();
     for stmt in &block.statements {
-        diags.extend(&check_statement_lvalues(
-            stmt,
-            ast,
-            &mut block_names
-        ));
+        diags.extend(&check_statement_lvalues(stmt, ast, &mut block_names));
     }
     diags
 }
@@ -246,9 +243,8 @@ fn check_statement_block_lvalues(
 fn check_expression_lvalues(
     xpr: &Expression,
     ast: &AST,
-    names: &HashMap::<String, NameInfo>,
+    names: &HashMap<String, NameInfo>,
 ) -> Diagnostics {
-
     match &xpr.kind {
         ExpressionKind::Lvalue(lval) => check_lvalue(lval, ast, names, None),
         ExpressionKind::Binary(lhs, _, rhs) => {
@@ -270,26 +266,20 @@ fn check_expression_lvalues(
             diags
         }
         _ => Diagnostics::new(),
-
     }
-
 }
-
 
 fn check_lvalue(
     lval: &Lvalue,
     ast: &AST,
-    names: &HashMap::<String, NameInfo>,
+    names: &HashMap<String, NameInfo>,
     parent: Option<&str>,
 ) -> Diagnostics {
-
     let parts = lval.parts();
 
     let ty = match check_name(parts[0], names, &lval.token, parent) {
         (_, Some(ty)) => ty,
-        (diags, None) => {
-            return diags
-        }
+        (diags, None) => return diags,
     };
 
     let mut diags = Diagnostics::new();
@@ -371,9 +361,7 @@ fn check_lvalue(
             if parts.len() > 1 {
                 diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!(
-                        "extern functions do not have members",
-                    ),
+                    message: format!("extern functions do not have members",),
                     token: lval.token.clone(),
                 });
             }
@@ -411,7 +399,7 @@ fn check_lvalue(
                     struct_names.extend(parent.names());
                     let mut token = lval.token.clone();
                     token.col += parts[0].len() + 1;
-                    let sub_lval = Lvalue{
+                    let sub_lval = Lvalue {
                         name: parts[1..].join("."),
                         token: token,
                     };
@@ -422,14 +410,14 @@ fn check_lvalue(
                         Some(&parent.name),
                     );
                     diags.extend(&sub_diags);
-                } 
+                }
             } else if let Some(parent) = ast.get_header(&name) {
                 if parts.len() > 1 {
                     let mut header_names = names.clone();
                     header_names.extend(parent.names());
                     let mut token = lval.token.clone();
                     token.col += parts[0].len() + 1;
-                    let sub_lval = Lvalue{
+                    let sub_lval = Lvalue {
                         name: parts[1..].join("."),
                         token: token,
                     };
@@ -447,7 +435,7 @@ fn check_lvalue(
                     extern_names.extend(parent.names());
                     let mut token = lval.token.clone();
                     token.col += parts[0].len() + 1;
-                    let sub_lval = Lvalue{
+                    let sub_lval = Lvalue {
                         name: parts[1..].join("."),
                         token: token,
                     };
@@ -477,8 +465,7 @@ pub struct ExpressionTypeChecker {
 }
 
 impl ExpressionTypeChecker {
-    pub fn run(&self) -> (HashMap::<Expression, Type>, Diagnostics) {
-
+    pub fn run(&self) -> (HashMap<Expression, Type>, Diagnostics) {
         // These iterations may seem a bit odd. The reason I'm using numeric
         // indices here is that I cannot borrow a mutable node of the AST and
         // the AST itself at the same time, and then pass them separately into a
@@ -501,7 +488,6 @@ impl ExpressionTypeChecker {
         */
 
         todo!();
-
     }
 
     pub fn check_constant(&self, _index: usize) -> Diagnostics {
@@ -526,7 +512,7 @@ impl ExpressionTypeChecker {
     pub fn check_statement_block(
         &self,
         _sb: &mut StatementBlock,
-        _names: &HashMap::<String, NameInfo>,
+        _names: &HashMap<String, NameInfo>,
     ) -> Diagnostics {
         todo!();
 
@@ -535,9 +521,9 @@ impl ExpressionTypeChecker {
         for stmt in &mut sb.statements {
             match stmt {
                 Statement::Empty => {}
-                Statement::Assignment(_, xpr) => { 
+                Statement::Assignment(_, xpr) => {
                     diags.extend(&self.check_expression(xpr, names));
-                    todo!() 
+                    todo!()
                 }
                 Statement::Call(c) => { todo!() }
                 Statement::If(ifb) => { todo!() }
@@ -547,15 +533,13 @@ impl ExpressionTypeChecker {
         }
         diags
         */
-
     }
 
     pub fn check_expression(
         &self,
         _xpr: &mut Expression,
-        _names: &HashMap::<String, NameInfo>,
+        _names: &HashMap<String, NameInfo>,
     ) -> Diagnostics {
-
         /*
         let mut diags = Diagnostics::new();
         match &mut xpr.kind {
@@ -590,14 +574,9 @@ impl ExpressionTypeChecker {
         diags
         */
         todo!();
-
     }
-
 
     pub fn check_parser(&self, _index: usize) -> Diagnostics {
         todo!("parser expression type check");
     }
 }
-
-
-

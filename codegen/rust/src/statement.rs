@@ -1,18 +1,15 @@
-use std::collections::HashMap;
 use crate::{
-    expression::ExpressionGenerator,
-    rust_type,
-    is_header_member,
-    is_rust_reference,
-    is_header,
+    expression::ExpressionGenerator, is_header, is_header_member,
+    is_rust_reference, rust_type,
 };
 use p4::ast::{
-    AST, Call, Control, DeclarationInfo, Direction, Expression, ExpressionKind,
-    NameInfo, Parser, Statement, StatementBlock, Transition, Type
+    Call, Control, DeclarationInfo, Direction, Expression, ExpressionKind,
+    NameInfo, Parser, Statement, StatementBlock, Transition, Type, AST,
 };
 use p4::hlir::Hlir;
-use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(crate) enum StatementContext<'a> {
@@ -21,25 +18,25 @@ pub(crate) enum StatementContext<'a> {
     Parser(&'a Parser),
 }
 
-pub(crate) struct StatementGenerator<'a> { 
+pub(crate) struct StatementGenerator<'a> {
     hlir: &'a Hlir,
     ast: &'a AST,
-    context: StatementContext::<'a>,
+    context: StatementContext<'a>,
 }
 
 impl<'a> StatementGenerator<'a> {
     pub fn new(
         ast: &'a AST,
         hlir: &'a Hlir,
-        context: StatementContext::<'a>
+        context: StatementContext<'a>,
     ) -> Self {
-        Self{ ast, hlir, context }
+        Self { ast, hlir, context }
     }
 
     pub(crate) fn generate_block(
         &self,
         sb: &StatementBlock,
-        names: &mut HashMap::<String, NameInfo>,
+        names: &mut HashMap<String, NameInfo>,
     ) -> TokenStream {
         let mut ts = TokenStream::new();
         for stmt in &sb.statements {
@@ -51,32 +48,27 @@ impl<'a> StatementGenerator<'a> {
     pub(crate) fn generate_statement(
         &self,
         stmt: &Statement,
-        names: &mut HashMap::<String, NameInfo>,
+        names: &mut HashMap<String, NameInfo>,
     ) -> TokenStream {
         match stmt {
-            Statement::Empty => { TokenStream::new() }
+            Statement::Empty => TokenStream::new(),
             Statement::Assignment(lval, xpr) => {
                 let eg = ExpressionGenerator::new(self.hlir);
 
                 let lhs = eg.generate_lvalue(lval);
 
                 let rhs = eg.generate_expression(xpr.as_ref());
-                let rhs_ty = self
-                    .hlir
-                    .expression_types
-                    .get(xpr.as_ref())
-                    .expect(&format!("codegen type not found for {:#?}", xpr));
+                let rhs_ty =
+                    self.hlir.expression_types.get(xpr.as_ref()).expect(
+                        &format!("codegen type not found for {:#?}", xpr),
+                    );
 
-                let name_info = self
-                    .hlir
-                    .lvalue_decls
-                    .get(lval)
-                    .expect(&format!(
-                            "codegen name not resolved for {:#?}", lval));
-
+                let name_info = self.hlir.lvalue_decls.get(lval).expect(
+                    &format!("codegen name not resolved for {:#?}", lval),
+                );
 
                 if is_header_member(&lval, self.hlir) {
-                    return quote!{ #lhs = #rhs.clone(); }
+                    return quote! { #lhs = #rhs.clone(); };
                 }
 
                 let rhs = if rhs_ty != &name_info.ty {
@@ -87,41 +79,29 @@ impl<'a> StatementGenerator<'a> {
                 };
 
                 let rhs = if let Type::Bit(_) = rhs_ty {
-                    quote!{ #rhs.clone() }
+                    quote! { #rhs.clone() }
                 } else {
                     rhs
                 };
 
                 if is_rust_reference(&lval, names) {
-                    quote!{ *#lhs = #rhs; }
+                    quote! { *#lhs = #rhs; }
                 } else {
-                    quote!{ #lhs = #rhs; }
+                    quote! { #lhs = #rhs; }
                 }
             }
-            Statement::Call(c) => {
-                match &self.context {
-                    StatementContext::Control(control) => {
-                        let mut ts = TokenStream::new();
-                        self.generate_control_body_call(
-                            control,
-                            c,
-                            &mut ts,
-                        );
-                        ts
-                    }
-                    StatementContext::Parser(parser) => {
-                        let mut ts = TokenStream::new();
-                        self.generate_parser_body_call(
-                            parser,
-                            c,
-                            &mut ts,
-                        );
-                        ts
-                    }
-
+            Statement::Call(c) => match &self.context {
+                StatementContext::Control(control) => {
+                    let mut ts = TokenStream::new();
+                    self.generate_control_body_call(control, c, &mut ts);
+                    ts
                 }
-
-            }
+                StatementContext::Parser(parser) => {
+                    let mut ts = TokenStream::new();
+                    self.generate_parser_body_call(parser, c, &mut ts);
+                    ts
+                }
+            },
             Statement::If(ifb) => {
                 let eg = ExpressionGenerator::new(self.hlir);
                 let predicate = eg.generate_expression(ifb.predicate.as_ref());
@@ -130,13 +110,14 @@ impl<'a> StatementGenerator<'a> {
                     if #predicate { #block }
                 };
                 for ei in &ifb.else_ifs {
-                    let predicate = eg.generate_expression(ei.predicate.as_ref());
+                    let predicate =
+                        eg.generate_expression(ei.predicate.as_ref());
                     let block = self.generate_block(&ei.block, names);
-                    ts.extend(quote!{else if #predicate { #block }})
+                    ts.extend(quote! {else if #predicate { #block }})
                 }
                 if let Some(eb) = &ifb.else_block {
                     let block = self.generate_block(&eb, names);
-                    ts.extend(quote!{else { #block }})
+                    ts.extend(quote! {else { #block }})
                 }
                 ts
             }
@@ -144,37 +125,39 @@ impl<'a> StatementGenerator<'a> {
                 let name = format_ident!("{}", v.name);
                 let ty = rust_type(&v.ty, false, 0);
                 let initializer = match &v.initializer {
-                    Some(xpr) =>  {
+                    Some(xpr) => {
                         let eg = ExpressionGenerator::new(self.hlir);
                         let ini = eg.generate_expression(xpr.as_ref());
-                        let ini_ty = self
-                            .hlir
-                            .expression_types
-                            .get(xpr)
-                            .expect(&format!("type for expression {:#?}", xpr));
+                        let ini_ty =
+                            self.hlir.expression_types.get(xpr).expect(
+                                &format!("type for expression {:#?}", xpr),
+                            );
                         if ini_ty != &v.ty {
                             let converter = self.converter(&ini_ty, &v.ty);
-                            quote!{ #converter(#ini) }
+                            quote! { #converter(#ini) }
                         } else {
                             ini
                         }
-                    },
-                    None => quote!{ #ty::default() },
+                    }
+                    None => quote! { #ty::default() },
                 };
-                names.insert(v.name.clone(), NameInfo{
-                    ty: v.ty.clone(),
-                    decl: DeclarationInfo::Local,
-                });
+                names.insert(
+                    v.name.clone(),
+                    NameInfo {
+                        ty: v.ty.clone(),
+                        decl: DeclarationInfo::Local,
+                    },
+                );
 
                 //TODO determine for real
                 let needs_mut = true;
 
                 if needs_mut {
-                    quote!{
+                    quote! {
                         let mut #name: #ty = #initializer;
                     }
                 } else {
-                    quote!{
+                    quote! {
                         let #name: #ty = #initializer;
                     }
                 }
@@ -183,10 +166,9 @@ impl<'a> StatementGenerator<'a> {
                 let name = format_ident!("{}", c.name);
                 let ty = rust_type(&c.ty, false, 0);
                 let eg = ExpressionGenerator::new(self.hlir);
-                let initializer = eg.generate_expression(
-                    c.initializer.as_ref()
-                );
-                quote!{
+                let initializer =
+                    eg.generate_expression(c.initializer.as_ref());
+                quote! {
                     let #name: #ty = #initializer;
                 }
             }
@@ -255,17 +237,15 @@ impl<'a> StatementGenerator<'a> {
         for a in &c.args {
             match &a.kind {
                 ExpressionKind::Lvalue(lvarg) => {
-                    let parts: Vec<&str> =
-                        lvarg.name.split(".").collect();
+                    let parts: Vec<&str> = lvarg.name.split(".").collect();
                     let root = parts[0];
                     let mut mut_arg = false;
                     for parg in &parser.parameters {
                         if parg.name == root {
                             match parg.direction {
-                                Direction::Out
-                                    | Direction::InOut => {
-                                        mut_arg = true;
-                                    }
+                                Direction::Out | Direction::InOut => {
+                                    mut_arg = true;
+                                }
                                 _ => {}
                             }
                         }
@@ -287,7 +267,6 @@ impl<'a> StatementGenerator<'a> {
         tokens.extend(quote! {
             #(#lval).* ( #(#args),* );
         });
-
     }
 
     fn generate_control_body_call(
@@ -304,11 +283,11 @@ impl<'a> StatementGenerator<'a> {
             panic!(
                 "codegen: bare calls not supported, \
                 only <ref>.apply() calls are: {:#?}",
-             c
+                c
             );
         }
         match c.lval.leaf() {
-            "apply" => { 
+            "apply" => {
                 self.generate_control_apply_body_call(control, c, tokens);
             }
             "setValid" => {
@@ -325,11 +304,10 @@ impl<'a> StatementGenerator<'a> {
                     "codegen: only <tablename>.apply() and \
                     <header>.{{isValid, setValid, setInvalid}}() calls are \
                     supported in apply blocks right now: {:#?}",
-                     c
+                    c
                 );
             }
         }
-
     }
 
     fn generate_control_apply_body_call(
@@ -338,22 +316,19 @@ impl<'a> StatementGenerator<'a> {
         c: &Call,
         tokens: &mut TokenStream,
     ) {
-        let name_info = self
-            .hlir
-            .lvalue_decls
-            .get(&c.lval.pop_right()).expect(&format!(
-                "codegen: lval root for {:#?} not found in hlir",
-                c.lval
-            ));
+        let name_info =
+            self.hlir
+                .lvalue_decls
+                .get(&c.lval.pop_right())
+                .expect(&format!(
+                    "codegen: lval root for {:#?} not found in hlir",
+                    c.lval
+                ));
 
         let control_instance = match &name_info.ty {
-            Type::UserDefined(name) => self
-                .ast
-                .get_control(name)
-                .expect(&format!(
-                    "codegen: control {} not found in AST",
-                    name,
-                )),
+            Type::UserDefined(name) => self.ast.get_control(name).expect(
+                &format!("codegen: control {} not found in AST", name,),
+            ),
             Type::Table => control,
             t => panic!("call references non-user-defined type {:#?}", t),
         };
@@ -362,7 +337,6 @@ impl<'a> StatementGenerator<'a> {
 
         // This is a call to another control instance
         if control_instance.name != control.name {
-
             let call = format_ident!("{}_apply", root);
             let eg = ExpressionGenerator::new(self.hlir);
             let mut args = Vec::new();
@@ -372,24 +346,24 @@ impl<'a> StatementGenerator<'a> {
                     Direction::Out | Direction::InOut => {
                         match &a.as_ref().kind {
                             ExpressionKind::Lvalue(lval) => {
-                                let name_info = self
-                                    .hlir
-                                    .lvalue_decls
-                                    .get(lval).expect(&format!(
+                                let name_info =
+                                    self.hlir.lvalue_decls.get(lval).expect(
+                                        &format!(
                                         "codegen: lvalue resolve fail {:#?}",
                                         lval
-                                    ));
+                                    ),
+                                    );
                                 match name_info.decl {
                                     DeclarationInfo::Parameter(_) => {
                                         args.push(arg_xpr);
                                     }
                                     _ => {
-                                        args.push(quote!{&mut #arg_xpr});
+                                        args.push(quote! {&mut #arg_xpr});
                                     }
                                 }
                             }
                             _ => {
-                                args.push(quote!{&mut #arg_xpr});
+                                args.push(quote! {&mut #arg_xpr});
                             }
                         }
                     }
@@ -401,11 +375,9 @@ impl<'a> StatementGenerator<'a> {
 
             let tables = control_instance.tables(self.ast);
             for (control, table) in tables {
-                let name = format_ident!("{}_table_{}",
-                    control.name,
-                    table.name,
-                );
-                args.push(quote!{ #name });
+                let name =
+                    format_ident!("{}_table_{}", control.name, table.name,);
+                args.push(quote! { #name });
             }
 
             /*XXX
@@ -413,12 +385,11 @@ impl<'a> StatementGenerator<'a> {
             args.push(quote!{#tbl_arg});
             */
 
-            tokens.extend(quote!{
+            tokens.extend(quote! {
                 #call(#(#args),*);
             });
 
             return;
-
         }
 
         let table = match control_instance.get_table(root) {
@@ -426,9 +397,7 @@ impl<'a> StatementGenerator<'a> {
             None => {
                 panic!(
                     "codegen: table {} not found in control {} decl: {:#?}",
-                    root,
-                    control.name,
-                    name_info,
+                    root, control.name, name_info,
                 );
             }
         };
@@ -437,11 +406,8 @@ impl<'a> StatementGenerator<'a> {
         // match an action based on the key material
         //
 
-        let table_name = format_ident!(
-            "{}_table_{}",
-            control_instance.name,
-            table.name,
-        );
+        let table_name =
+            format_ident!("{}_table_{}", control_instance.name, table.name,);
 
         let mut action_args = Vec::new();
         for p in &control.parameters {
@@ -451,7 +417,6 @@ impl<'a> StatementGenerator<'a> {
 
         let mut selector_components = Vec::new();
         for (lval, _match_kind) in &table.key {
-
             let lvref: Vec<TokenStream> = lval
                 .name
                 .split(".")
@@ -467,28 +432,24 @@ impl<'a> StatementGenerator<'a> {
 
             if is_header(&lval.pop_right(), self.ast, &names) {
                 //TODO: to_bitvec is bad here, copying on data path
-                selector_components.push(quote!{
+                selector_components.push(quote! {
                     p4rs::bitvec_to_biguint(
                         &#(#lvref).*
                     )
                 });
             } else {
-                selector_components.push(quote!{
+                selector_components.push(quote! {
                     p4rs::bitvec_to_biguint(&#(#lvref).*)
                 });
             }
-
         }
-        let default_action = format_ident!(
-            "{}_action_{}",
-            control.name,
-            table.default_action,
-        );
+        let default_action =
+            format_ident!("{}_action_{}", control.name, table.default_action,);
         tokens.extend(quote! {
             let matches = #table_name.match_selector(
                 &[#(#selector_components),*]
             );
-            if matches.len() > 0 { 
+            if matches.len() > 0 {
                 (matches[0].action)(#(#action_args),*)
             }
             else {
@@ -503,8 +464,9 @@ impl<'a> StatementGenerator<'a> {
         tokens: &mut TokenStream,
         valid: bool,
     ) {
-
-        let lhs: Vec<TokenStream> = c.lval.pop_right()
+        let lhs: Vec<TokenStream> = c
+            .lval
+            .pop_right()
             .name
             .split(".")
             .map(|x| format_ident!("{}", x))
@@ -519,16 +481,12 @@ impl<'a> StatementGenerator<'a> {
                 #(#lhs).*.set_invalid();
             });
         }
-
     }
 
-    fn generate_header_get_validity(
-        &self,
-        c: &Call,
-        tokens: &mut TokenStream,
-    ) {
-
-        let lhs: Vec<TokenStream> = c.lval.pop_right()
+    fn generate_header_get_validity(&self, c: &Call, tokens: &mut TokenStream) {
+        let lhs: Vec<TokenStream> = c
+            .lval
+            .pop_right()
             .name
             .split(".")
             .map(|x| format_ident!("{}", x))
@@ -537,17 +495,12 @@ impl<'a> StatementGenerator<'a> {
         tokens.extend(quote! {
             #(#lhs).*.is_valid()
         });
-
     }
 
-    fn converter(
-        &self,
-        from: &Type,
-        to: &Type,
-    ) -> TokenStream {
+    fn converter(&self, from: &Type, to: &Type) -> TokenStream {
         match (from, to) {
             (Type::Int(_), Type::Bit(_)) => {
-                quote!{ p4rs::int_to_bitvec }
+                quote! { p4rs::int_to_bitvec }
             }
             _ => todo!("type converter for {} to {}", from, to),
         }
@@ -585,5 +538,4 @@ impl<'a> StatementGenerator<'a> {
         */
         todo!();
     }
-
 }

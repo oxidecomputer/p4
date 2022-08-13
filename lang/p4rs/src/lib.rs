@@ -60,7 +60,6 @@ impl<'a> std::cmp::PartialEq for Bit<'a, 8> {
 
 impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 
-
 /// Every packet that goes through a P4 pipeline is represented as a `packet_in`
 /// instance. `packet_in` objects wrap an underlying mutable data reference that
 /// is ultimately rooted in a memory mapped region containing a ring of packets.
@@ -84,7 +83,7 @@ pub trait Pipeline {
     /// packet and output port number.
     fn process_packet<'a>(
         &mut self,
-        port: u8, 
+        port: u8,
         pkt: &mut packet_in<'a>,
     ) -> Option<(packet_out<'a>, u8)>;
 }
@@ -113,19 +112,12 @@ impl<'a> packet_in<'a> {
     // standard library requires the return type to be `void`, so this signature
     // cannot return a result without the compiler having special knowledge of
     // functions that happen to be called "extract".
-    pub fn extract<H: Header>(
-        &mut self,
-        h: &mut H,
-    ) {
+    pub fn extract<H: Header>(&mut self, h: &mut H) {
         //TODO what if a header does not end on a byte boundary?
         let n = H::size();
-        let start = if self.index > 0 {
-            self.index >> 3
-        } else {
-            0
-        };
+        let start = if self.index > 0 { self.index >> 3 } else { 0 };
         match h.set(&self.data[start..start + (n >> 3)]) {
-            Ok(_) => { },
+            Ok(_) => {}
             Err(e) => {
                 //TODO better than this
                 println!("packet extraction failed: {}", e);
@@ -137,15 +129,9 @@ impl<'a> packet_in<'a> {
 
     // This is the same as extract except we return a new header instead of
     // modifying an existing one.
-    pub fn extract_new<H: Header>(
-        &mut self,
-    ) -> Result<H, TryFromSliceError> {
+    pub fn extract_new<H: Header>(&mut self) -> Result<H, TryFromSliceError> {
         let n = H::size();
-        let start = if self.index > 0 {
-            self.index >> 3
-        } else {
-            0
-        };
+        let start = if self.index > 0 { self.index >> 3 } else { 0 };
         self.index += n;
         let mut x = H::new();
         x.set(&self.data[start..start + (n >> 3)])?;
@@ -162,16 +148,13 @@ pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> num::BigUint {
 
 pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
     let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
-    std::net::IpAddr::V6(
-        std::net::Ipv6Addr::from(arr),
-    )
-
+    std::net::IpAddr::V6(std::net::Ipv6Addr::from(arr))
 }
 
 #[repr(C, align(16))]
 pub struct AlignedU128(pub u128);
 
-pub fn int_to_bitvec(x: i128) -> BitVec::<u8, Msb0> {
+pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
     //let mut bv = BitVec::<u8, Msb0>::new();
     let mut bv = bitvec![mut u8, Msb0; 0; 128];
     bv.store(x);
@@ -183,9 +166,7 @@ pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
     aligned.force_align();
     let buf = aligned.as_raw_slice();
     match buf.len() {
-        0 => {
-            "∅".into()
-        }
+        0 => "∅".into(),
         1 => {
             let v = buf[0];
             format!("0x{:02x}", v)
@@ -222,11 +203,9 @@ pub fn extract_exact_key(
     offset: usize,
     len: usize,
 ) -> table::Key {
-
-    table::Key::Exact(
-        num::BigUint::from_bytes_be(&keyset_data[offset..offset+len])
-    )
-
+    table::Key::Exact(num::BigUint::from_bytes_be(
+        &keyset_data[offset..offset + len],
+    ))
 }
 
 pub fn extract_ternary_key(
@@ -242,31 +221,27 @@ pub fn extract_lpm_key(
     offset: usize,
     _len: usize,
 ) -> table::Key {
-
     let (addr, len) = match keyset_data.len() {
         // IPv4
         5 => {
-            let data: [u8; 4] = keyset_data
-                .as_slice()[offset..offset+4]
+            let data: [u8; 4] = keyset_data.as_slice()[offset..offset + 4]
                 .try_into()
                 .unwrap();
-            (IpAddr::from(data), keyset_data[offset+4])
+            (IpAddr::from(data), keyset_data[offset + 4])
         }
         // IPv6
         17 => {
-            let data: [u8; 16] = keyset_data
-                .as_slice()[offset..offset+16]
+            let data: [u8; 16] = keyset_data.as_slice()[offset..offset + 16]
                 .try_into()
                 .unwrap();
-            (IpAddr::from(data), keyset_data[offset+16])
+            (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
             panic!("add router table entry: unknown action id {}, ignoring", x);
         }
     };
 
-    table::Key::Lpm(table::Prefix{ addr, len })
-
+    table::Key::Lpm(table::Prefix { addr, len })
 }
 
 pub fn extract_bool_action_parameter(
@@ -282,5 +257,5 @@ pub fn extract_bit_action_parameter(
     size: usize,
 ) -> BitVec<u8, Msb0> {
     let size = size >> 3;
-    BitVec::from_slice(&parameter_data[offset..offset+size])
+    BitVec::from_slice(&parameter_data[offset..offset + size])
 }

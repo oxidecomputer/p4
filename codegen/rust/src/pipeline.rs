@@ -1,6 +1,6 @@
-use crate::{Context, rust_type, type_size};
+use crate::{rust_type, type_size, Context};
+use p4::ast::{Control, MatchKind, PackageInstance, Parser, Table, Type, AST};
 use p4::hlir::Hlir;
-use p4::ast::{AST, Control, PackageInstance, MatchKind, Parser, Table, Type};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -10,25 +10,22 @@ pub(crate) struct PipelineGenerator<'a> {
     hlir: &'a Hlir,
 }
 
-impl <'a> PipelineGenerator<'a> {
+impl<'a> PipelineGenerator<'a> {
     pub(crate) fn new(
         ast: &'a AST,
-        hlir: &'a Hlir, 
-        ctx: &'a mut Context
+        hlir: &'a Hlir,
+        ctx: &'a mut Context,
     ) -> Self {
-        Self{ ast, hlir, ctx }
+        Self { ast, hlir, ctx }
     }
 
     pub(crate) fn generate(&mut self) {
-
         if let Some(ref inst) = self.ast.package_instance {
             self.generate_pipeline(inst);
         }
-
     }
 
     pub(crate) fn generate_pipeline(&mut self, inst: &PackageInstance) {
-
         //TODO check instance against package definition instead of hardcoding
         //SoftNPU in below. This begs the question, will the Rust back end
         //support something besides SoftNPU. Probably not for the forseeable
@@ -74,16 +71,13 @@ impl <'a> PipelineGenerator<'a> {
         let pipeline_impl_process_packet =
             self.pipeline_impl_process_packet(parser, control);
 
-        let add_table_entry_method =
-            self.add_table_entry_method(control);
+        let add_table_entry_method = self.add_table_entry_method(control);
 
-        let remove_table_entry_method =
-            self.remove_table_entry_method(control);
+        let remove_table_entry_method = self.remove_table_entry_method(control);
 
-        let table_modifiers =
-            self.table_modifiers(control);
+        let table_modifiers = self.table_modifiers(control);
 
-        let pipeline = quote!{
+        let pipeline = quote! {
             pub struct #pipeline_name {
                 #(#table_members),*,
                 #parse_member,
@@ -112,7 +106,6 @@ impl <'a> PipelineGenerator<'a> {
         };
 
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);
-
     }
 
     fn pipeline_impl_process_packet(
@@ -120,7 +113,6 @@ impl <'a> PipelineGenerator<'a> {
         parser: &Parser,
         control: &Control,
     ) -> TokenStream {
-
         let parsed_type = rust_type(&parser.parameters[1].ty, false, 0);
 
         // determine table arguments
@@ -128,7 +120,7 @@ impl <'a> PipelineGenerator<'a> {
         let mut tbl_args = Vec::new();
         for (c, t) in tables {
             let name = format_ident!("{}_table_{}", c.name, t.name);
-            tbl_args.push(quote!{
+            tbl_args.push(quote! {
                 &self.#name
             });
         }
@@ -193,7 +185,7 @@ impl <'a> PipelineGenerator<'a> {
                     parsed_size += ipv6_t::size() >> 3;
                 }
 
-                // 
+                //
                 // 5. Run the control block
                 //
 
@@ -208,7 +200,7 @@ impl <'a> PipelineGenerator<'a> {
                 // 6. Determine egress port
                 //
 
-                let port = if egress_metadata.port.is_empty() 
+                let port = if egress_metadata.port.is_empty()
                     || egress_metadata.drop {
                     dtrace_provider::control_dropped!(||(&dump));
                     println!("{}", "no match".red());
@@ -248,7 +240,8 @@ impl <'a> PipelineGenerator<'a> {
     ) -> (Vec<TokenStream>, Vec<TokenStream>) {
         let mut members = Vec::new();
         let mut initializers = Vec::new();
-        let mut cg = crate::ControlGenerator::new(self.ast, self.hlir, self.ctx);
+        let mut cg =
+            crate::ControlGenerator::new(self.ast, self.hlir, self.ctx);
 
         let tables = control.tables(self.ast);
         for (control, table) in tables {
@@ -256,21 +249,16 @@ impl <'a> PipelineGenerator<'a> {
             let n = table.key.len() as usize;
             let table_type = quote! {
                 p4rs::table::Table::<
-                    #n, 
+                    #n,
                     std::sync::Arc<dyn Fn(#(#param_types),*)>
-                    > 
+                    >
             };
-            let name = format_ident!(
-                "{}_table_{}",
-                control.name,
-                table.name
-            );
+            let name = format_ident!("{}_table_{}", control.name, table.name);
             members.push(quote! {
                 pub #name: #table_type
             });
-            let ctor = format_ident!(
-                "{}_table_{}", control.name, table.name);
-            initializers.push(quote!{
+            let ctor = format_ident!("{}_table_{}", control.name, table.name);
+            initializers.push(quote! {
                 #name: #ctor()
             })
         }
@@ -278,11 +266,7 @@ impl <'a> PipelineGenerator<'a> {
         (members, initializers)
     }
 
-    fn add_table_entry_method(
-        &mut self,
-        control: &Control,
-    ) -> TokenStream {
-
+    fn add_table_entry_method(&mut self, control: &Control) -> TokenStream {
         let mut i: u32 = 0;
 
         let mut body = TokenStream::new();
@@ -290,7 +274,7 @@ impl <'a> PipelineGenerator<'a> {
         let tables = control.tables(self.ast);
         for (_control, table) in tables {
             let call = format_ident!("add_{}_table_entry", table.name);
-            body.extend(quote!{
+            body.extend(quote! {
                 #i => self.#call(
                     action_id,
                     keyset_data,
@@ -300,7 +284,7 @@ impl <'a> PipelineGenerator<'a> {
             i += 1;
         }
 
-        body.extend(quote!{
+        body.extend(quote! {
             x => println!("add table entry: unknown table id {}, ignoring", x),
         });
 
@@ -319,11 +303,7 @@ impl <'a> PipelineGenerator<'a> {
         }
     }
 
-    fn remove_table_entry_method(
-        &mut self,
-        control: &Control,
-    ) -> TokenStream {
-
+    fn remove_table_entry_method(&mut self, control: &Control) -> TokenStream {
         let mut body = TokenStream::new();
         let mut i: u32 = 0;
 
@@ -332,7 +312,7 @@ impl <'a> PipelineGenerator<'a> {
             //TODO probably a conflict with the same table name in multiple control
             //blocks
             let call = format_ident!("remove_{}_table_entry", table.name);
-            body.extend(quote!{
+            body.extend(quote! {
                 #i => self.#call(keyset_data),
             });
             i += 1;
@@ -355,72 +335,54 @@ impl <'a> PipelineGenerator<'a> {
         }
     }
 
-    fn table_modifiers(
-        &mut self,
-        control: &Control,
-    ) -> TokenStream {
-
+    fn table_modifiers(&mut self, control: &Control) -> TokenStream {
         let mut tokens = TokenStream::new();
         let tables = control.tables(self.ast);
         for (control, table) in tables {
-            tokens.extend(
-                self.add_table_entry_function(table, control)
-            );
-            tokens.extend(
-                self.remove_table_entry_function(table, control)
-            );
+            tokens.extend(self.add_table_entry_function(table, control));
+            tokens.extend(self.remove_table_entry_function(table, control));
         }
 
         tokens
     }
 
-    fn table_entry_keys(
-        &mut self,
-        table: &Table,
-    ) -> TokenStream {
-
+    fn table_entry_keys(&mut self, table: &Table) -> TokenStream {
         let mut keys = TokenStream::new();
         let mut offset: usize = 0;
         for (lval, match_kind) in &table.key {
-            let name_info = self.hlir.lvalue_decls.get(lval).expect(&format!(
-                    "declaration info for {:#?}",
-                    lval,
-            ));
+            let name_info = self
+                .hlir
+                .lvalue_decls
+                .get(lval)
+                .expect(&format!("declaration info for {:#?}", lval,));
             let sz = type_size(&name_info.ty, self.ast) >> 3;
             match match_kind {
-                MatchKind::Exact => {
-                    keys.extend(quote!{
-                        p4rs::extract_exact_key(
-                            keyset_data,
-                            #offset,
-                            #sz,
-                        )
-                    })
-                }
-                MatchKind::Ternary => {
-                    keys.extend(quote!{
-                        p4rs::extract_ternary_key(
-                            keyset_data,
-                            #offset,
-                            #sz,
-                        )
-                    })
-                }
-                MatchKind::LongestPrefixMatch => {
-                    keys.extend(quote!{
-                        p4rs::extract_lpm_key(
-                            keyset_data,
-                            #offset,
-                            #sz,
-                        )
-                    })
-                }
+                MatchKind::Exact => keys.extend(quote! {
+                    p4rs::extract_exact_key(
+                        keyset_data,
+                        #offset,
+                        #sz,
+                    )
+                }),
+                MatchKind::Ternary => keys.extend(quote! {
+                    p4rs::extract_ternary_key(
+                        keyset_data,
+                        #offset,
+                        #sz,
+                    )
+                }),
+                MatchKind::LongestPrefixMatch => keys.extend(quote! {
+                    p4rs::extract_lpm_key(
+                        keyset_data,
+                        #offset,
+                        #sz,
+                    )
+                }),
             }
             offset += sz;
         }
 
         keys
-
     }
 
     fn add_table_entry_function(
@@ -428,7 +390,6 @@ impl <'a> PipelineGenerator<'a> {
         table: &Table,
         control: &Control,
     ) -> TokenStream {
-
         let keys = self.table_entry_keys(table);
 
         let mut action_match_body = TokenStream::new();
@@ -442,8 +403,7 @@ impl <'a> PipelineGenerator<'a> {
             }
             let a = control.get_action(action).expect(&format!(
                 "control {} must have action {}",
-                control.name,
-                action,
+                control.name, action,
             ));
             let mut parameter_tokens = Vec::new();
             let mut parameter_refs = Vec::new();
@@ -451,8 +411,8 @@ impl <'a> PipelineGenerator<'a> {
             for p in &a.parameters {
                 let pname = format_ident!("{}", p.name);
                 match &p.ty {
-                    Type::Bool => { 
-                        parameter_tokens.push(quote!{
+                    Type::Bool => {
+                        parameter_tokens.push(quote! {
                             let #pname = p4rs::extract_bool_action_parameter(
                                 parameter_data,
                                 #offset,
@@ -460,25 +420,41 @@ impl <'a> PipelineGenerator<'a> {
                         });
                         offset += 1;
                     }
-                    Type::Error => { todo!(); }
-                    Type::Bit(n) => { 
-                        parameter_tokens.push(quote!{
+                    Type::Error => {
+                        todo!();
+                    }
+                    Type::Bit(n) => {
+                        parameter_tokens.push(quote! {
                             let #pname = p4rs::extract_bit_action_parameter(
                                 parameter_data,
                                 #offset,
                                 #n,
                             );
                         });
-                        parameter_refs.push(quote!{ #pname.clone() });
+                        parameter_refs.push(quote! { #pname.clone() });
                         offset += 1;
                     }
-                    Type::Varbit(_n) => { todo!(); }
-                    Type::Int(_n) => { todo!(); }
-                    Type::String => { todo!(); }
-                    Type::UserDefined(_s) => { todo!(); }
-                    Type::ExternFunction => { todo!(); }
-                    Type::Table => { todo!(); }
-                    Type::Void => { todo!(); }
+                    Type::Varbit(_n) => {
+                        todo!();
+                    }
+                    Type::Int(_n) => {
+                        todo!();
+                    }
+                    Type::String => {
+                        todo!();
+                    }
+                    Type::UserDefined(_s) => {
+                        todo!();
+                    }
+                    Type::ExternFunction => {
+                        todo!();
+                    }
+                    Type::Table => {
+                        todo!();
+                    }
+                    Type::Void => {
+                        todo!();
+                    }
                 }
             }
             let mut control_params = Vec::new();
@@ -487,23 +463,19 @@ impl <'a> PipelineGenerator<'a> {
             let mut action_param_types = Vec::new();
             for p in &control.parameters {
                 let name = format_ident!("{}", p.name);
-                control_params.push(quote!{ #name });
+                control_params.push(quote! { #name });
                 let ty = rust_type(&p.ty, false, 0);
-                control_param_types.push(quote!{ &mut #ty });
+                control_param_types.push(quote! { &mut #ty });
             }
             for p in &a.parameters {
                 let name = format_ident!("{}", p.name);
-                action_params.push(quote!{ #name });
+                action_params.push(quote! { #name });
                 let ty = rust_type(&p.ty, false, 0);
-                action_param_types.push(quote!{ #ty });
+                action_param_types.push(quote! { #ty });
             }
             //XXX let tname = format_ident!("{}", table.name);
-            let tname = format_ident!(
-                "{}_table_{}",
-                control.name,
-                table.name
-            );
-            action_match_body.extend(quote!{
+            let tname = format_ident!("{}_table_{}", control.name, table.name);
+            action_match_body.extend(quote! {
                 #i => {
                     #(#parameter_tokens)*
                     let action: std::sync::Arc<dyn Fn(
@@ -534,12 +506,12 @@ impl <'a> PipelineGenerator<'a> {
             });
         }
         let name = format!("{}", control.name);
-        action_match_body.extend(quote!{
+        action_match_body.extend(quote! {
             x => panic!("unknown {} action id {}", #name, x),
         });
 
         let name = format_ident!("add_{}_table_entry", table.name);
-        quote!{
+        quote! {
             // lifetime is due to
             // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
             pub fn #name<'a>(
@@ -557,7 +529,6 @@ impl <'a> PipelineGenerator<'a> {
 
             }
         }
-
     }
 
     fn remove_table_entry_function(
@@ -565,28 +536,23 @@ impl <'a> PipelineGenerator<'a> {
         table: &Table,
         control: &Control,
     ) -> TokenStream {
-
         let keys = self.table_entry_keys(table);
         let n = table.key.len();
 
         //let tname = format_ident!("{}", table.name);
-        let tname = format_ident!(
-            "{}_table_{}",
-            control.name,
-            table.name
-        );
+        let tname = format_ident!("{}_table_{}", control.name, table.name);
         let name = format_ident!("remove_{}_table_entry", table.name);
 
         let mut control_params = Vec::new();
         let mut control_param_types = Vec::new();
         for p in &control.parameters {
             let name = format_ident!("{}", p.name);
-            control_params.push(quote!{ #name });
+            control_params.push(quote! { #name });
             let ty = rust_type(&p.ty, false, 0);
-            control_param_types.push(quote!{ &mut #ty });
+            control_param_types.push(quote! { &mut #ty });
         }
 
-        quote!{
+        quote! {
             // lifetime is due to
             // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
             pub fn #name<'a>(
@@ -621,18 +587,16 @@ impl <'a> PipelineGenerator<'a> {
 
             }
         }
-
     }
 
     pub(crate) fn parse_entrypoint(
         &mut self,
         parser: &Parser,
     ) -> (TokenStream, TokenStream) {
-
         // this should never happen here, if it does it's a bug in the checker.
-        let start_state = parser.get_start_state().expect(
-            "parser must have start state",
-        );
+        let start_state = parser
+            .get_start_state()
+            .expect("parser must have start state");
 
         let mut pg = crate::ParserGenerator::new(self.ast, self.hlir, self.ctx);
         let (sig, _) = pg.generate_state_function(parser, start_state);
@@ -642,20 +606,15 @@ impl <'a> PipelineGenerator<'a> {
         };
 
         let initializer = format_ident!("{}_start", parser.name);
-        (member, quote!{ parse: #initializer })
-
+        (member, quote! { parse: #initializer })
     }
 
     pub(crate) fn control_entrypoint(
         &mut self,
         control: &Control,
     ) -> (TokenStream, TokenStream) {
-
-        let mut cg = crate::ControlGenerator::new(
-            self.ast,
-            self.hlir,
-            self.ctx,
-        );
+        let mut cg =
+            crate::ControlGenerator::new(self.ast, self.hlir, self.ctx);
         let (sig, _) = cg.generate_control(control);
 
         let member = quote! {
@@ -663,7 +622,6 @@ impl <'a> PipelineGenerator<'a> {
         };
 
         let initializer = format_ident!("{}_apply", control.name);
-        (member, quote!{ control: #initializer })
-
+        (member, quote! { control: #initializer })
     }
 }

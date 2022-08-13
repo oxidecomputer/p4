@@ -1,11 +1,9 @@
 use crate::{
-    Context,
     rust_type,
-    statement::{StatementGenerator, StatementContext},
+    statement::{StatementContext, StatementGenerator},
+    Context,
 };
-use p4::ast::{
-    AST, Parser, State, Direction
-};
+use p4::ast::{Direction, Parser, State, AST};
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -22,7 +20,7 @@ impl<'a> ParserGenerator<'a> {
         hlir: &'a Hlir,
         ctx: &'a mut Context,
     ) -> Self {
-        Self{ ast, hlir, ctx }
+        Self { ast, hlir, ctx }
     }
 
     pub(crate) fn generate(&mut self) {
@@ -64,14 +62,15 @@ impl<'a> ParserGenerator<'a> {
             }
         };
 
-        self.ctx.functions.insert(function_name.to_string(), function);
+        self.ctx
+            .functions
+            .insert(function_name.to_string(), function);
 
         (signature, body)
-        
     }
 
     fn generate_state_function_body(
-        &mut self, 
+        &mut self,
         parser: &Parser,
         state: &State,
     ) -> TokenStream {

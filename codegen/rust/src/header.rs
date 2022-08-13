@@ -1,10 +1,5 @@
-use crate::{
-    Context,
-    rust_type, type_size,
-};
-use p4::ast::{
-    AST, Header,
-};
+use crate::{rust_type, type_size, Context};
+use p4::ast::{Header, AST};
 use quote::{format_ident, quote};
 
 pub(crate) struct HeaderGenerator<'a> {
@@ -14,7 +9,7 @@ pub(crate) struct HeaderGenerator<'a> {
 
 impl<'a> HeaderGenerator<'a> {
     pub(crate) fn new(ast: &'a AST, ctx: &'a mut Context) -> Self {
-        Self{ ast, ctx }
+        Self { ast, ctx }
     }
 
     pub(crate) fn generate(&mut self) {
@@ -58,7 +53,7 @@ impl<'a> HeaderGenerator<'a> {
         let mut set_statements = Vec::new();
         let mut to_bitvec_statements = Vec::new();
         let mut dump_statements = Vec::new();
-        let fmt = "{} ".repeat(h.members.len()*2);
+        let fmt = "{} ".repeat(h.members.len() * 2);
         let fmt = fmt.trim();
         let mut offset = 0;
         for member in &h.members {
@@ -68,7 +63,7 @@ impl<'a> HeaderGenerator<'a> {
             member_values.push(quote! {
                 #name: BitVec::<u8, Msb0>::default()
             });
-            let end = offset+size;
+            let end = offset + size;
             set_statements.push(quote! {
                 self.#name = buf.view_bits::<Msb0>()[#offset..#end].to_owned()
             });
@@ -82,7 +77,7 @@ impl<'a> HeaderGenerator<'a> {
 
             offset += size;
         }
-        let dump = quote!{
+        let dump = quote! {
             format!(#fmt, #(#dump_statements),*)
         };
 

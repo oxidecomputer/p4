@@ -1,30 +1,30 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{ self, Write };
+use std::io::{self, Write};
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    AST, ControlParameter, DeclarationInfo, Direction, Expression,
-    ExpressionKind, Lvalue, NameInfo, Parser, Type, UserDefinedType,
+    ControlParameter, DeclarationInfo, Direction, Expression, ExpressionKind,
+    Lvalue, NameInfo, Parser, Type, UserDefinedType, AST,
 };
-use p4::util::resolve_lvalue;
 use p4::hlir::Hlir;
+use p4::util::resolve_lvalue;
 
+use control::ControlGenerator;
 use header::HeaderGenerator;
 use p4struct::StructGenerator;
 use parser::ParserGenerator;
-use control::ControlGenerator;
 use pipeline::PipelineGenerator;
 
+mod control;
+mod expression;
 mod header;
 mod p4struct;
 mod parser;
-mod control;
-mod statement;
-mod expression;
 mod pipeline;
+mod statement;
 
 /// An object for keeping track of state as we generate code.
 #[derive(Default)]
@@ -51,12 +51,10 @@ pub fn emit(ast: &AST, hlir: &Hlir, filename: &str) -> io::Result<()> {
             // On failure write generated code to a tempfile
             println!("Code generation produced unparsable code");
             write_to_tempfile(&tokens)?;
-            return Err(
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to parse generated code: {:?}", e),
-                )
-            );
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to parse generated code: {:?}", e),
+            ));
         }
     };
     fs::write(filename, prettyplease::unparse(&f))?;
@@ -65,9 +63,7 @@ pub fn emit(ast: &AST, hlir: &Hlir, filename: &str) -> io::Result<()> {
 }
 
 fn write_to_tempfile(tokens: &TokenStream) -> io::Result<()> {
-    let mut out = tempfile::Builder::new()
-        .suffix(".rs")
-        .tempfile()?;
+    let mut out = tempfile::Builder::new().suffix(".rs").tempfile()?;
     out.write_all(tokens.to_string().as_bytes())?;
     println!("Wrote generated code to {}", out.path().display());
     out.keep()?;
@@ -78,13 +74,13 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     //
     // initialize a context to track state while we generate code
     //
-    
+
     let mut ctx = Context::default();
 
     //
     // genearate rust code for the P4 AST
     //
-    
+
     let mut hg = HeaderGenerator::new(ast, &mut ctx);
     hg.generate();
 
@@ -99,7 +95,6 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
 
     let mut pg = PipelineGenerator::new(ast, hlir, &mut ctx);
     pg.generate();
-
 
     //
     // collect all the tokens we generated into one stream
@@ -130,12 +125,11 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
         tokens.extend(p.clone());
     }
 
-
     tokens
 }
 
 fn dtrace_probes() -> TokenStream {
-    quote!{
+    quote! {
         #[usdt::provider]
         mod dtrace_provider {
             fn parser_accepted(_: &str) {}
@@ -169,9 +163,9 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
         Type::Error => todo!("generate error type"),
         Type::Bit(_size) => {
             if header_member {
-                quote!{ BitVec<u8, Msb0> }
+                quote! { BitVec<u8, Msb0> }
             } else {
-                quote!{ BitVec<u8, Msb0> }
+                quote! { BitVec<u8, Msb0> }
             }
         }
         Type::Int(_size) => todo!("generate int type"),
@@ -181,9 +175,15 @@ fn rust_type(ty: &Type, header_member: bool, _offset: usize) -> TokenStream {
             let typename = format_ident!("{}", name);
             quote! { #typename }
         }
-        Type::ExternFunction => { todo!("rust type for extern function"); }
-        Type::Table => { todo!("rust type for table"); }
-        Type::Void => { quote!{ () } }
+        Type::ExternFunction => {
+            todo!("rust type for extern function");
+        }
+        Type::Table => {
+            todo!("rust type for table");
+        }
+        Type::Void => {
+            quote! { () }
+        }
     }
 }
 
@@ -219,9 +219,13 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
                 }
             }
         }
-        Type::ExternFunction => { todo!("type size for extern function"); }
-        Type::Table => { todo!("type size for table"); }
-        Type::Void => { 0 }
+        Type::ExternFunction => {
+            todo!("type size for extern function");
+        }
+        Type::Table => {
+            todo!("type size for table");
+        }
+        Type::Void => 0,
     }
 }
 
@@ -231,36 +235,25 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
 //
 // where b is an integer literal interpret b as a prefix mask based on the
 // number of leading ones
-fn try_extract_prefix_len(
-    expr: &Box<Expression>
-) -> Option<u8> {
-
+fn try_extract_prefix_len(expr: &Box<Expression>) -> Option<u8> {
     match &expr.kind {
-        ExpressionKind::Binary(_lhs, _op, rhs) => {
-            match &rhs.kind {
-                ExpressionKind::IntegerLit(v) => {
-                    Some(v.trailing_ones() as u8)
-                }
-                ExpressionKind::BitLit(_width, v) => {
-                    Some(v.trailing_ones() as u8)
-                }
-                ExpressionKind::SignedLit(_width, v) => {
-                    Some(v.trailing_ones() as u8)
-                }
-                _ => { None }
+        ExpressionKind::Binary(_lhs, _op, rhs) => match &rhs.kind {
+            ExpressionKind::IntegerLit(v) => Some(v.trailing_ones() as u8),
+            ExpressionKind::BitLit(_width, v) => Some(v.trailing_ones() as u8),
+            ExpressionKind::SignedLit(_width, v) => {
+                Some(v.trailing_ones() as u8)
             }
-        }
-        _ => { None }
+            _ => None,
+        },
+        _ => None,
     }
-
 }
 
 fn is_header(
     lval: &Lvalue,
     ast: &AST,
-    names: &HashMap::<String, NameInfo>,
+    names: &HashMap<String, NameInfo>,
 ) -> bool {
-
     //TODO: get from hlir?
     let typename = match resolve_lvalue(lval, ast, names).unwrap().ty {
         Type::UserDefined(name) => name,
@@ -272,10 +265,7 @@ fn is_header(
     }
 }
 
-fn is_header_member(
-    lval: &Lvalue,
-    hlir: &Hlir,
-) -> bool {
+fn is_header_member(lval: &Lvalue, hlir: &Hlir) -> bool {
     if lval.degree() >= 1 {
         let name_info = hlir
             .lvalue_decls
@@ -292,11 +282,7 @@ fn is_header_member(
 }
 
 // TODO define in terms of hlir rather than names
-fn is_rust_reference(
-    lval: &Lvalue,
-    names: &HashMap::<String, NameInfo>,
-) -> bool {
-
+fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
     if lval.degree() == 1 {
         let name_info = names
             .get(lval.root())
@@ -317,5 +303,4 @@ fn is_rust_reference(
     } else {
         false
     }
-    
 }

@@ -1,13 +1,12 @@
 use crate::{
-    Context,
-    rust_type,
-    try_extract_prefix_len,
-    statement::{StatementGenerator, StatementContext},
     expression::ExpressionGenerator,
+    rust_type,
+    statement::{StatementContext, StatementGenerator},
+    try_extract_prefix_len, Context,
 };
 use p4::ast::{
-    Action, AST, Control, ControlParameter, Direction, ExpressionKind,
-    KeySetElementValue, MatchKind, Statement, Table, Type
+    Action, Control, ControlParameter, Direction, ExpressionKind,
+    KeySetElementValue, MatchKind, Statement, Table, Type, AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -23,10 +22,10 @@ pub(crate) struct ControlGenerator<'a> {
 impl<'a> ControlGenerator<'a> {
     pub(crate) fn new(
         ast: &'a AST,
-        hlir: &'a Hlir, 
-        ctx: &'a mut Context
+        hlir: &'a Hlir,
+        ctx: &'a mut Context,
     ) -> Self {
-        Self{ ast, hlir, ctx }
+        Self { ast, hlir, ctx }
     }
 
     pub(crate) fn generate(&mut self) {
@@ -53,13 +52,9 @@ impl<'a> ControlGenerator<'a> {
                 p4rs::table::Table::<
                     #n,
                     std::sync::Arc<dyn Fn(#(#param_types),*)>
-                    > 
+                    >
             };
-            let name = format_ident!(
-                "{}_table_{}",
-                c.name,
-                table.name
-            );
+            let name = format_ident!("{}_table_{}", c.name, table.name);
             params.push(quote! {
                 #name: &#table_type
             });
@@ -118,7 +113,7 @@ impl<'a> ControlGenerator<'a> {
                                     types.push(quote! { &mut #ty });
                                 }
                                 _ => {
-                                    params.push(quote! { 
+                                    params.push(quote! {
                                         #name: &#ty
                                     });
                                     types.push(quote! { &#ty });
@@ -154,11 +149,7 @@ impl<'a> ControlGenerator<'a> {
         (params, types)
     }
 
-    fn generate_control_action(
-        &mut self,
-        control: &Control,
-        action: &Action,
-    ) {
+    fn generate_control_action(&mut self, control: &Control, action: &Action) {
         let name = format_ident!("{}_action_{}", control.name, action.name);
         let (mut params, _) = self.control_parameters(control);
 
@@ -174,8 +165,7 @@ impl<'a> ControlGenerator<'a> {
                     None => {
                         panic!(
                             "codegen: undefined type {} for arg {:#?}",
-                            typename,
-                            arg,
+                            typename, arg,
                         );
                     }
                 }
@@ -188,7 +178,7 @@ impl<'a> ControlGenerator<'a> {
 
         let mut names = control.names();
         let sg = StatementGenerator::new(
-            self.ast, 
+            self.ast,
             self.hlir,
             StatementContext::Control(control),
         );
@@ -205,7 +195,7 @@ impl<'a> ControlGenerator<'a> {
                     //Generate dtrace prbes that allow us to trace control
                     //action flows.
                     //println!("####{}####", #__name);
-                    
+
                     #body
                 }
             },
@@ -218,7 +208,6 @@ impl<'a> ControlGenerator<'a> {
         table: &Table,
         control_param_types: &Vec<TokenStream>,
     ) -> (TokenStream, TokenStream) {
-
         let mut key_type_tokens: Vec<TokenStream> = Vec::new();
         let mut key_types: Vec<Type> = Vec::new();
 
@@ -248,9 +237,9 @@ impl<'a> ControlGenerator<'a> {
         let n = table.key.len() as usize;
         let table_type = quote! {
             p4rs::table::Table::<
-                #n, 
+                #n,
                 std::sync::Arc<dyn Fn(#(#control_param_types),*)>
-            > 
+            >
         };
 
         let mut tokens = quote! {
@@ -272,14 +261,14 @@ impl<'a> ControlGenerator<'a> {
                         let ks = match table.key[i].1 {
                             MatchKind::Exact => {
                                 let k = format_ident!("{}", "Exact");
-                                quote!{
+                                quote! {
                                     p4rs::table::Key::#k(
                                         p4rs::bitvec_to_biguint(&#xpr))
                                 }
                             }
                             MatchKind::Ternary => {
                                 let k = format_ident!("{}", "Ternary");
-                                quote!{
+                                quote! {
                                     p4rs::table::Key::#k(
                                         p4rs::bitvec_to_biguint(&#xpr))
                                 }
@@ -296,7 +285,7 @@ impl<'a> ControlGenerator<'a> {
                                     }
                                 };
                                 let k = format_ident!("{}", "Lpm");
-                                quote!{
+                                quote! {
                                     p4rs::table::Key::#k(p4rs::table::Prefix{
                                         addr: bitvec_to_ip6addr(&(#xpr)),
                                         len: #len,
@@ -305,7 +294,7 @@ impl<'a> ControlGenerator<'a> {
                             }
                         };
                         keyset.push(ks);
-                    },
+                    }
                     x => todo!("key set element {:?}", x),
                 }
             }
@@ -332,7 +321,7 @@ impl<'a> ControlGenerator<'a> {
                             Type::Bit(n) => {
                                 if *n <= 8 {
                                     let v = *v as u8;
-                                    action_fn_args.push(quote!{
+                                    action_fn_args.push(quote! {
                                         #v.view_bits::<Msb0>().to_bitvec()
                                     });
                                 }
@@ -352,7 +341,7 @@ impl<'a> ControlGenerator<'a> {
 
             tokens.extend(quote! {
 
-                let action: std::sync::Arc<dyn Fn(#(#control_param_types),*)> = 
+                let action: std::sync::Arc<dyn Fn(#(#control_param_types),*)> =
                     std::sync::Arc::new(|#(#closure_params),*| {
                         #action_fn_name(#(#action_fn_args),*);
                     });
@@ -383,7 +372,7 @@ impl<'a> ControlGenerator<'a> {
     ) {
         let mut names = control.names();
         let sg = StatementGenerator::new(
-            self.ast, 
+            self.ast,
             self.hlir,
             StatementContext::Control(control),
         );
@@ -412,5 +401,4 @@ impl<'a> ControlGenerator<'a> {
         }
         None
     }
-
 }

@@ -1,6 +1,6 @@
-use std::fmt;
-use std::collections::HashMap;
 use std::cmp::{Eq, PartialEq};
+use std::collections::HashMap;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 use crate::lexer::Token;
@@ -71,7 +71,7 @@ impl AST {
     pub fn get_control(&self, name: &str) -> Option<&Control> {
         for c in &self.controls {
             if c.name == name {
-                return Some(c)
+                return Some(c);
             }
         }
         None
@@ -80,7 +80,7 @@ impl AST {
     pub fn get_parser(&self, name: &str) -> Option<&Parser> {
         for p in &self.parsers {
             if p.name == name {
-                return Some(p)
+                return Some(p);
             }
         }
         None
@@ -216,7 +216,7 @@ impl Expression {
 }
 
 impl Hash for Expression {
-    fn hash<H: Hasher> (&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.token.hash(state);
     }
 }
@@ -227,7 +227,7 @@ impl PartialEq for Expression {
     }
 }
 
-impl Eq for Expression { }
+impl Eq for Expression {}
 
 #[derive(Debug, Clone)]
 pub enum ExpressionKind {
@@ -277,13 +277,16 @@ impl Header {
             members: Vec::new(),
         }
     }
-    pub fn names(&self) -> HashMap::<String, NameInfo> {
+    pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.members {
-            names.insert(p.name.clone(), NameInfo{
-                ty: p.ty.clone(),
-                decl: DeclarationInfo::HeaderMember,
-            });
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::HeaderMember,
+                },
+            );
         }
         names
     }
@@ -309,13 +312,16 @@ impl Struct {
         }
     }
 
-    pub fn names(&self) -> HashMap::<String, NameInfo> {
+    pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.members {
-            names.insert(p.name.clone(), NameInfo{
-                ty: p.ty.clone(),
-                decl: DeclarationInfo::StructMember,
-            });
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::StructMember,
+                },
+            );
         }
         names
     }
@@ -397,43 +403,55 @@ impl Control {
                 }
             }
         }
-        result 
+        result
     }
 
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
             if t == name {
-                return true
+                return true;
             }
         }
         return false;
     }
-    
-    pub fn names(&self) -> HashMap::<String, NameInfo> {
+
+    pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.parameters {
-            names.insert(p.name.clone(), NameInfo{
-                ty: p.ty.clone(),
-                decl: DeclarationInfo::Parameter(p.direction),
-            });
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
         }
         for t in &self.tables {
-            names.insert(t.name.clone(), NameInfo{
-                ty: Type::Table,
-                decl: DeclarationInfo::ControlTable,
-            });
+            names.insert(
+                t.name.clone(),
+                NameInfo {
+                    ty: Type::Table,
+                    decl: DeclarationInfo::ControlTable,
+                },
+            );
         }
         for v in &self.variables {
-            names.insert(v.name.clone(), NameInfo {
-                ty: v.ty.clone(),
-                decl: DeclarationInfo::ControlMember,
-            });
+            names.insert(
+                v.name.clone(),
+                NameInfo {
+                    ty: v.ty.clone(),
+                    decl: DeclarationInfo::ControlMember,
+                },
+            );
         }
         for c in &self.constants {
-            names.insert(c.name.clone(), NameInfo {
-                ty: c.ty.clone(),
-                decl: DeclarationInfo::ControlMember,
-            });
+            names.insert(
+                c.name.clone(),
+                NameInfo {
+                    ty: c.ty.clone(),
+                    decl: DeclarationInfo::ControlMember,
+                },
+            );
         }
         names
     }
@@ -472,19 +490,22 @@ impl Parser {
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
             if t == name {
-                return true
+                return true;
             }
         }
         return false;
     }
 
-    pub fn names(&self) -> HashMap::<String, NameInfo> {
+    pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.parameters {
-            names.insert(p.name.clone(), NameInfo{
-                ty: p.ty.clone(),
-                decl: DeclarationInfo::Parameter(p.direction),
-            });
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
         }
         names
     }
@@ -492,7 +513,7 @@ impl Parser {
     pub fn get_start_state(&self) -> Option<&State> {
         for s in &self.states {
             if s.name == "start" {
-                return Some(s)
+                return Some(s);
             }
         }
         None
@@ -525,7 +546,9 @@ pub struct StatementBlock {
 
 impl StatementBlock {
     fn new() -> Self {
-        Self { statements: Vec::new() }
+        Self {
+            statements: Vec::new(),
+        }
     }
 }
 
@@ -545,13 +568,16 @@ impl Action {
         }
     }
 
-    pub fn names(&self) -> HashMap::<String, NameInfo> {
+    pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.parameters {
-            names.insert(p.name.clone(), NameInfo{
-                ty: p.ty.clone(),
-                decl: DeclarationInfo::Parameter(p.direction),
-            });
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: p.ty.clone(),
+                    decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
         }
         names
     }
@@ -646,7 +672,6 @@ pub enum Statement {
     Constant(Constant),
     Transition(Transition),
     Return(Option<Box<Expression>>),
-
     // TODO ...
 }
 
@@ -686,31 +711,31 @@ impl Lvalue {
     }
     pub fn leaf(&self) -> &str {
         let parts = self.parts();
-        parts[parts.len()-1]
+        parts[parts.len() - 1]
     }
     pub fn degree(&self) -> usize {
         self.parts().len()
     }
     pub fn pop_left(&self) -> Self {
         let parts = self.parts();
-        Lvalue{
+        Lvalue {
             name: parts[1..].join("."),
-            token: Token{
+            token: Token {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col + parts[0].len() + 1,
-            }
+            },
         }
     }
     pub fn pop_right(&self) -> Self {
         let parts = self.parts();
-        Lvalue{
-            name: parts[..parts.len()-1].join("."),
-            token: Token{
+        Lvalue {
+            name: parts[..parts.len() - 1].join("."),
+            token: Token {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col,
-            }
+            },
         }
     }
 }
@@ -781,13 +806,16 @@ pub struct Extern {
 }
 
 impl Extern {
-    pub fn names(&self) -> HashMap::<String, NameInfo> {
+    pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
-        for p in &self.methods{
-            names.insert(p.name.clone(), NameInfo{
-                ty: Type::ExternFunction,
-                decl: DeclarationInfo::Method,
-            });
+        for p in &self.methods {
+            names.insert(
+                p.name.clone(),
+                NameInfo {
+                    ty: Type::ExternFunction,
+                    decl: DeclarationInfo::Method,
+                },
+            );
         }
         names
     }

@@ -1,9 +1,5 @@
-use crate::{
-    Context,
-};
-use p4::ast::{
-    AST, Struct, Type,
-};
+use crate::Context;
+use p4::ast::{Struct, Type, AST};
 use quote::{format_ident, quote};
 
 pub(crate) struct StructGenerator<'a> {
@@ -13,7 +9,7 @@ pub(crate) struct StructGenerator<'a> {
 
 impl<'a> StructGenerator<'a> {
     pub(crate) fn new(ast: &'a AST, ctx: &'a mut Context) -> Self {
-        Self{ ast, ctx }
+        Self { ast, ctx }
     }
 
     pub(crate) fn generate(&mut self) {
@@ -42,7 +38,7 @@ impl<'a> StructGenerator<'a> {
                         members.push(quote! { pub #name: #ty });
 
                         // valid header size statements
-                        valid_member_size.push(quote!{
+                        valid_member_size.push(quote! {
                             if self.#name.valid {
                                 x += #ty::size();
                             }
@@ -60,7 +56,6 @@ impl<'a> StructGenerator<'a> {
                             #name_s.blue(),
                             self.#name.dump()
                         });
-
                     } else {
                         panic!(
                             "Struct member {:#?} undefined in {:#?}",
@@ -80,7 +75,7 @@ impl<'a> StructGenerator<'a> {
             }
         }
 
-        let dump = quote!{
+        let dump = quote! {
             format!(#fmt, #(#dump_statements),*)
         };
 
@@ -102,7 +97,7 @@ impl<'a> StructGenerator<'a> {
                     }
 
                     pub fn to_bitvec(&self) -> BitVec<u8, Msb0> {
-                        let mut x = 
+                        let mut x =
                             bitvec![u8, Msb0; 0; self.valid_header_size()];
                         let mut off = 0;
                         #(#to_bitvec_stmts)*
@@ -114,7 +109,7 @@ impl<'a> StructGenerator<'a> {
                     }
                 }
             })
-        } 
+        }
 
         self.ctx.structs.insert(s.name.clone(), structure);
     }

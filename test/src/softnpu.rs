@@ -74,14 +74,12 @@ pub fn run_pipeline<
 >(
     ingress: &[RingConsumer<R, N, F>],
     egress: &[RingProducer<R, N, F>],
-    pipeline: &mut P
+    pipeline: &mut P,
 ) {
     loop {
-
         // TODO: yes this is a highly suboptimal linear gather-scatter across
         // each ingress. Will update to something more concurrent eventually.
         for (i, ig) in ingress.iter().enumerate() {
-
             // keep track of how many frames we've produced for each egress
             let mut egress_count = vec![0; egress.len()];
 
@@ -96,13 +94,12 @@ pub fn run_pipeline<
 
                 match pipeline.process_packet(i as u8, &mut pkt) {
                     Some((out_pkt, port)) => {
-
                         let port = port as usize;
 
                         //
                         // get frame for packet
                         //
-                        
+
                         let eg = &egress[port];
                         let mut fps = eg.reserve(1).unwrap();
                         let fp = fps.next().unwrap();
@@ -110,7 +107,7 @@ pub fn run_pipeline<
                         //
                         // emit headers
                         //
-                        
+
                         eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
 
                         //
@@ -119,13 +116,13 @@ pub fn run_pipeline<
 
                         eg.write_at(
                             fp,
-                            out_pkt.payload_data, 
+                            out_pkt.payload_data,
                             out_pkt.header_data.len(),
                         );
 
                         egress_count[port] += 1;
                     }
-                    None => { }
+                    None => {}
                 }
             }
             ig.consume(frames_in).unwrap();
@@ -133,7 +130,6 @@ pub fn run_pipeline<
             for (j, n) in egress_count.iter().enumerate() {
                 egress[j].produce(*n).unwrap();
             }
-
         }
     }
 }

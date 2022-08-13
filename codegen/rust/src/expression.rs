@@ -1,9 +1,7 @@
-use p4::ast::{
-    BinOp, DeclarationInfo, Expression, ExpressionKind, Lvalue,
-};
+use p4::ast::{BinOp, DeclarationInfo, Expression, ExpressionKind, Lvalue};
 use p4::hlir::Hlir;
-use quote::{format_ident, quote};
 use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
 
 pub(crate) struct ExpressionGenerator<'a> {
     hlir: &'a Hlir,
@@ -11,16 +9,16 @@ pub(crate) struct ExpressionGenerator<'a> {
 
 impl<'a> ExpressionGenerator<'a> {
     pub fn new(hlir: &'a Hlir) -> Self {
-        Self{ hlir }
+        Self { hlir }
     }
 
     pub(crate) fn generate_expression(&self, xpr: &Expression) -> TokenStream {
         match &xpr.kind {
             ExpressionKind::BoolLit(v) => {
-                quote!{ #v }
+                quote! { #v }
             }
             ExpressionKind::IntegerLit(v) => {
-                quote!{ #v }
+                quote! { #v }
             }
             ExpressionKind::BitLit(width, v) => {
                 self.generate_bit_literal(*width, *v)
@@ -28,9 +26,7 @@ impl<'a> ExpressionGenerator<'a> {
             ExpressionKind::SignedLit(_width, _v) => {
                 todo!("generate expression signed lit");
             }
-            ExpressionKind::Lvalue(v) => {
-                self.generate_lvalue(v)
-            }
+            ExpressionKind::Lvalue(v) => self.generate_lvalue(v),
             ExpressionKind::Binary(lhs, op, rhs) => {
                 let lhs_tks = self.generate_expression(lhs.as_ref());
                 let op_tks = self.generate_binop(*op);
@@ -55,29 +51,30 @@ impl<'a> ExpressionGenerator<'a> {
                     ExpressionKind::IntegerLit(v) => *v as usize,
                     _ => panic!("slice ranges can only be integer literals"),
                 };
-                let l = l+1;
+                let l = l + 1;
                 let r = match &end.kind {
                     ExpressionKind::IntegerLit(v) => *v as usize,
                     _ => panic!("slice ranges can only be integer literals"),
                 };
-                quote!{
+                quote! {
                     [#r..#l]
                 }
             }
             ExpressionKind::Call(call) => {
-                let lv: Vec<TokenStream> = call.lval
+                let lv: Vec<TokenStream> = call
+                    .lval
                     .name
                     .split(".")
                     .map(|x| format_ident!("{}", x))
                     .map(|x| quote! { #x })
                     .collect();
 
-                let lvalue = quote!{ #(#lv).* };
+                let lvalue = quote! { #(#lv).* };
                 let mut args = Vec::new();
                 for arg in &call.args {
                     args.push(self.generate_expression(&arg));
                 }
-                quote!{
+                quote! {
                     #lvalue(#(#args),*)
                 }
             }
@@ -88,7 +85,7 @@ impl<'a> ExpressionGenerator<'a> {
     pub(crate) fn generate_bit_literal(
         &self,
         width: u16,
-        value: u128
+        value: u128,
     ) -> TokenStream {
         assert!(width <= 128);
 
@@ -96,39 +93,35 @@ impl<'a> ExpressionGenerator<'a> {
 
         if width <= 8 {
             let v = value as u8;
-            return quote! { #v.view_bits::<Msb0>().to_bitvec() }
-        }
-        else if width <= 16 {
+            return quote! { #v.view_bits::<Msb0>().to_bitvec() };
+        } else if width <= 16 {
             let v = (value as u16).to_be();
-            return quote! { 
+            return quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 16];
                     x.store(#v);
                     x
                 }
-            }
-        }
-        else if width <= 32 {
+            };
+        } else if width <= 32 {
             let v = value as u32;
-            return quote! { 
+            return quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 32];
                     x.store(#v);
                     x
                 }
-            }
-        }
-        else if width <= 64 {
+            };
+        } else if width <= 64 {
             let v = value as u64;
-            return quote! { 
+            return quote! {
                 {
                     let mut x = bitvec![mut u8, Msb0; 0; 64];
                     x.store(#v);
                     x
                 }
-            }
-        }
-        else if width <= 128 {
+            };
+        } else if width <= 128 {
             let v = value as u128;
             return quote! {
                 {
@@ -136,9 +129,8 @@ impl<'a> ExpressionGenerator<'a> {
                     x.store(#v);
                     x
                 }
-            }
-        }
-        else {
+            };
+        } else {
             todo!("bit<x> where x > 128");
         }
     }
@@ -146,7 +138,7 @@ impl<'a> ExpressionGenerator<'a> {
     pub(crate) fn generate_binop(&self, op: BinOp) -> TokenStream {
         match op {
             BinOp::Add => quote! { + },
-            BinOp::Subtract=> quote! { - },
+            BinOp::Subtract => quote! { - },
             BinOp::Geq => quote! { >= },
             BinOp::Eq => quote! { == },
             BinOp::NotEq => quote! { != },
@@ -155,7 +147,6 @@ impl<'a> ExpressionGenerator<'a> {
     }
 
     pub(crate) fn generate_lvalue(&self, lval: &Lvalue) -> TokenStream {
-
         let lv: Vec<TokenStream> = lval
             .name
             .split(".")
@@ -163,18 +154,19 @@ impl<'a> ExpressionGenerator<'a> {
             .map(|x| quote! { #x })
             .collect();
 
-        let lvalue = quote!{ #(#lv).* };
+        let lvalue = quote! { #(#lv).* };
 
-        let name_info = self.hlir.lvalue_decls.get(lval).expect(&format!(
-            "declaration info for {:#?}",
-            lval,
-        ));
+        let name_info = self
+            .hlir
+            .lvalue_decls
+            .get(lval)
+            .expect(&format!("declaration info for {:#?}", lval,));
 
         match name_info.decl {
-            DeclarationInfo::HeaderMember => quote!{
+            DeclarationInfo::HeaderMember => quote! {
                 #lvalue
             },
-            _ => lvalue
+            _ => lvalue,
         }
     }
 }
