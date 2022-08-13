@@ -25,7 +25,6 @@ for x in debug release
 do
     mkdir -p /work/$x
     cp target/$x/x4c /work/$x/x4c
-    cp target/$x/routeradm /work/$x/routeradm
 done
 
 banner "check"
