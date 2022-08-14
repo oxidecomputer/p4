@@ -46,6 +46,70 @@ The first function `process_packet` provides an interface for external code to
 plumb packets through the compiled P4 pipeline. The `packet_in` type is a simple
 wrapper around a binary data buffer.
 
+The next two functions provide an interface for adding and removing P4 table
+entries from a pipeline. These functions can be used to pre-populate a pipeline
+with entries as well as modify tables while the pipeline is running. These
+functions are designed to support binary serialized data. For more type safety
+your code may choose to integrate directly with the generated pipeline tables.
+However since using pipeline specific structures would require making the
+Pipeline type signature specific to the code being generated, the Pipeline
+interface was chosen to keep things generic and use a serialized representation.
+
+The `keyset_data` parameter is the binary representation of a P4 table key set.
+For example if the table has the following structure.
+
+[source,p4]
+----
+struct headers_t {
+    ethernet_t eth;
+    ipv6_t ipv6;
+}
+
+header ethernet_t {
+    bit<48> dst;
+    bit<48> src;
+    bit<16> ether_type;
+}
+
+header ipv6_t {
+	bit<4>	    version;
+	bit<8>	    traffic_class;
+	bit<20>	    flow_label;
+	bit<16>	    payload_len;
+	bit<8>	    next_hdr;
+	bit<8>	    hop_limit;
+	bit<128>    src;
+	bit<128>    dst;
+}
+
+control example {
+    action foo(bit<8> x) {
+        egress.port = port;
+    }
+    action bar(bit<8> x, bit<16> y) {
+        egress.port = port;
+    }
+    table example {
+        key = {
+            hdr.eth.dst: exact;
+            hdr.ipv6.dst: exact;
+        }
+        actions = {
+            foo;
+            bar;
+        }
+    }
+}
+----
+
+The expectation for the key set data is that the Ethernet destination is the
+first 6 bytes and the IPv6 destination is the next 16 bytes
+
+Similarly for parameter data. If the action `foo` is being specified for a table
+entry, we expect 1 byte of data for the parameter `x`. If the action `bar` is
+being specified for an entry, we expect the first byte to hold the parameter
+data for `x` and the next two bytes to hold the parameter data for `y`.
+
 [source,rust]
 ----
 pub struct packet_in<'a> {
@@ -53,7 +117,7 @@ pub struct packet_in<'a> {
     pub data: &'a [u8],
 
     /// Extraction index. Everything before `index` has been extracted already.
-    /// Only data after `index` is eligble for extraction. Extraction is always
+    /// Only data after `index` is eligible for extraction. Extraction is always
     /// for contiguous segments of the underlying packet ring data.
     pub index: usize,
 }
