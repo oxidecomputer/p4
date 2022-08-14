@@ -103,7 +103,7 @@ control example {
 ----
 
 The expectation for the key set data is that the Ethernet destination is the
-first 6 bytes and the IPv6 destination is the next 16 bytes
+first 6 bytes and the IPv6 destination is the next 16 bytes.
 
 Similarly for parameter data. If the action `foo` is being specified for a table
 entry, we expect 1 byte of data for the parameter `x`. If the action `bar` is
@@ -123,13 +123,12 @@ pub struct packet_in<'a> {
 }
 ----
 
-Similarly the `packet_out` data that is returned also wraps binary data.
-However, the `packet_out` object also makes the distinction between header data
-processed by the P4 pipeline and the untouched payload data. The pipeline may
-modify the overall structure of the header data including adding or removing
-headers. For this reason the header data is owned data that is created by the
-pipeline and ownership is then transferred to the caller when the pipeline
-returns.
+The `packet_out` data that is returned also wraps binary data. However, the
+`packet_out` object also makes the distinction between header data processed by
+the P4 pipeline and the untouched payload data. The pipeline may modify the
+overall structure of the header data including adding or removing headers. For
+this reason the header data is owned data that is created by the pipeline and
+ownership is then transferred to the caller when the pipeline returns.
 
 [source,rust]
 ----
