@@ -49,4 +49,4 @@ OPTIONS:
 
 == Target Backends
 
-- <<doc/rust.adoc,Rust>> 
+- https://github.com/oxidecomputer/p4/blob/main/doc/rust.adoc[Rust]

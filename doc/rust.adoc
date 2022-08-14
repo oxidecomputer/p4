@@ -9,8 +9,9 @@ There are two ways to consume generated Rust code.
 2. Use P4 directly from your Rust code using the `use_p4` macro.
 
 In each case the generated code implements a well defined set of interfaces
-leverages a supporting <</lang/p4rs,p4rs>> library that the calling code will
-need to declare as a Cargo dependency.
+leverages a supporting
+https://github.com/oxidecomputer/p4/tree/main/lang/p4rs[p4rs]
+library that the calling code will need to declare as a Cargo dependency.
 
 == Interfaces
 
@@ -75,7 +76,7 @@ pub struct packet_out<'a> {
 ----
 
 More details on how header processing works more generally can be found in the
-<<packet_mapping.adoc,packet mapping docs>>.
+https://github.com/oxidecomputer/p4/blob/main/doc/packet_mapping.adoc[packet mapping docs].
 
 
 == Use P4 directly from Rust
@@ -134,5 +135,6 @@ ethertype: 86dd
 ----
 
 More advanced examples of this interface can be found in the
-<</test,integration tests>> in this repository. All of these tests use the
+https://github.com/oxidecomputer/p4/tree/main/test[integration tests]
+in this repository. All of these tests use the
 `use_p4` macro.
