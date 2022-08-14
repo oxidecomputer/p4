@@ -93,13 +93,13 @@ impl<'a> PipelineGenerator<'a> {
                         #control_initializer,
                     }
                 }
-                #add_table_entry_method
-                #remove_table_entry_method
                 #table_modifiers
             }
 
             impl p4rs::Pipeline for #pipeline_name {
                 #pipeline_impl_process_packet
+                #add_table_entry_method
+                #remove_table_entry_method
             }
 
             unsafe impl Send for #pipeline_name { }
@@ -287,12 +287,12 @@ impl<'a> PipelineGenerator<'a> {
         });
 
         quote! {
-            pub fn add_table_entry(
+            fn add_table_entry(
                 &mut self,
                 table_id: u32,
                 action_id: u32,
-                keyset_data: &Vec<u8>,
-                parameter_data: &Vec<u8>,
+                keyset_data: &[u8],
+                parameter_data: &[u8],
             ) {
                 match table_id {
                     #body
@@ -320,10 +320,10 @@ impl<'a> PipelineGenerator<'a> {
         });
 
         quote! {
-            pub fn remove_table_entry(
+            fn remove_table_entry(
                 &mut self,
                 table_id: u32,
-                keyset_data: &Vec<u8>,
+                keyset_data: &[u8],
             ) {
                 match table_id {
                     #body
@@ -512,8 +512,8 @@ impl<'a> PipelineGenerator<'a> {
             pub fn #name<'a>(
                 &mut self,
                 action_id: u32,
-                keyset_data: &'a Vec<u8>,
-                parameter_data: &'a Vec<u8>,
+                keyset_data: &'a [u8],
+                parameter_data: &'a [u8],
             ) {
 
                 let key = [#keys];
@@ -552,7 +552,7 @@ impl<'a> PipelineGenerator<'a> {
             // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
             pub fn #name<'a>(
                 &mut self,
-                keyset_data: &'a Vec<u8>,
+                keyset_data: &'a [u8],
             ) {
 
                 let key = [#keys];

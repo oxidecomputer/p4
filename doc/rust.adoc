@@ -1,0 +1,138 @@
+= Rust
+
+This document describes the Rust code generation capabilities of `x4c`.
+
+There are two ways to consume generated Rust code.
+
+1. Use the `x4c` CLI to compile P4 code into a Rust code file and add that file
+   to your Rust project.
+2. Use P4 directly from your Rust code using the `use_p4` macro.
+
+In each case the generated code implements a well defined set of interfaces
+leverages a supporting <</lang/p4rs,p4rs>> library that the calling code will
+need to declare as a Cargo dependency.
+
+== Interfaces
+
+Generated P4 code is centered around a `Pipeline` object.
+
+[source,rust]
+----
+pub trait Pipeline {
+    /// Process a packet for the specified port optionally producing an output
+    /// packet and output port number.
+    fn process_packet<'a>(
+        &mut self,
+        port: u8,
+        pkt: &mut packet_in<'a>,
+    ) -> Option<(packet_out<'a>, u8)>;
+
+    /// Add an entry to a table identified by table_id.
+    fn add_table_entry(
+        &mut self,
+        table_id: u32,
+        action_id: u32,
+        keyset_data: &[u8],
+        parameter_data: &[u8],
+    );
+
+    /// Remove an entry from a table identified by table_id.
+    fn remove_table_entry(&mut self, table_id: u32, keyset_data: &[u8]);
+}
+----
+
+The first function `process_packet` provides an interface for external code to
+plumb packets through the compiled P4 pipeline. The `packet_in` type is a simple
+wrapper around a binary data buffer.
+
+[source,rust]
+----
+pub struct packet_in<'a> {
+    /// The underlying data. Owned by an external, memory-mapped packet ring.
+    pub data: &'a [u8],
+
+    /// Extraction index. Everything before `index` has been extracted already.
+    /// Only data after `index` is eligble for extraction. Extraction is always
+    /// for contiguous segments of the underlying packet ring data.
+    pub index: usize,
+}
+----
+
+Similarly the `packet_out` data that is returned also wraps binary data.
+However, the `packet_out` object also makes the distinction between header data
+processed by the P4 pipeline and the untouched payload data. The pipeline may
+modify the overall structure of the header data including adding or removing
+headers. For this reason the header data is owned data that is created by the
+pipeline and ownership is then transferred to the caller when the pipeline
+returns.
+
+[source,rust]
+----
+pub struct packet_out<'a> {
+    pub header_data: Vec<u8>,
+    pub payload_data: &'a [u8],
+}
+----
+
+More details on how header processing works more generally can be found in the
+<<packet_mapping.adoc,packet mapping docs>>.
+
+
+== Use P4 directly from Rust
+
+Given this P4
+
+[source,p4]
+----
+parser parsadillo(packet_in pkt, out headers_t headers){
+    state start { transition accept; }
+}
+
+struct headers_t {
+    ethernet_t ethernet;
+}
+
+header ethernet_t {
+    bit<48> dst_addr;
+    bit<48> src_addr;
+    bit<16> ether_type;
+}
+----
+
+we can do this
+
+[source,rust]
+----
+p4_macro::use_p4!("ether.p4");
+
+fn main() {
+    let buf = [
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, // dst mac
+        0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, // src mac
+        0x86, 0xdd, // ipv6 ethertype
+    ];
+
+    let mut eth = ethernet_t::new();
+    eth.set(&buf).unwrap();
+
+    println!("dst: {:x?}", eth.dst_addr.as_raw_slice());
+    println!("src: {:x?}", eth.src_addr.as_raw_slice());
+    let ethertype = u16::from_be_bytes(
+        eth.ether_type.as_raw_slice().try_into().unwrap()
+    );
+    println!("ethertype: {:x?}", ethertype);
+}
+----
+
+which will output this
+
+----
+$ ./p4-macro-test
+dst: [11, 22, 33, 44, 55, 66]
+src: [77, 88, 99, aa, bb, cc]
+ethertype: 86dd
+----
+
+More advanced examples of this interface can be found in the
+<</test,integration tests>> in this repository. All of these tests use the
+`use_p4` macro.

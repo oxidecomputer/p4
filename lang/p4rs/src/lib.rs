@@ -86,6 +86,18 @@ pub trait Pipeline {
         port: u8,
         pkt: &mut packet_in<'a>,
     ) -> Option<(packet_out<'a>, u8)>;
+
+    /// Add an entry to a table identified by table_id.
+    fn add_table_entry(
+        &mut self,
+        table_id: u32,
+        action_id: u32,
+        keyset_data: &[u8],
+        parameter_data: &[u8],
+    );
+
+    /// Remove an entry from a table identified by table_id.
+    fn remove_table_entry(&mut self, table_id: u32, keyset_data: &[u8]);
 }
 
 /// A fixed length header trait.
