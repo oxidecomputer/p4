@@ -703,11 +703,11 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             self.parser.backlog.push(token);
 
             // parse a header member
-            let (ty, _) = self.parser.parse_type()?;
+            let (ty, tyt) = self.parser.parse_type()?;
             let (name, _) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            header.members.push(HeaderMember { ty, name });
+            header.members.push(HeaderMember { ty, name, token: tyt });
         }
 
         ast.headers.push(header);

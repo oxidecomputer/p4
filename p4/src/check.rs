@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    DeclarationInfo, Expression, ExpressionKind, Lvalue, NameInfo, Parser,
-    Statement, StatementBlock, Type, AST,
+    AST, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue, NameInfo,
+    Parser, Statement, StatementBlock, Struct, Type,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -53,8 +53,14 @@ impl Diagnostics {
 
 pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     let mut diags = Diagnostics::new();
-    for parser in &ast.parsers {
-        diags.extend(&ParserChecker::check(parser, ast));
+    for p in &ast.parsers {
+        diags.extend(&ParserChecker::check(p, ast));
+    }
+    for s in &ast.structs {
+        diags.extend(&StructChecker::check(s, ast));
+    }
+    for h in &ast.headers {
+        diags.extend(&HeaderChecker::check(h, ast));
     }
     let mut hg = HlirGenerator::new(ast);
     hg.run();
@@ -109,6 +115,47 @@ impl ParserChecker {
         }
     }
 }
+
+pub struct StructChecker {}
+
+impl StructChecker {
+    pub fn check(s: &Struct, ast: &AST) -> Diagnostics {
+        let mut diags = Diagnostics::new();
+        for m in &s.members {
+            if let Type::UserDefined(typename) = &m.ty {
+                if let None = ast.get_user_defined_type(typename) {
+                    diags.push(Diagnostic{
+                        level: Level::Error,
+                        message: format!("Typename {} not found", typename),
+                        token: m.token.clone(),
+                    })
+                }
+            }
+        }
+        diags
+    }
+}
+
+pub struct HeaderChecker {}
+
+impl HeaderChecker {
+    pub fn check(h: &Header, ast: &AST) -> Diagnostics {
+        let mut diags = Diagnostics::new();
+        for m in &h.members {
+            if let Type::UserDefined(typename) = &m.ty {
+                if let None = ast.get_user_defined_type(typename) {
+                    diags.push(Diagnostic{
+                        level: Level::Error,
+                        message: format!("Typename {} not found", typename),
+                        token: m.token.clone(),
+                    })
+                }
+            }
+        }
+        diags
+    }
+}
+
 
 fn check_name(
     name: &str,

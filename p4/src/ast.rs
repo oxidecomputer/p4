@@ -280,6 +280,7 @@ impl Header {
 pub struct HeaderMember {
     pub ty: Type,
     pub name: String,
+    pub token: Token,
 }
 
 #[derive(Debug, Clone)]

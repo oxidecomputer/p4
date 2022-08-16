@@ -30,7 +30,17 @@ SoftNPU(
 struct headers_t {
     ethernet_h ethernet;
     sidecar_h sidecar;
+    ivp4_h ipv4;
     ipv6_h ipv6;
+    tcp_h tcp;
+    udp_h udp;
+
+    geneve_h geneve;
+    ethernet_h inner_eth;
+    ivp4_h inner_ipv4;
+    ipv6_h inner_ipv6;
+    tcp_h inner_tcp;
+    udp_h inner_udp;
 }
 
 header sidecar_h {
@@ -48,14 +58,14 @@ header ethernet_h {
 }
 
 header ipv6_h {
-	bit<4>	    version;
-	bit<8>	    traffic_class;
-	bit<20>	    flow_label;
-	bit<16>	    payload_len;
-	bit<8>	    next_hdr;
-	bit<8>	    hop_limit;
-	bit<128>    src;
-	bit<128>    dst;
+    bit<4>      version;
+    bit<8>      traffic_class;
+    bit<20>     flow_label;
+    bit<16>     payload_len;
+    bit<8>      next_hdr;
+    bit<8>      hop_limit;
+    bit<128>    src;
+    bit<128>    dst;
 }
 
 header ipv4_h {
@@ -74,17 +84,41 @@ header ipv4_h {
 }
 
 header udp_h {
-	bit<16> src_port;
-	bit<16> dst_port;
-	bit<16> hdr_length;
-	bit<16> checksum;
+    bit<16> src_port;
+    bit<16> dst_port;
+    bit<16> hdr_length;
+    bit<16> checksum;
+}
+
+header tcp_h {
+    bit<16> src_port;
+    bit<16> dst_port;
+    bit<32> seq_no;
+    bit<32> ack_no;
+    bit<4> data_offset;
+    bit<4> res;
+    bit<8> flags;
+    bit<16> window;
+    bit<16> checksum;
+    bit<16> urgent_ptr;
 }
 
 header icmp_h {
-	bit<8> type;
-	bit<8> code;
-	bit<16> hdr_checksum;
-	bit<32> data;
+    bit<8> type;
+    bit<8> code;
+    bit<16> hdr_checksum;
+    bit<32> data;
+}
+
+header geneve_h {
+    bit<2> version;
+    bit<6> opt_len;
+    bit<1> ctrl;
+    bit<1> crit;
+    bit<6> reserved;
+    bit<16> protocol;
+    bit<24> vni;
+    bit<8> reserved2;
 }
 
 parser parse(
