@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    AST, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue, NameInfo,
-    Parser, Statement, StatementBlock, Struct, Type,
+    DeclarationInfo, Expression, ExpressionKind, Header, Lvalue, NameInfo,
+    Parser, Statement, StatementBlock, Struct, Type, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -123,8 +123,8 @@ impl StructChecker {
         let mut diags = Diagnostics::new();
         for m in &s.members {
             if let Type::UserDefined(typename) = &m.ty {
-                if let None = ast.get_user_defined_type(typename) {
-                    diags.push(Diagnostic{
+                if ast.get_user_defined_type(typename).is_none() {
+                    diags.push(Diagnostic {
                         level: Level::Error,
                         message: format!("Typename {} not found", typename),
                         token: m.token.clone(),
@@ -143,8 +143,8 @@ impl HeaderChecker {
         let mut diags = Diagnostics::new();
         for m in &h.members {
             if let Type::UserDefined(typename) = &m.ty {
-                if let None = ast.get_user_defined_type(typename) {
-                    diags.push(Diagnostic{
+                if ast.get_user_defined_type(typename).is_none() {
+                    diags.push(Diagnostic {
                         level: Level::Error,
                         message: format!("Typename {} not found", typename),
                         token: m.token.clone(),
@@ -155,7 +155,6 @@ impl HeaderChecker {
         diags
     }
 }
-
 
 fn check_name(
     name: &str,

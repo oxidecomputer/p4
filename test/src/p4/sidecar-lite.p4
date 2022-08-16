@@ -30,14 +30,14 @@ SoftNPU(
 struct headers_t {
     ethernet_h ethernet;
     sidecar_h sidecar;
-    ivp4_h ipv4;
+    ipv4_h ipv4;
     ipv6_h ipv6;
     tcp_h tcp;
     udp_h udp;
 
     geneve_h geneve;
     ethernet_h inner_eth;
-    ivp4_h inner_ipv4;
+    ipv4_h inner_ipv4;
     ipv6_h inner_ipv6;
     tcp_h inner_tcp;
     udp_h inner_udp;
