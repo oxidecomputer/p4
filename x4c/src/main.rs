@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     lxr.show_tokens = opts.show_tokens;
 
     let mut psr = parser::Parser::new(lxr);
-    let ast = psr.run()?;
+    let mut ast = psr.run()?;
     if opts.show_ast {
         println!("{:#?}", ast);
     }
@@ -82,6 +82,7 @@ fn main() -> Result<()> {
 
     match opts.target {
         Target::Rust => {
+            p4_rust::sanitize(&mut ast);
             p4_rust::emit(&ast, &hlir, &opts.out)?;
         }
         Target::RedHawk => {

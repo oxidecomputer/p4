@@ -39,6 +39,26 @@ struct Context {
     pipelines: HashMap<String, TokenStream>,
 }
 
+pub fn sanitize(ast: &mut AST) {
+    for h in &mut ast.headers {
+        for m in &mut h.members {
+            sanitize_string(&mut m.name);
+        }
+    }
+    for s in &mut ast.structs {
+        for m in &mut s.members {
+            sanitize_string(&mut m.name);
+        }
+    }
+}
+
+pub fn sanitize_string(s: &mut String) {
+    //TODO sanitize other problematic rust tokens
+    if s == "type" {
+        *s = "typ".to_owned();
+    }
+}
+
 pub fn emit(ast: &AST, hlir: &Hlir, filename: &str) -> io::Result<()> {
     let tokens = emit_tokens(ast, hlir);
 
