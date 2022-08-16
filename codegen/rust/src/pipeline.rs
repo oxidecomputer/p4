@@ -172,18 +172,7 @@ impl<'a> PipelineGenerator<'a> {
                 // 4. Calculate parsed header size
                 //
 
-                // TODO generate require a parsed_size method on header trait
-                // and generate impls.
-                let mut parsed_size = 0;
-                if parsed.ethernet.valid {
-                    parsed_size += ethernet_t::size() >> 3;
-                }
-                if parsed.sidecar.valid {
-                    parsed_size += sidecar_t::size() >> 3;
-                }
-                if parsed.ipv6.valid {
-                    parsed_size += ipv6_t::size() >> 3;
-                }
+                let parsed_size = parsed.valid_header_size() >> 3;
 
                 //
                 // 5. Run the control block
