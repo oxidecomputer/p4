@@ -309,7 +309,7 @@ control nat_ingress(
 
     table nat_v4 {
         key = {
-            hdr.ipv4.dst_addr: exact;
+            hdr.ipv4.dst: exact;
             ingress.l4_dst_port: range;
         }
         actions = { forward_to_sled; }
@@ -317,7 +317,7 @@ control nat_ingress(
 
     table nat_v6 {
         key = {
-            hdr.ipv6.dst_addr: exact;
+            hdr.ipv6.dst: exact;
             ingress.l4_dst_port: range;
         }
         actions = { forward_to_sled; }
