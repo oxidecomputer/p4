@@ -127,6 +127,9 @@ parser parse(
 ){
     state start {
         pkt.extract(headers.ethernet);
+        if (headers.ethernet.ether_type == 16w0x0800) {
+            transition ipv4;
+        }
         if (headers.ethernet.ether_type == 16w0x86dd) {
             transition ipv6;
         }
@@ -141,11 +144,92 @@ parser parse(
         if (headers.sidecar.sc_ether_type == 16w0x86dd) {
             transition ipv6;
         }
+        if (headers.sidecar.sc_ether_type == 16w0x0800) {
+            transition ipv4;
+        }
         transition reject;
     }
 
     state ipv6 {
         pkt.extract(headers.ipv6);
+        if (headers.ipv6.next_hdr == 8w17) {
+            transition udp;
+        }
+        if (headers.ipv6.next_hdr == 8w6) {
+            transition tcp;
+        }
+        transition accept;
+    }
+
+    state ipv4 {
+        pkt.extract(headers.ipv4);
+        if (headers.ipv4.protocol == 8w17) {
+            transition udp;
+        }
+        if (headers.ipv4.protocol == 8w6) {
+            transition tcp;
+        }
+        transition accept;
+    }
+
+    state udp {
+        pkt.extract(headers.udp);
+        if (headers.udp.dst_port == 16w6081) {
+            transition geneve;
+        }
+        transition accept;
+    }
+
+    state tcp {
+        pkt.extract(headers.tcp);
+        transition accept;
+    }
+
+    state geneve {
+        pkt.extract(headers.geneve);
+        transition inner_eth;
+    }
+
+    state inner_eth {
+        pkt.extract(headers.inner_eth);
+        if (headers.inner_eth.ether_type == 16w0x0800) {
+            transition inner_ipv4;
+        }
+        if (headers.inner_eth.ether_type == 16w0x86dd) {
+            transition inner_ipv6;
+        }
+        transition reject;
+    }
+    
+    state inner_ipv4 {
+        pkt.extract(headers.ipv4);
+        if (headers.inner_ipv4.protocol == 8w17) {
+            transition inner_udp;
+        }
+        if (headers.inner_ipv4.protocol == 8w6) {
+            transition inner_tcp;
+        }
+        transition accept;
+    }
+
+    state inner_ipv6 {
+        pkt.extract(headers.inner_ipv6);
+        if (headers.inner_ipv6.next_hdr == 8w17) {
+            transition inner_udp;
+        }
+        if (headers.inner_ipv6.next_hdr == 8w6) {
+            transition inner_tcp;
+        }
+        transition accept;
+    }
+
+    state inner_udp {
+        pkt.extract(headers.inner_udp);
+        transition accept;
+    }
+
+    state inner_tcp {
+        pkt.extract(headers.inner_tcp);
         transition accept;
     }
 
