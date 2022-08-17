@@ -459,10 +459,14 @@ impl<'a> StatementGenerator<'a> {
             if matches.len() > 0 {
                 (matches[0].action)(#(#action_args),*)
             }
-            else {
-                #default_action(#(#action_args),*);
-            }
         });
+        if table.default_action != "NoAction" {
+            tokens.extend(quote! {
+                else {
+                    #default_action(#(#action_args),*);
+                }
+            });
+        }
     }
 
     fn generate_header_set_validity(

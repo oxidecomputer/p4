@@ -41,6 +41,9 @@ impl<'a> ControlGenerator<'a> {
         let (mut params, _param_types) = self.control_parameters(control);
 
         for action in &control.actions {
+            if action.name == "NoAction" {
+                continue
+            }
             self.generate_control_action(control, action);
         }
 

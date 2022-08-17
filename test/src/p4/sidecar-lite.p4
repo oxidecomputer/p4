@@ -313,6 +313,7 @@ control nat_ingress(
             ingress.l4_dst_port: range;
         }
         actions = { forward_to_sled; }
+        default_action = NoAction;
     }
 
     table nat_v6 {
@@ -321,6 +322,7 @@ control nat_ingress(
             ingress.l4_dst_port: range;
         }
         actions = { forward_to_sled; }
+        default_action = NoAction;
     }
 
     apply {
