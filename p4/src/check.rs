@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    DeclarationInfo, Expression, ExpressionKind, Header, Lvalue, NameInfo,
-    Parser, State, Statement, StatementBlock, Struct, Type, AST,
+    Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
+    NameInfo, Parser, State, Statement, StatementBlock, Struct, Type, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -56,6 +56,9 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     for p in &ast.parsers {
         diags.extend(&ParserChecker::check(p, ast));
     }
+    for c in &ast.controls {
+        diags.extend(&ControlChecker::check(c, ast));
+    }
     for s in &ast.structs {
         diags.extend(&StructChecker::check(s, ast));
     }
@@ -66,6 +69,30 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     hg.run();
     diags.extend(&hg.diags);
     (hg.hlir, diags)
+}
+
+pub struct ControlChecker {}
+
+impl ControlChecker {
+    pub fn check(c: &Control, ast: &AST) -> Diagnostics {
+        let mut diags = Diagnostics::new();
+        Self::check_params(c, ast, &mut diags);
+        diags
+    }
+
+    pub fn check_params(c: &Control, ast: &AST, diags: &mut Diagnostics) {
+        for p in &c.parameters {
+            if let Type::UserDefined(typename) = &p.ty {
+                if ast.get_user_defined_type(typename).is_none() {
+                    diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!("Typename {} not found", typename),
+                        token: p.ty_token.clone(),
+                    })
+                }
+            }
+        }
+    }
 }
 
 pub struct ParserChecker {}
