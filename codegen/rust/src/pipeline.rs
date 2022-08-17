@@ -363,6 +363,13 @@ impl<'a> PipelineGenerator<'a> {
                         #sz,
                     )
                 }),
+                MatchKind::Range => keys.extend(quote! {
+                    p4rs::extract_range_key(
+                        keyset_data,
+                        #offset,
+                        #sz,
+                    )
+                }),
             }
             offset += sz;
         }

@@ -217,6 +217,21 @@ pub fn extract_exact_key(
     ))
 }
 
+pub fn extract_range_key(
+    keyset_data: &[u8],
+    offset: usize,
+    len: usize,
+) -> table::Key {
+    table::Key::Range(
+        num::BigUint::from_bytes_be(
+            &keyset_data[offset..offset + len],
+        ),
+        num::BigUint::from_bytes_be(
+            &keyset_data[offset + len .. offset + len + len],
+        ),
+    )
+}
+
 pub fn extract_ternary_key(
     _keyset_data: &[u8],
     _offset: usize,

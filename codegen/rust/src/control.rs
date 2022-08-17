@@ -292,6 +292,12 @@ impl<'a> ControlGenerator<'a> {
                                     })
                                 }
                             }
+                            MatchKind::Range => {
+                                let k = format_ident!("Range");
+                                quote! {
+                                    p4rs::table::Key::#k(#xpr)
+                                }
+                            }
                         };
                         keyset.push(ks);
                     }

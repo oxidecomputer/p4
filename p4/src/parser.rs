@@ -1247,6 +1247,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
             lexer::Kind::Exact => Ok(MatchKind::Exact),
             lexer::Kind::Ternary => Ok(MatchKind::Ternary),
             lexer::Kind::Lpm => Ok(MatchKind::LongestPrefixMatch),
+            lexer::Kind::Range => Ok(MatchKind::Range),
             _ => Err(ParserError {
                 at: token.clone(),
                 message: format!(

@@ -645,6 +645,7 @@ pub enum MatchKind {
     Exact,
     Ternary,
     LongestPrefixMatch,
+    Range,
 }
 
 #[derive(Debug, Clone)]
