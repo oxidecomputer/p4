@@ -762,7 +762,7 @@ impl State {
         Self {
             name,
             statements: StatementBlock::new(),
-            token: token.clone(),
+            token,
         }
     }
 }

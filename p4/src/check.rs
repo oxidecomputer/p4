@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::{
     DeclarationInfo, Expression, ExpressionKind, Header, Lvalue, NameInfo,
-    Parser, Statement, StatementBlock, Struct, State, Type, AST,
+    Parser, State, Statement, StatementBlock, Struct, Type, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -104,11 +104,10 @@ impl ParserChecker {
     }
 
     pub fn ensure_transition(state: &State, diags: &mut Diagnostics) {
-
         let stmts = &state.statements.statements;
 
         if stmts.is_empty() {
-            diags.push(Diagnostic{
+            diags.push(Diagnostic {
                 level: Level::Error,
                 message: "state must include transition".into(),
                 token: state.token.clone(),
@@ -118,12 +117,12 @@ impl ParserChecker {
         //TODO the right thing to do here is to ensure all code paths end in a
         //     transition, for now just check that the last statement is a
         //     transition.
-        let last = &stmts[stmts.len()-1];
+        let last = &stmts[stmts.len() - 1];
         if !matches!(last, Statement::Transition(_)) {
-            diags.push(Diagnostic{
+            diags.push(Diagnostic {
                 level: Level::Error,
-                message: 
-                    "final parser state statement must be a transition".into(),
+                message: "final parser state statement must be a transition"
+                    .into(),
                 token: state.token.clone(),
             });
         }
