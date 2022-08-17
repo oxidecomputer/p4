@@ -116,12 +116,7 @@ impl ControlChecker {
         diags: &mut Diagnostics,
     ) {
         for (lval, _match_kind) in &t.key {
-            diags.extend(&check_lvalue(
-                    lval,
-                    ast,
-                    names,
-                    Some(&c.name),
-            ))
+            diags.extend(&check_lvalue(lval, ast, names, Some(&c.name)))
         }
     }
 }

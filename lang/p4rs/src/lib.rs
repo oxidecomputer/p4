@@ -223,11 +223,9 @@ pub fn extract_range_key(
     len: usize,
 ) -> table::Key {
     table::Key::Range(
+        num::BigUint::from_bytes_be(&keyset_data[offset..offset + len]),
         num::BigUint::from_bytes_be(
-            &keyset_data[offset..offset + len],
-        ),
-        num::BigUint::from_bytes_be(
-            &keyset_data[offset + len .. offset + len + len],
+            &keyset_data[offset + len..offset + len + len],
         ),
     )
 }
