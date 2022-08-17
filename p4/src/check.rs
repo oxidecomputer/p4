@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use crate::ast::{
     Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
-    NameInfo, Parser, State, Statement, StatementBlock, Struct, Type, AST,
+    NameInfo, Parser, State, Statement, StatementBlock, Struct, Table, Type,
+    AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -76,7 +77,9 @@ pub struct ControlChecker {}
 impl ControlChecker {
     pub fn check(c: &Control, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
+        let names = c.names();
         Self::check_params(c, ast, &mut diags);
+        Self::check_tables(c, &names, ast, &mut diags);
         diags
     }
 
@@ -91,6 +94,34 @@ impl ControlChecker {
                     })
                 }
             }
+        }
+    }
+
+    pub fn check_tables(
+        c: &Control,
+        names: &HashMap<String, NameInfo>,
+        ast: &AST,
+        diags: &mut Diagnostics,
+    ) {
+        for t in &c.tables {
+            Self::check_table(c, t, names, ast, diags);
+        }
+    }
+
+    pub fn check_table(
+        c: &Control,
+        t: &Table,
+        names: &HashMap<String, NameInfo>,
+        ast: &AST,
+        diags: &mut Diagnostics,
+    ) {
+        for (lval, _match_kind) in &t.key {
+            diags.extend(&check_lvalue(
+                    lval,
+                    ast,
+                    names,
+                    Some(&c.name),
+            ))
         }
     }
 }

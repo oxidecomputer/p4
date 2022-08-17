@@ -15,6 +15,8 @@ extern packet_out {
 // XXX import from softnpu.p4
 struct IngressMetadata {
     bit<8> port;
+    bool nat;
+    bit<16> l4_dst_port;
 }
 struct EgressMetadata {
     bit<8> port;
@@ -86,7 +88,7 @@ header ipv4_h {
 header udp_h {
     bit<16> src_port;
     bit<16> dst_port;
-    bit<16> hdr_length;
+    bit<16> len;
     bit<16> checksum;
 }
 
@@ -123,114 +125,211 @@ header geneve_h {
 
 parser parse(
     packet_in pkt,
-    out headers_t headers,
+    out headers_t hdr,
+    inout IngressMetadata ingress,
 ){
     state start {
-        pkt.extract(headers.ethernet);
-        if (headers.ethernet.ether_type == 16w0x0800) {
+        pkt.extract(hdr.ethernet);
+        if (hdr.ethernet.ether_type == 16w0x0800) {
             transition ipv4;
         }
-        if (headers.ethernet.ether_type == 16w0x86dd) {
+        if (hdr.ethernet.ether_type == 16w0x86dd) {
             transition ipv6;
         }
-        if (headers.ethernet.ether_type == 16w0x0901) {
+        if (hdr.ethernet.ether_type == 16w0x0901) {
             transition sidecar;
         }
         transition reject;
     }
 
     state sidecar {
-        pkt.extract(headers.sidecar);
-        if (headers.sidecar.sc_ether_type == 16w0x86dd) {
+        pkt.extract(hdr.sidecar);
+        if (hdr.sidecar.sc_ether_type == 16w0x86dd) {
             transition ipv6;
         }
-        if (headers.sidecar.sc_ether_type == 16w0x0800) {
+        if (hdr.sidecar.sc_ether_type == 16w0x0800) {
             transition ipv4;
         }
         transition reject;
     }
 
     state ipv6 {
-        pkt.extract(headers.ipv6);
-        if (headers.ipv6.next_hdr == 8w17) {
+        pkt.extract(hdr.ipv6);
+        if (hdr.ipv6.next_hdr == 8w17) {
             transition udp;
         }
-        if (headers.ipv6.next_hdr == 8w6) {
+        if (hdr.ipv6.next_hdr == 8w6) {
             transition tcp;
         }
         transition accept;
     }
 
     state ipv4 {
-        pkt.extract(headers.ipv4);
-        if (headers.ipv4.protocol == 8w17) {
+        pkt.extract(hdr.ipv4);
+        if (hdr.ipv4.protocol == 8w17) {
             transition udp;
         }
-        if (headers.ipv4.protocol == 8w6) {
+        if (hdr.ipv4.protocol == 8w6) {
             transition tcp;
         }
         transition accept;
     }
 
     state udp {
-        pkt.extract(headers.udp);
-        if (headers.udp.dst_port == 16w6081) {
+        pkt.extract(hdr.udp);
+        ingress.l4_dst_port = hdr.udp.dst_port;
+        if (hdr.udp.dst_port == 16w6081) {
             transition geneve;
         }
         transition accept;
     }
 
     state tcp {
-        pkt.extract(headers.tcp);
+        pkt.extract(hdr.tcp);
+        ingress.l4_dst_port = hdr.tcp.dst_port;
         transition accept;
     }
 
     state geneve {
-        pkt.extract(headers.geneve);
+        pkt.extract(hdr.geneve);
         transition inner_eth;
     }
 
     state inner_eth {
-        pkt.extract(headers.inner_eth);
-        if (headers.inner_eth.ether_type == 16w0x0800) {
+        pkt.extract(hdr.inner_eth);
+        if (hdr.inner_eth.ether_type == 16w0x0800) {
             transition inner_ipv4;
         }
-        if (headers.inner_eth.ether_type == 16w0x86dd) {
+        if (hdr.inner_eth.ether_type == 16w0x86dd) {
             transition inner_ipv6;
         }
         transition reject;
     }
     
     state inner_ipv4 {
-        pkt.extract(headers.ipv4);
-        if (headers.inner_ipv4.protocol == 8w17) {
+        pkt.extract(hdr.ipv4);
+        if (hdr.inner_ipv4.protocol == 8w17) {
             transition inner_udp;
         }
-        if (headers.inner_ipv4.protocol == 8w6) {
+        if (hdr.inner_ipv4.protocol == 8w6) {
             transition inner_tcp;
         }
         transition accept;
     }
 
     state inner_ipv6 {
-        pkt.extract(headers.inner_ipv6);
-        if (headers.inner_ipv6.next_hdr == 8w17) {
+        pkt.extract(hdr.inner_ipv6);
+        if (hdr.inner_ipv6.next_hdr == 8w17) {
             transition inner_udp;
         }
-        if (headers.inner_ipv6.next_hdr == 8w6) {
+        if (hdr.inner_ipv6.next_hdr == 8w6) {
             transition inner_tcp;
         }
         transition accept;
     }
 
     state inner_udp {
-        pkt.extract(headers.inner_udp);
+        pkt.extract(hdr.inner_udp);
         transition accept;
     }
 
     state inner_tcp {
-        pkt.extract(headers.inner_tcp);
+        pkt.extract(hdr.inner_tcp);
         transition accept;
+    }
+
+}
+
+control nat_ingress(
+    inout headers_t hdr,
+    inout IngressMetadata ingress,
+) {
+
+    action forward_to_sled(bit<128> target) {
+
+        bit<16> orig_l3_len = 0;
+
+        // move L2 to inner L2
+
+        hdr.inner_eth = hdr.ethernet;
+
+        // move L3 to inner L3
+
+        if (hdr.ipv4.isValid()) {
+            hdr.inner_ipv4 = hdr.ipv4;
+            orig_l3_len = hdr.ipv4.total_len;
+        }
+        if (hdr.ipv6.isValid()) {
+            hdr.inner_ipv6 = hdr.ipv6;
+            orig_l3_len = hdr.ipv6.payload_len + 16w40;
+        }
+
+
+        // move L4 to inner L4
+
+        if (hdr.tcp.isValid()) {
+            hdr.inner_tcp = hdr.tcp;
+            hdr.inner_tcp.setValid();
+            hdr.tcp.setInvalid();
+        }
+        if (hdr.udp.isValid()) {
+            hdr.inner_udp = hdr.udp;
+            hdr.inner_udp.setValid();
+        }
+
+        // set up outer l3
+
+        // original l2 + original l3 + encapsulating udp + encapsulating geneve
+        hdr.ipv6.payload_len = 16w14 + orig_l3_len + 16w8 + 16w8; 
+        hdr.ipv6.next_hdr = 8w17;
+        hdr.ipv6.hop_limit = 255;
+        hdr.ipv6.src = 0; // TODO set to boundary services addr
+        hdr.ipv6.dst = target;
+        hdr.ipv6.setValid();
+
+        // set up outer udp
+        hdr.udp.src_port = 16w6081;
+        hdr.udp.dst_port = 16w6081;
+        hdr.udp.len = hdr.ipv6.payload_len;
+        hdr.udp.checksum = 0; //TODO
+        hdr.udp.setValid();
+
+        // set up geneve
+        hdr.geneve.version = 2w0;
+        hdr.geneve.opt_len = 2w0;
+        hdr.geneve.ctrl = 1w0;
+        hdr.geneve.crit = 1w0;
+        hdr.geneve.reserved = 6w0;
+        hdr.geneve.protocol = hdr.inner_eth.ether_type;
+        hdr.geneve.vni = 24w99; // XXX hard coded implicit boundary services vni
+        hdr.geneve.reserved2 = 8w0;
+        hdr.geneve.setValid();
+
+    }
+
+    table nat_v4 {
+        key = {
+            hdr.ipv4.dst_addr: exact;
+            ingress.l4_dst_port: range;
+        }
+        actions = { forward_to_sled; }
+    }
+
+    table nat_v6 {
+        key = {
+            hdr.ipv6.dst_addr: exact;
+            ingress.l4_dst_port: range;
+        }
+        actions = { forward_to_sled; }
+    }
+
+    apply {
+        if (hdr.ipv4.isValid()) {
+            nat_v4.apply();
+        }
+        if (hdr.ipv6.isValid()) {
+            nat_v6.apply();
+        }
     }
 
 }
@@ -381,18 +480,35 @@ control ingress(
         local.apply(hdr, local_dst);
 
         if (local_dst) {
-            hdr.sidecar.setValid();
-            hdr.ethernet.ether_type = 16w0x0901;
 
-            //SC_FORWARD_TO_USERSPACE
-            hdr.sidecar.sc_code = 8w0x01;
-            hdr.sidecar.sc_ingress = ingress.port;
-            hdr.sidecar.sc_egress = ingress.port;
-            hdr.sidecar.sc_ether_type = 16w0x86dd;
-            hdr.sidecar.sc_payload = 128w0x1701d;
+            // check if this packet is destined to boundary services sourced
+            // from within the rack.
+            if (hdr.geneve.isValid()) {
 
-            // scrimlet port
-            egress.port = 0;
+                // TODO also check for boundary services VNI
+
+                // strip the geneve header and try to route
+                hdr.geneve.setInvalid();
+                router.apply(hdr, ingress, egress);
+            }
+
+            // check if this packet is destined to boundary services from
+            // outside the rack.
+
+            else {
+                hdr.sidecar.setValid();
+                hdr.ethernet.ether_type = 16w0x0901;
+
+                //SC_FORWARD_TO_USERSPACE
+                hdr.sidecar.sc_code = 8w0x01;
+                hdr.sidecar.sc_ingress = ingress.port;
+                hdr.sidecar.sc_egress = ingress.port;
+                hdr.sidecar.sc_ether_type = 16w0x86dd;
+                hdr.sidecar.sc_payload = 128w0x1701d;
+
+                // scrimlet port
+                egress.port = 0;
+            }
         }
 
         //
@@ -400,8 +516,9 @@ control ingress(
         //
 
         else {
+            // XXX? should be covered by sidecar check above
             // if the packet came from the scrimlet invalidate the header
-            // sidecar header so.
+            // sidecar header before routing.
             if (ingress.port == 8w1) {
                 hdr.sidecar.setInvalid();
             }
