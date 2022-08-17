@@ -1760,8 +1760,8 @@ impl<'a, 'b> StateParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<State, Error> {
-        let (name, _) = self.parser.parse_identifier()?;
-        let mut state = State::new(name);
+        let (name, tk) = self.parser.parse_identifier()?;
+        let mut state = State::new(name, tk);
 
         self.parse_body(&mut state)?;
 

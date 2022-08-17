@@ -754,13 +754,15 @@ impl Ord for Lvalue {
 pub struct State {
     pub name: String,
     pub statements: StatementBlock,
+    pub token: Token,
 }
 
 impl State {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, token: Token) -> Self {
         Self {
             name,
             statements: StatementBlock::new(),
+            token: token.clone(),
         }
     }
 }
