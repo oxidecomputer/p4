@@ -586,10 +586,11 @@ pub struct Table {
     pub key: Vec<(Lvalue, MatchKind)>,
     pub const_entries: Vec<ConstTableEntry>,
     pub size: usize,
+    pub token: Token,
 }
 
 impl Table {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, token: Token) -> Self {
         Self {
             name,
             actions: Vec::new(),
@@ -597,6 +598,7 @@ impl Table {
             key: Vec::new(),
             const_entries: Vec::new(),
             size: 0,
+            token,
         }
     }
 }

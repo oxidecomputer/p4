@@ -1139,8 +1139,8 @@ impl<'a, 'b> TableParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Table, Error> {
-        let (name, _) = self.parser.parse_identifier()?;
-        let mut table = Table::new(name);
+        let (name, tk) = self.parser.parse_identifier()?;
+        let mut table = Table::new(name, tk);
 
         self.parse_body(&mut table)?;
 
