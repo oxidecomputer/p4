@@ -4,7 +4,6 @@ use bitvec::prelude::*;
 //struct BitMath(BitVec<u8, Msb0>);
 
 pub fn add(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
-
     if a.len() != b.len() {
         panic!("bitvec add size mismatch");
     }
@@ -22,7 +21,10 @@ pub fn add(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 
 // leaving here in case we have a need for a true arbitrary-width adder.
 #[allow(dead_code)]
-pub fn add_generic(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+pub fn add_generic(
+    a: BitVec<u8, Msb0>,
+    b: BitVec<u8, Msb0>,
+) -> BitVec<u8, Msb0> {
     if a.len() != b.len() {
         panic!("bitvec add size mismatch");
     }

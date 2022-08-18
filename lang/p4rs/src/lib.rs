@@ -11,8 +11,8 @@ use bitvec::prelude::*;
 pub mod error;
 //pub mod hicuts;
 //pub mod rice;
-pub mod table;
 pub mod bitmath;
+pub mod table;
 
 #[derive(Debug)]
 pub struct Bit<'a, const N: usize>(pub &'a [u8]);
