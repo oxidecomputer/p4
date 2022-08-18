@@ -282,8 +282,8 @@ control nat_ingress(
         // original l2 + original l3 + encapsulating udp + encapsulating geneve
         hdr.ipv6.payload_len = 16w14 + orig_l3_len + 16w8 + 16w8; 
         hdr.ipv6.next_hdr = 8w17;
-        hdr.ipv6.hop_limit = 255;
-        hdr.ipv6.src = 0; // TODO set to boundary services addr
+        hdr.ipv6.hop_limit = 8w255;
+        hdr.ipv6.src = 128w0; // TODO set to boundary services addr
         hdr.ipv6.dst = target;
         hdr.ipv6.setValid();
 
@@ -291,7 +291,7 @@ control nat_ingress(
         hdr.udp.src_port = 16w6081;
         hdr.udp.dst_port = 16w6081;
         hdr.udp.len = hdr.ipv6.payload_len;
-        hdr.udp.checksum = 0; //TODO
+        hdr.udp.checksum = 16w0; //TODO
         hdr.udp.setValid();
 
         // set up geneve
