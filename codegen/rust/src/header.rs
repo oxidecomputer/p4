@@ -34,7 +34,7 @@ impl<'a> HeaderGenerator<'a> {
         }
 
         let mut generated = quote! {
-            #[derive(Debug, Default)]
+            #[derive(Debug, Default, Clone)]
             pub struct #name {
                 pub valid: bool,
                 #(#members),*

@@ -84,7 +84,11 @@ impl<'a> StatementGenerator<'a> {
 
                 let rhs = if let Type::Bit(_) = rhs_ty {
                     quote! { #rhs.clone() }
-                } else {
+                } 
+                else if let Type::UserDefined(_) = rhs_ty {
+                    quote! { #rhs.clone() }
+                }
+                else {
                     rhs
                 };
 

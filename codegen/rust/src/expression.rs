@@ -32,9 +32,18 @@ impl<'a> ExpressionGenerator<'a> {
                 let op_tks = self.generate_binop(*op);
                 let rhs_tks = self.generate_expression(rhs.as_ref());
                 let mut ts = TokenStream::new();
-                ts.extend(lhs_tks);
-                ts.extend(op_tks);
-                ts.extend(rhs_tks);
+                match op {
+                    BinOp::Add => {
+                        ts.extend(quote!{
+                            p4rs::bitmath::add(#lhs_tks.clone(), #rhs_tks.clone())
+                        });
+                    }
+                    _ => {
+                        ts.extend(lhs_tks);
+                        ts.extend(op_tks);
+                        ts.extend(rhs_tks);
+                    }
+                }
                 ts
             }
             ExpressionKind::Index(lval, xpr) => {

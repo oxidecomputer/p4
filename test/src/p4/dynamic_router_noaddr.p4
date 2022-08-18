@@ -15,6 +15,8 @@ extern packet_out {
 // XXX import from softnpu.p4
 struct IngressMetadata {
     bit<8> port;
+    bool nat;
+    bit<16> l4_dst_port;
 }
 struct EgressMetadata {
     bit<8> port;
@@ -59,6 +61,7 @@ header ipv6_t {
 parser parse(
     packet_in pkt,
     out headers_t headers,
+    inout IngressMetadata ingress,
 ){
     state start {
         pkt.extract(headers.ethernet);
