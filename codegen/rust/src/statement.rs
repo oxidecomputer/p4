@@ -83,7 +83,9 @@ impl<'a> StatementGenerator<'a> {
                 };
 
                 let rhs = if let Type::Bit(_) = rhs_ty {
-                    quote! { #rhs.clone() }
+                    // TODO eww, to better to figure out precisely when to_owned
+                    // and clone are needed
+                    quote! { #rhs.to_owned().clone() }
                 } else if let Type::UserDefined(_) = rhs_ty {
                     quote! { #rhs.clone() }
                 } else {

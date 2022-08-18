@@ -161,7 +161,14 @@ impl<'a> HlirGenerator<'a> {
             ExpressionKind::Binary(lhs, op, rhs) => {
                 self.binary_expression(xpr, lhs, rhs, op, names)
             }
-            ExpressionKind::Index(lval, xpr) => self.index(lval, xpr, names),
+            ExpressionKind::Index(lval, i_xpr) => {
+                if let Some(ty) = self.index(lval, i_xpr, names) {
+                    self.hlir.expression_types.insert(xpr.clone(), ty.clone());
+                    Some(ty)
+                } else {
+                    None
+                }
+            }
             ExpressionKind::Slice(end, _begin) => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
@@ -438,6 +445,5 @@ impl<'a> HlirGenerator<'a> {
             let mut local_names = names.clone();
             self.statement_block(&s.statements, &mut local_names);
         }
-        // TODO
     }
 }

@@ -32,6 +32,7 @@ SoftNPU(
 struct headers_t {
     ethernet_h ethernet;
     sidecar_h sidecar;
+    icmp_h icmp;
     ipv4_h ipv4;
     ipv6_h ipv6;
     tcp_h tcp;
@@ -155,12 +156,21 @@ parser parse(
 
     state ipv6 {
         pkt.extract(hdr.ipv6);
+        if (hdr.ipv6.next_hdr == 8w1) {
+            transition icmp;
+        }
         if (hdr.ipv6.next_hdr == 8w17) {
             transition udp;
         }
         if (hdr.ipv6.next_hdr == 8w6) {
             transition tcp;
         }
+        transition accept;
+    }
+
+    state icmp {
+        pkt.extract(hdr.icmp);
+        ingress.l4_dst_port = hdr.icmp.data[15:0];
         transition accept;
     }
 
@@ -325,12 +335,38 @@ control nat_ingress(
         default_action = NoAction;
     }
 
+    table nat_icmp_v6 {
+        key = {
+            hdr.ipv6.dst: exact;
+            ingress.l4_dst_port: range;
+        }
+        actions = { forward_to_sled; }
+        default_action = NoAction;
+    }
+
+    table nat_icmp_v4 {
+        key = {
+            hdr.ipv4.dst: exact;
+            ingress.l4_dst_port: range;
+        }
+        actions = { forward_to_sled; }
+        default_action = NoAction;
+    }
+
     apply {
         if (hdr.ipv4.isValid()) {
-            nat_v4.apply();
+            if (hdr.icmp.isValid()) {
+                nat_icmp_v4.apply();
+            } else {
+                nat_v4.apply();
+            }
         }
         if (hdr.ipv6.isValid()) {
-            nat_v6.apply();
+            if (hdr.icmp.isValid()) {
+                nat_icmp_v6.apply();
+            } else {
+                nat_v6.apply();
+            }
         }
     }
 
