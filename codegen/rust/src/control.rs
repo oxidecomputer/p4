@@ -42,7 +42,7 @@ impl<'a> ControlGenerator<'a> {
 
         for action in &control.actions {
             if action.name == "NoAction" {
-                continue
+                continue;
             }
             self.generate_control_action(control, action);
         }

@@ -146,7 +146,13 @@ impl<'a> PipelineGenerator<'a> {
                         let mut x = bitvec![mut u8, Msb0; 0; 8];
                         x.store(port);
                         x
-                    }
+                    },
+                    nat: false,
+                    l4_dst_port: {
+                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        x.store(port);
+                        x
+                    },
                 };
                 let mut egress_metadata = EgressMetadata::default();
 
@@ -155,7 +161,7 @@ impl<'a> PipelineGenerator<'a> {
                 //
                 // 3. run the parser block
                 //
-                let accept = (self.parse)(pkt, &mut parsed);
+                let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
                 if !accept {
                     // drop the packet
                     dtrace_provider::parser_dropped!(||());
