@@ -118,7 +118,7 @@ impl ControlChecker {
         for (lval, _match_kind) in &t.key {
             diags.extend(&check_lvalue(lval, ast, names, Some(&c.name)))
         }
-        if t.default_action == "" {
+        if t.default_action.is_empty() {
             diags.push(Diagnostic {
                 level: Level::Error,
                 message: "Table must have a default action".into(),

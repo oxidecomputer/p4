@@ -373,7 +373,7 @@ mod tests {
         TableEntry::<1, ()> {
             key: [Key::Lpm(Prefix {
                 addr: addr.parse().unwrap(),
-                len: len,
+                len,
             })],
             priority: 1,
             name: name.into(),
@@ -467,7 +467,7 @@ mod tests {
             key: [
                 Key::Lpm(Prefix {
                     addr: addr.parse().unwrap(),
-                    len: len,
+                    len,
                 }),
                 Key::Ternary(zone),
             ],
@@ -516,7 +516,7 @@ mod tests {
             key: [
                 Key::Lpm(Prefix {
                     addr: addr.parse().unwrap(),
-                    len: len,
+                    len,
                 }),
                 Key::Ternary(zone),
                 Key::Range(range.0.into(), range.1.into()),
