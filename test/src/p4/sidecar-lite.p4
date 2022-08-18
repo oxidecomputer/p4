@@ -16,7 +16,7 @@ extern packet_out {
 struct IngressMetadata {
     bit<8> port;
     bool nat;
-    bit<16> l4_dst_port;
+    bit<16> nat_id;
 }
 struct EgressMetadata {
     bit<8> port;
@@ -170,7 +170,7 @@ parser parse(
 
     state icmp {
         pkt.extract(hdr.icmp);
-        ingress.l4_dst_port = hdr.icmp.data[15:0];
+        ingress.nat_id = hdr.icmp.data[15:0];
         transition accept;
     }
 
@@ -187,7 +187,7 @@ parser parse(
 
     state udp {
         pkt.extract(hdr.udp);
-        ingress.l4_dst_port = hdr.udp.dst_port;
+        ingress.nat_id = hdr.udp.dst_port;
         if (hdr.udp.dst_port == 16w6081) {
             transition geneve;
         }
@@ -196,7 +196,7 @@ parser parse(
 
     state tcp {
         pkt.extract(hdr.tcp);
-        ingress.l4_dst_port = hdr.tcp.dst_port;
+        ingress.nat_id = hdr.tcp.dst_port;
         transition accept;
     }
 
@@ -320,7 +320,7 @@ control nat_ingress(
     table nat_v4 {
         key = {
             hdr.ipv4.dst: exact;
-            ingress.l4_dst_port: range;
+            ingress.nat_id: range;
         }
         actions = { forward_to_sled; }
         default_action = NoAction;
@@ -329,7 +329,7 @@ control nat_ingress(
     table nat_v6 {
         key = {
             hdr.ipv6.dst: exact;
-            ingress.l4_dst_port: range;
+            ingress.nat_id: range;
         }
         actions = { forward_to_sled; }
         default_action = NoAction;
@@ -338,7 +338,7 @@ control nat_ingress(
     table nat_icmp_v6 {
         key = {
             hdr.ipv6.dst: exact;
-            ingress.l4_dst_port: range;
+            ingress.nat_id: range;
         }
         actions = { forward_to_sled; }
         default_action = NoAction;
@@ -347,7 +347,7 @@ control nat_ingress(
     table nat_icmp_v4 {
         key = {
             hdr.ipv4.dst: exact;
-            ingress.l4_dst_port: range;
+            ingress.nat_id: range;
         }
         actions = { forward_to_sled; }
         default_action = NoAction;

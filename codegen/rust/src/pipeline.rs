@@ -141,19 +141,7 @@ impl<'a> PipelineGenerator<'a> {
                 //
                 // 2. Instantiate ingress/egress metadata
                 //
-                let mut ingress_metadata = IngressMetadata{
-                    port: {
-                        let mut x = bitvec![mut u8, Msb0; 0; 8];
-                        x.store(port);
-                        x
-                    },
-                    nat: false,
-                    l4_dst_port: {
-                        let mut x = bitvec![mut u8, Msb0; 0; 16];
-                        x.store(port);
-                        x
-                    },
-                };
+                let mut ingress_metadata = IngressMetadata::default();
                 let mut egress_metadata = EgressMetadata::default();
 
                 println!("{}", "begin".green());
