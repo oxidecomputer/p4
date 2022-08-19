@@ -257,6 +257,8 @@ control nat_ingress(
 
     action forward_to_sled(bit<128> target) {
 
+        ingress.nat = true;
+
         bit<16> orig_l3_len = 0;
 
         // move L2 to inner L2
@@ -484,6 +486,7 @@ control ingress(
 ) {
     local() local;
     router() router;
+    nat_ingress() nat;
 
     apply {
 
@@ -553,14 +556,20 @@ control ingress(
         // Otherwise route the packet using the L3 routing table.
         //
 
+
         else {
-            // XXX? should be covered by sidecar check above
-            // if the packet came from the scrimlet invalidate the header
-            // sidecar header before routing.
-            if (ingress.port == 8w1) {
-                hdr.sidecar.setInvalid();
+
+            nat.apply(hdr, ingress);
+
+            if (ingress.nat != true) {
+                // XXX? should be covered by sidecar check above
+                // if the packet came from the scrimlet invalidate the header
+                // sidecar header before routing.
+                if (ingress.port == 8w1) {
+                    hdr.sidecar.setInvalid();
+                }
+                router.apply(hdr, ingress, egress);
             }
-            router.apply(hdr, ingress, egress);
         }
     }
 }

@@ -80,6 +80,7 @@ impl ControlChecker {
         let names = c.names();
         Self::check_params(c, ast, &mut diags);
         Self::check_tables(c, &names, ast, &mut diags);
+        Self::check_variables(c, ast, &mut diags);
         diags
     }
 
@@ -124,6 +125,24 @@ impl ControlChecker {
                 message: "Table must have a default action".into(),
                 token: t.token.clone(),
             });
+        }
+    }
+
+    pub fn check_variables(c: &Control, ast: &AST, diags: &mut Diagnostics) {
+        for v in &c.variables {
+            if let Type::UserDefined(typename) = &v.ty {
+                if ast.get_user_defined_type(typename).is_some() {
+                    continue;
+                }
+                if ast.get_control(typename).is_some() {
+                    continue;
+                }
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!("Typename {} not found", typename),
+                    token: v.token.clone(),
+                })
+            }
         }
     }
 }

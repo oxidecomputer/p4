@@ -210,7 +210,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_variable(&mut self) -> Result<Variable, Error> {
-        let (ty, _) = self.parse_type()?;
+        let (ty, tytk) = self.parse_type()?;
         let token = self.next_token()?;
 
         // check for constructor
@@ -234,6 +234,7 @@ impl<'a> Parser<'a> {
                 name,
                 initializer: Some(initializer),
                 parameters,
+                token: tytk,
             })
         } else {
             self.backlog.push(token);
@@ -243,6 +244,7 @@ impl<'a> Parser<'a> {
                 name,
                 initializer: None,
                 parameters,
+                token: tytk,
             })
         }
     }

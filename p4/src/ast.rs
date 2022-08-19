@@ -185,6 +185,7 @@ pub struct Variable {
     pub name: String,
     pub initializer: Option<Box<Expression>>,
     pub parameters: Vec<ControlParameter>,
+    pub token: Token,
 }
 
 #[derive(Debug, Clone)]

@@ -326,8 +326,8 @@ impl<'a> PipelineGenerator<'a> {
         tokens
     }
 
-    fn table_entry_keys(&mut self, table: &Table) -> TokenStream {
-        let mut keys = TokenStream::new();
+    fn table_entry_keys(&mut self, table: &Table) -> Vec<TokenStream> {
+        let mut keys = Vec::new();
         let mut offset: usize = 0;
         for (lval, match_kind) in &table.key {
             let name_info =
@@ -336,28 +336,28 @@ impl<'a> PipelineGenerator<'a> {
                 });
             let sz = type_size(&name_info.ty, self.ast) >> 3;
             match match_kind {
-                MatchKind::Exact => keys.extend(quote! {
+                MatchKind::Exact => keys.push(quote! {
                     p4rs::extract_exact_key(
                         keyset_data,
                         #offset,
                         #sz,
                     )
                 }),
-                MatchKind::Ternary => keys.extend(quote! {
+                MatchKind::Ternary => keys.push(quote! {
                     p4rs::extract_ternary_key(
                         keyset_data,
                         #offset,
                         #sz,
                     )
                 }),
-                MatchKind::LongestPrefixMatch => keys.extend(quote! {
+                MatchKind::LongestPrefixMatch => keys.push(quote! {
                     p4rs::extract_lpm_key(
                         keyset_data,
                         #offset,
                         #sz,
                     )
                 }),
-                MatchKind::Range => keys.extend(quote! {
+                MatchKind::Range => keys.push(quote! {
                     p4rs::extract_range_key(
                         keyset_data,
                         #offset,
@@ -381,7 +381,7 @@ impl<'a> PipelineGenerator<'a> {
         let mut action_match_body = TokenStream::new();
         for (i, action) in table.actions.iter().enumerate() {
             let i = i as u32;
-            let call = format_ident!("{}_action_{}", table.name, action);
+            let call = format_ident!("{}_action_{}", control.name, action);
             let n = table.key.len();
             //XXX hack
             if action == "NoAction" {
@@ -506,7 +506,7 @@ impl<'a> PipelineGenerator<'a> {
                 parameter_data: &'a [u8],
             ) {
 
-                let key = [#keys];
+                let key = [#(#keys),*];
 
                 match action_id {
                     #action_match_body
@@ -545,7 +545,7 @@ impl<'a> PipelineGenerator<'a> {
                 keyset_data: &'a [u8],
             ) {
 
-                let key = [#keys];
+                let key = [#(#keys),*];
 
                 let action: std::sync::Arc<dyn Fn(
                     #(#control_param_types),*

@@ -59,6 +59,12 @@ impl<'a> HlirGenerator<'a> {
             local_names.extend(a.names());
             self.statement_block(&a.statement_block, &mut local_names);
         }
+        for t in &c.tables {
+            let mut local_names = names.clone();
+            for (lval, _match_kind) in &t.key {
+                self.lvalue(lval, &mut local_names);
+            }
+        }
         self.statement_block(&c.apply, &mut names);
     }
 

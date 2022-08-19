@@ -345,7 +345,6 @@ impl<'a> StatementGenerator<'a> {
 
         // This is a call to another control instance
         if control_instance.name != control.name {
-            let call = format_ident!("{}_apply", root);
             let eg = ExpressionGenerator::new(self.hlir);
             let mut args = Vec::new();
             for (i, a) in c.args.iter().enumerate() {
@@ -390,6 +389,8 @@ impl<'a> StatementGenerator<'a> {
                     format_ident!("{}_table_{}", control.name, table.name,);
                 args.push(quote! { #name });
             }
+
+            let call = format_ident!("{}_apply", control_instance.name);
 
             /*XXX
             let tbl_arg = format_ident!("{}", root);
