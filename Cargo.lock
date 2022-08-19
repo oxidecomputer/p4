@@ -511,6 +511,7 @@ dependencies = [
  "bitvec",
  "colored",
  "num",
+ "pnet",
  "serde",
  "serde_json",
  "slog",

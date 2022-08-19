@@ -297,6 +297,9 @@ impl<'a> StatementGenerator<'a> {
             "apply" => {
                 self.generate_control_apply_body_call(control, c, tokens);
             }
+            "checksum" => {
+                self.generate_control_checksum_call(control, c, tokens);
+            }
             "setValid" => {
                 self.generate_header_set_validity(c, tokens, true);
             }
@@ -315,6 +318,15 @@ impl<'a> StatementGenerator<'a> {
                 );
             }
         }
+    }
+
+    fn generate_control_checksum_call(
+        &self,
+        _control: &Control,
+        _c: &Call,
+        _tokens: &mut TokenStream,
+    ) {
+        //TODO
     }
 
     fn generate_control_apply_body_call(
