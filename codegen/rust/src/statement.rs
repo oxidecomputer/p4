@@ -308,7 +308,7 @@ impl<'a> StatementGenerator<'a> {
             }
             _ => {
                 // assume we are at an extern call
-                
+
                 // TODO check the extern call against defined externs in checker
                 // before we get here
 
@@ -339,17 +339,17 @@ impl<'a> StatementGenerator<'a> {
             args.push(arg_xpr);
         }
 
-        let lvref: Vec<TokenStream> = c.lval
+        let lvref: Vec<TokenStream> = c
+            .lval
             .name
             .split('.')
             .map(|x| format_ident!("{}", x))
             .map(|x| quote! { #x })
             .collect();
 
-        tokens.extend(quote!{
+        tokens.extend(quote! {
             #(#lvref).*(#(#args),*)
         })
-
     }
 
     fn generate_control_apply_body_call(

@@ -398,10 +398,10 @@ impl<'a> ControlGenerator<'a> {
             //TODO check in checker that externs are actually defined by
             //SoftNPU.
             if let Type::UserDefined(typename) = &var.ty {
-                if let Some(_) = self.ast.get_extern(typename) {
+                if self.ast.get_extern(typename).is_some() {
                     let name = format_ident!("{}", var.name);
                     let extern_type = format_ident!("{}", typename);
-                    tokens.extend(quote!{
+                    tokens.extend(quote! {
                         let #name = p4rs::externs::#extern_type::new();
                     })
                 }
