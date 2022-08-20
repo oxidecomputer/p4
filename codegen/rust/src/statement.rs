@@ -297,9 +297,6 @@ impl<'a> StatementGenerator<'a> {
             "apply" => {
                 self.generate_control_apply_body_call(control, c, tokens);
             }
-            "checksum" => {
-                self.generate_control_checksum_call(control, c, tokens);
-            }
             "setValid" => {
                 self.generate_header_set_validity(c, tokens, true);
             }
@@ -310,23 +307,49 @@ impl<'a> StatementGenerator<'a> {
                 self.generate_header_get_validity(c, tokens);
             }
             _ => {
+                // assume we are at an extern call
+                
+                // TODO check the extern call against defined externs in checker
+                // before we get here
+
+                self.generate_control_extern_call(control, c, tokens);
+                /*
                 panic!(
                     "codegen: only <tablename>.apply() and \
                     <header>.{{isValid, setValid, setInvalid}}() calls are \
                     supported in apply blocks right now: {:#?}",
                     c
                 );
+                */
             }
         }
     }
 
-    fn generate_control_checksum_call(
+    fn generate_control_extern_call(
         &self,
         _control: &Control,
-        _c: &Call,
-        _tokens: &mut TokenStream,
+        c: &Call,
+        tokens: &mut TokenStream,
     ) {
-        //TODO
+        let eg = ExpressionGenerator::new(self.hlir);
+        let mut args = Vec::new();
+
+        for a in &c.args {
+            let arg_xpr = eg.generate_expression(a.as_ref());
+            args.push(arg_xpr);
+        }
+
+        let lvref: Vec<TokenStream> = c.lval
+            .name
+            .split('.')
+            .map(|x| format_ident!("{}", x))
+            .map(|x| quote! { #x })
+            .collect();
+
+        tokens.extend(quote!{
+            #(#lvref).*(#(#args),*)
+        })
+
     }
 
     fn generate_control_apply_body_call(
@@ -403,11 +426,6 @@ impl<'a> StatementGenerator<'a> {
             }
 
             let call = format_ident!("{}_apply", control_instance.name);
-
-            /*XXX
-            let tbl_arg = format_ident!("{}", root);
-            args.push(quote!{#tbl_arg});
-            */
 
             tokens.extend(quote! {
                 #call(#(#args),*);
@@ -548,6 +566,7 @@ impl<'a> StatementGenerator<'a> {
             Type::ExternFunction => todo!(),
             Type::Table => todo!(),
             Type::Void => todo!(),
+            Type::List(_) => todo!(),
         }
     }
 

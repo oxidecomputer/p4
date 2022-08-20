@@ -541,6 +541,18 @@ fn check_lvalue(
                 });
             }
         }
+        Type::List(_) => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type list does not have a member {}",
+                        parts[1]
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
         Type::UserDefined(name) => {
             // get the parent type definition from the AST and check for the
             // referenced member

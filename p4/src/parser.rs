@@ -1591,6 +1591,23 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                     Expression::new(token, ExpressionKind::Lvalue(lval))
                 }
             }
+            lexer::Kind::CurlyOpen => {
+                let mut elements = Vec::new();
+                loop {
+                    let token = self.parser.next_token()?;
+                    if token.kind == lexer::Kind::Comma {
+                        continue;
+                    }
+                    if token.kind == lexer::Kind::CurlyClose {
+                        break;
+                    }
+                    self.parser.backlog.push(token);
+                    let mut xp = ExpressionParser::new(self.parser);
+                    let xpr = xp.run()?;
+                    elements.push(xpr);
+                }
+                Expression::new(token.clone(), ExpressionKind::List(elements))
+            }
             _ => {
                 return Err(ParserError {
                     at: token.clone(),

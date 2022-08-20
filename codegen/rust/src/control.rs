@@ -393,6 +393,21 @@ impl<'a> ControlGenerator<'a> {
         control: &Control,
     ) -> TokenStream {
         let mut tokens = TokenStream::new();
+
+        for var in &control.variables {
+            //TODO check in checker that externs are actually defined by
+            //SoftNPU.
+            if let Type::UserDefined(typename) = &var.ty {
+                if let Some(_) = self.ast.get_extern(typename) {
+                    let name = format_ident!("{}", var.name);
+                    let extern_type = format_ident!("{}", typename);
+                    tokens.extend(quote!{
+                        let #name = p4rs::externs::#extern_type::new();
+                    })
+                }
+            }
+        }
+
         for stmt in &control.apply.statements {
             self.generate_control_apply_stmt(control, stmt, &mut tokens);
         }

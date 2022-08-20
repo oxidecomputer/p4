@@ -147,6 +147,7 @@ pub enum Type {
     ExternFunction, //TODO actual signature
     Table,
     Void,
+    List(Vec<Box<Type>>),
 }
 
 impl fmt::Display for Type {
@@ -162,6 +163,13 @@ impl fmt::Display for Type {
             Type::ExternFunction => write!(f, "extern function"),
             Type::Table => write!(f, "table"),
             Type::Void => write!(f, "void"),
+            Type::List(elems) => {
+                write!(f, "list<")?;
+                for e in elems {
+                    write!(f, "{},", e)?;
+                }
+                write!(f, ">")
+            }
         }
     }
 }
@@ -225,6 +233,7 @@ pub enum ExpressionKind {
     Index(Lvalue, Box<Expression>),
     Slice(Box<Expression>, Box<Expression>),
     Call(Call),
+    List(Vec<Box<Expression>>),
 }
 
 #[derive(Debug, Clone, Copy)]

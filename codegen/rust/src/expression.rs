@@ -87,6 +87,15 @@ impl<'a> ExpressionGenerator<'a> {
                     #lvalue(#(#args),*)
                 }
             }
+            ExpressionKind::List(elements) => {
+                let mut parts = Vec::new();
+                for e in elements {
+                    parts.push(self.generate_expression(e));
+                }
+                quote! {
+                    [ #(#parts),* ]
+                }
+            }
         }
     }
 

@@ -197,6 +197,7 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::Void => {
             quote! { () }
         }
+        Type::List(_) => todo!("rust type for list"),
     }
 }
 
@@ -239,6 +240,7 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
             todo!("type size for table");
         }
         Type::Void => 0,
+        Type::List(_) => todo!("type size for list"),
     }
 }
 

@@ -255,11 +255,14 @@ control nat_ingress(
     inout IngressMetadata ingress,
 ) {
 
+    Checksum() csum;
+
     action forward_to_sled(bit<128> target) {
 
         ingress.nat = true;
 
         bit<16> orig_l3_len = 0;
+        bit<16> orig_l3_csum = 0;
 
         // move L2 to inner L2
 
@@ -285,6 +288,7 @@ control nat_ingress(
             hdr.tcp.setInvalid();
         }
         if (hdr.udp.isValid()) {
+            orig_l3_csum = hdr.udp.checksum;
             hdr.inner_udp = hdr.udp;
             hdr.inner_udp.setValid();
         }
@@ -316,6 +320,16 @@ control nat_ingress(
         hdr.geneve.vni = 24w99; // XXX hard coded implicit boundary services vni
         hdr.geneve.reserved2 = 8w0;
         hdr.geneve.setValid();
+
+        hdr.udp.checksum = csum.calculate({
+            hdr.ipv6.src,
+            hdr.ipv6.dst,
+            orig_l3_len + 16w14 + 16w8 + 16w8, // orig + eth + udp + geneve
+            8w17, // udp next header
+            16w6081, 16w6081, // geneve src/dst port
+            orig_l3_len + 16w14 + 16w8 + 16w8, // orig + eth + udp + geneve
+            orig_csum,
+        });
 
     }
 

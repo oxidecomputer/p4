@@ -440,6 +440,9 @@ impl<'a> PipelineGenerator<'a> {
                     Type::Void => {
                         todo!();
                     }
+                    Type::List(_) => {
+                        todo!();
+                    }
                 }
             }
             let mut control_params = Vec::new();

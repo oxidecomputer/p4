@@ -194,6 +194,17 @@ impl<'a> HlirGenerator<'a> {
                     _ => Type::Void,
                 })
             }
+            ExpressionKind::List(elements) => {
+                let mut type_elements = Vec::new();
+                for e in elements {
+                    let ty = match self.expression(e.as_ref(), names) {
+                        Some(ty) => ty,
+                        None => return None,
+                    };
+                    type_elements.push(Box::new(ty));
+                }
+                Some(Type::List(type_elements))
+            }
         }
     }
 
@@ -228,6 +239,14 @@ impl<'a> HlirGenerator<'a> {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index a void".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
+            Type::List(_) => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "cannot index a list".into(),
                     token: lval.token.clone(),
                 });
                 None
