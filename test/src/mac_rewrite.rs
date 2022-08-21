@@ -48,7 +48,7 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
     let (tx0_p, tx0_c) = ring::<R, N, F>(fb.clone());
     let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
     let (tx2_p, tx2_c) = ring::<R, N, F>(fb.clone());
-    let (tx3_p, tx3_c) = ring::<R, N, F>(fb.clone());
+    let (tx3_p, tx3_c) = ring::<R, N, F>(fb);
 
     // create phys
     let phy0 = Phy::new(0, rx0_p);
@@ -77,17 +77,17 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
 
         pipeline.add_local_table_entry(
             0,
-            &addr_c.octets().to_vec(),
+            addr_c.octets().as_ref(),
             &Vec::new(),
         );
         pipeline.add_local_table_entry(
             0,
-            &addr_d.octets().to_vec(),
+            addr_d.octets().as_ref(),
             &Vec::new(),
         );
         pipeline.add_local_table_entry(
             0,
-            &addr_e.octets().to_vec(),
+            addr_e.octets().as_ref(),
             &Vec::new(),
         );
 
@@ -95,20 +95,20 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
 
         pipeline.add_resolver_table_entry(
             0,
-            &addr_c.octets().to_vec(),
-            &vec![0x44, 0x44, 0x44, 0x44, 0x44, 0x44],
+            addr_c.octets().as_ref(),
+            &[0x44, 0x44, 0x44, 0x44, 0x44, 0x44],
         );
 
         pipeline.add_resolver_table_entry(
             0,
-            &addr_d.octets().to_vec(),
-            &vec![0x33, 0x33, 0x33, 0x33, 0x33, 0x33],
+            addr_d.octets().as_ref(),
+            &[0x33, 0x33, 0x33, 0x33, 0x33, 0x33],
         );
 
         pipeline.add_resolver_table_entry(
             0,
-            &addr_e.octets().to_vec(),
-            &vec![0x22, 0x22, 0x22, 0x22, 0x22, 0x22],
+            addr_e.octets().as_ref(),
+            &[0x22, 0x22, 0x22, 0x22, 0x22, 0x22],
         );
 
         // routing table entries

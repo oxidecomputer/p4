@@ -234,7 +234,7 @@ impl<'a> PipelineGenerator<'a> {
                 if let Type::UserDefined(typename) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
-                        param_types.push(quote!{
+                        param_types.push(quote! {
                             &p4rs::externs::#extern_type
                         })
                     }
@@ -481,7 +481,7 @@ impl<'a> PipelineGenerator<'a> {
                     if self.ast.get_extern(typename).is_some() {
                         control_params.push(quote! { #name });
                         let extern_type = format_ident!("{}", typename);
-                        control_param_types.push(quote!{
+                        control_param_types.push(quote! {
                             &p4rs::externs::#extern_type
                         });
                     }
@@ -573,7 +573,7 @@ impl<'a> PipelineGenerator<'a> {
                 if self.ast.get_extern(typename).is_some() {
                     control_params.push(quote! { #name });
                     let extern_type = format_ident!("{}", typename);
-                    control_param_types.push(quote!{
+                    control_param_types.push(quote! {
                         &p4rs::externs::#extern_type
                     });
                 }

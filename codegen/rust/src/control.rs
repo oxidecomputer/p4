@@ -54,7 +54,7 @@ impl<'a> ControlGenerator<'a> {
                 if let Type::UserDefined(typename) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
-                        param_types.push(quote!{
+                        param_types.push(quote! {
                             &p4rs::externs::#extern_type
                         })
                     }
@@ -171,7 +171,7 @@ impl<'a> ControlGenerator<'a> {
                 if self.ast.get_extern(typename).is_some() {
                     let name = format_ident!("{}", var.name);
                     let extern_type = format_ident!("{}", typename);
-                    params.push(quote!{
+                    params.push(quote! {
                         #name: &p4rs::externs::#extern_type
                     })
                 }

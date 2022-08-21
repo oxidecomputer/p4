@@ -193,10 +193,9 @@ impl<'a> HlirGenerator<'a> {
                     if let Type::UserDefined(typename) = &name_info.ty {
                         if let Some(ext) = self.ast.get_extern(typename) {
                             if let Some(m) = ext.get_method(call.lval.leaf()) {
-                                self.hlir.expression_types.insert(
-                                    xpr.clone(),
-                                    m.return_type.clone(),
-                                );
+                                self.hlir
+                                    .expression_types
+                                    .insert(xpr.clone(), m.return_type.clone());
                                 return Some(m.return_type.clone());
                             }
                         }

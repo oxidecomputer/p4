@@ -48,7 +48,7 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
     let (tx0_p, tx0_c) = ring::<R, N, F>(fb.clone());
     let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
     let (tx2_p, tx2_c) = ring::<R, N, F>(fb.clone());
-    let (tx3_p, tx3_c) = ring::<R, N, F>(fb.clone());
+    let (tx3_p, tx3_c) = ring::<R, N, F>(fb);
 
     // create phys
     let phy0 = Phy::new(0, rx0_p);

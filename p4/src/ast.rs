@@ -824,7 +824,7 @@ impl Extern {
     pub fn get_method(&self, name: &str) -> Option<&ExternMethod> {
         for m in &self.methods {
             if m.name == name {
-                return Some(m)
+                return Some(m);
             }
         }
         None
