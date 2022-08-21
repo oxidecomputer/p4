@@ -49,6 +49,7 @@ impl<'a> HeaderGenerator<'a> {
         let mut member_values = Vec::new();
         let mut set_statements = Vec::new();
         let mut to_bitvec_statements = Vec::new();
+        let mut checksum_statements = Vec::new();
         let mut dump_statements = Vec::new();
         let fmt = "{} ".repeat(h.members.len() * 2);
         let fmt = fmt.trim();
@@ -66,6 +67,9 @@ impl<'a> HeaderGenerator<'a> {
             });
             to_bitvec_statements.push(quote! {
                 x[#offset..#end] |= &self.#name
+            });
+            checksum_statements.push(quote! {
+                csum += self.#name.csum()
             });
             dump_statements.push(quote! {
                 #name_s.cyan(),
@@ -111,6 +115,14 @@ impl<'a> HeaderGenerator<'a> {
                     let mut x = bitvec![u8, Msb0; 0u8; Self::size()];
                     #(#to_bitvec_statements);*;
                     x
+                }
+            }
+
+            impl Checksum for #name {
+                fn csum(&self) -> u16 {
+                    let mut csum: u16 = 0;
+                    #(#checksum_statements);*;
+                    csum
                 }
             }
 

@@ -1,7 +1,4 @@
-//use std::ops;
 use bitvec::prelude::*;
-
-//struct BitMath(BitVec<u8, Msb0>);
 
 pub fn add(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     if a.len() != b.len() {
@@ -50,16 +47,6 @@ pub fn add_generic(
 
     c
 }
-
-/*
-impl ops::Add<&BitVec<u8, Msb0>> for &BitVec<u8, Msb0> {
-    type Output = BitVec<u8, Msb0>;
-
-    fn add(self, rhs: &BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
-        add(self, rhs)
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {
