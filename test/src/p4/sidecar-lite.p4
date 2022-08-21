@@ -286,7 +286,6 @@ control nat_ingress(
             orig_l3_len = hdr.ipv6.payload_len + 16w40;
         }
 
-
         // move L4 to inner L4
 
         if (hdr.tcp.isValid()) {

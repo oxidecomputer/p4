@@ -49,7 +49,17 @@ impl<'a> ControlGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (c, table) in tables {
-            let (_, param_types) = self.control_parameters(c);
+            let (_, mut param_types) = self.control_parameters(c);
+            for var in &c.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let extern_type = format_ident!("{}", typename);
+                        param_types.push(quote!{
+                            &p4rs::externs::#extern_type
+                        })
+                    }
+                }
+            }
             let n = table.key.len() as usize;
             let table_type = quote! {
                 p4rs::table::Table::<
@@ -155,6 +165,18 @@ impl<'a> ControlGenerator<'a> {
     fn generate_control_action(&mut self, control: &Control, action: &Action) {
         let name = format_ident!("{}_action_{}", control.name, action.name);
         let (mut params, _) = self.control_parameters(control);
+
+        for var in &control.variables {
+            if let Type::UserDefined(typename) = &var.ty {
+                if self.ast.get_extern(typename).is_some() {
+                    let name = format_ident!("{}", var.name);
+                    let extern_type = format_ident!("{}", typename);
+                    params.push(quote!{
+                        #name: &p4rs::externs::#extern_type
+                    })
+                }
+            }
+        }
 
         for arg in &action.parameters {
             // if the type is user defined, check to ensure it's defined

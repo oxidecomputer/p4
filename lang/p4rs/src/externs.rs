@@ -1,3 +1,5 @@
+use bitvec::prelude::*;
+
 pub struct Checksum {
 }
 
@@ -6,12 +8,15 @@ impl Checksum {
         Self{}
     }
 
-    pub fn run(&self, elements: &[&dyn crate::checksum::Checksum]) -> u16 {
+    pub fn run(&self, elements: &[&dyn crate::checksum::Checksum]) -> BitVec<u8, Msb0> {
         let mut csum: u16 = 0;
         for e in elements {
-            csum += e.csum();
+            let c: u16 = e.csum().load();
+            csum += c;
         }
-        csum
+        let mut result = bitvec![u8, Msb0; 0u8, 16];
+        result.store(csum);
+        result
     }
 
 }

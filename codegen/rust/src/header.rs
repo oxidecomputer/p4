@@ -69,7 +69,7 @@ impl<'a> HeaderGenerator<'a> {
                 x[#offset..#end] |= &self.#name
             });
             checksum_statements.push(quote! {
-                csum += self.#name.csum()
+                csum = p4rs::bitmath::add(csum.clone(), self.#name.csum())
             });
             dump_statements.push(quote! {
                 #name_s.cyan(),
@@ -119,8 +119,8 @@ impl<'a> HeaderGenerator<'a> {
             }
 
             impl Checksum for #name {
-                fn csum(&self) -> u16 {
-                    let mut csum: u16 = 0;
+                fn csum(&self) -> BitVec::<u8, Msb0> {
+                    let mut csum = BitVec::new();
                     #(#checksum_statements);*;
                     csum
                 }

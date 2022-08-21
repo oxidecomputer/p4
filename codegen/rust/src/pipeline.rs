@@ -228,7 +228,19 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (control, table) in tables {
-            let (_, param_types) = cg.control_parameters(control);
+            let (_, mut param_types) = cg.control_parameters(control);
+
+            for var in &control.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let extern_type = format_ident!("{}", typename);
+                        param_types.push(quote!{
+                            &p4rs::externs::#extern_type
+                        })
+                    }
+                }
+            }
+
             let n = table.key.len() as usize;
             let table_type = quote! {
                 p4rs::table::Table::<
@@ -455,12 +467,27 @@ impl<'a> PipelineGenerator<'a> {
                 let ty = rust_type(&p.ty);
                 control_param_types.push(quote! { &mut #ty });
             }
+
             for p in &a.parameters {
                 let name = format_ident!("{}", p.name);
                 action_params.push(quote! { #name });
                 let ty = rust_type(&p.ty);
                 action_param_types.push(quote! { #ty });
             }
+
+            for var in &control.variables {
+                let name = format_ident!("{}", var.name);
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        control_params.push(quote! { #name });
+                        let extern_type = format_ident!("{}", typename);
+                        control_param_types.push(quote!{
+                            &p4rs::externs::#extern_type
+                        });
+                    }
+                }
+            }
+
             //XXX let tname = format_ident!("{}", table.name);
             let tname = format_ident!("{}_table_{}", control.name, table.name);
             action_match_body.extend(quote! {
@@ -538,6 +565,19 @@ impl<'a> PipelineGenerator<'a> {
             control_params.push(quote! { #name });
             let ty = rust_type(&p.ty);
             control_param_types.push(quote! { &mut #ty });
+        }
+
+        for var in &control.variables {
+            let name = format_ident!("{}", var.name);
+            if let Type::UserDefined(typename) = &var.ty {
+                if self.ast.get_extern(typename).is_some() {
+                    control_params.push(quote! { #name });
+                    let extern_type = format_ident!("{}", typename);
+                    control_param_types.push(quote!{
+                        &p4rs::externs::#extern_type
+                    });
+                }
+            }
         }
 
         quote! {

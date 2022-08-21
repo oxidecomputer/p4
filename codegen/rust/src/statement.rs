@@ -313,14 +313,6 @@ impl<'a> StatementGenerator<'a> {
                 // before we get here
 
                 self.generate_control_extern_call(control, c, tokens);
-                /*
-                panic!(
-                    "codegen: only <tablename>.apply() and \
-                    <header>.{{isValid, setValid, setInvalid}}() calls are \
-                    supported in apply blocks right now: {:#?}",
-                    c
-                );
-                */
             }
         }
     }
@@ -455,6 +447,15 @@ impl<'a> StatementGenerator<'a> {
         for p in &control.parameters {
             let name = format_ident!("{}", p.name);
             action_args.push(quote! { #name });
+        }
+
+        for var in &control.variables {
+            let name = format_ident!("{}", var.name);
+            if let Type::UserDefined(typename) = &var.ty {
+                if self.ast.get_extern(typename).is_some() {
+                    action_args.push(quote! { &#name });
+                }
+            }
         }
 
         let mut selector_components = Vec::new();
