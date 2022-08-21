@@ -188,6 +188,20 @@ impl<'a> HlirGenerator<'a> {
                 for arg in &call.args {
                     self.expression(arg.as_ref(), names);
                 }
+                // TODO check extern methods in checker before getting here
+                if let Some(name_info) = names.get(call.lval.root()) {
+                    if let Type::UserDefined(typename) = &name_info.ty {
+                        if let Some(ext) = self.ast.get_extern(typename) {
+                            if let Some(m) = ext.get_method(call.lval.leaf()) {
+                                self.hlir.expression_types.insert(
+                                    xpr.clone(),
+                                    m.return_type.clone(),
+                                );
+                                return Some(m.return_type.clone());
+                            }
+                        }
+                    }
+                };
                 //TODO less special case-y?
                 Some(match call.lval.leaf() {
                     "isValid" => Type::Bool,

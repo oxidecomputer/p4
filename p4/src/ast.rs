@@ -664,6 +664,7 @@ pub enum MatchKind {
 pub enum Statement {
     Empty,
     Assignment(Lvalue, Box<Expression>),
+    //TODO get rid of this in favor of ExpressionKind::Call ???
     Call(Call),
     If(IfBlock),
     Variable(Variable),
@@ -818,6 +819,15 @@ impl Extern {
             );
         }
         names
+    }
+
+    pub fn get_method(&self, name: &str) -> Option<&ExternMethod> {
+        for m in &self.methods {
+            if m.name == name {
+                return Some(m)
+            }
+        }
+        None
     }
 }
 

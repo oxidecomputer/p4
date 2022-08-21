@@ -18,10 +18,17 @@ struct IngressMetadata {
     bool nat;
     bit<16> nat_id;
 }
+
+// XXX import from softnpu.p4
 struct EgressMetadata {
     bit<8> port;
     bit<128> nexthop;
     bool drop;
+}
+
+// XXX import from softnpu.p4
+extern Checksum {
+    bit<16> run<T>(in T data);
 }
 
 SoftNPU(
@@ -321,14 +328,14 @@ control nat_ingress(
         hdr.geneve.reserved2 = 8w0;
         hdr.geneve.setValid();
 
-        hdr.udp.checksum = csum.calculate({
+        hdr.udp.checksum = csum.run({
             hdr.ipv6.src,
             hdr.ipv6.dst,
             orig_l3_len + 16w14 + 16w8 + 16w8, // orig + eth + udp + geneve
             8w17, // udp next header
             16w6081, 16w6081, // geneve src/dst port
             orig_l3_len + 16w14 + 16w8 + 16w8, // orig + eth + udp + geneve
-            orig_csum,
+            orig_l3_csum,
         });
 
     }
