@@ -93,7 +93,7 @@ impl<'a> ExpressionGenerator<'a> {
                     parts.push(self.generate_expression(e));
                 }
                 quote! {
-                    [ #(#parts),* ]
+                    &[ #(&#parts),* ]
                 }
             }
         }

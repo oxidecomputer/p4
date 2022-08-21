@@ -13,6 +13,7 @@ pub mod error;
 //pub mod rice;
 pub mod bitmath;
 pub mod checksum;
+pub mod externs;
 pub mod table;
 
 #[derive(Debug)]

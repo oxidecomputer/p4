@@ -348,7 +348,7 @@ impl<'a> StatementGenerator<'a> {
             .collect();
 
         tokens.extend(quote! {
-            #(#lvref).*(#(#args),*)
+            #(#lvref).*(#(#args),*);
         })
     }
 

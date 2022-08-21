@@ -39,7 +39,7 @@ control ingress(inout headers_t hdr) {
     apply {
         csum.run({
             hdr.eth.dst,
-            hdr.ipv6,
+            hdr.ipv6.src,
             hdr.udp.src_port,
         });
     }

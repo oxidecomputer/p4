@@ -1,3 +1,5 @@
+use bitvec::prelude::*;
+
 struct Csum(u16);
 
 impl Csum {
@@ -95,5 +97,21 @@ mod tests {
         let y = udp::ipv6_checksum(&p, &src, &dst);
 
         assert_eq!(x, y);
+    }
+}
+
+pub trait Checksum {
+    fn csum(&self) -> u16;
+}
+
+impl Checksum for BitVec<u8, Msb0> {
+    fn csum(&self) -> u16 {
+        let x: u128 = self.load();
+        let buf = x.to_be_bytes();
+        let mut c: u16 = 0;
+        for i in (0..16).step_by(2) {
+            c += u16::from_be_bytes([buf[i], buf[i+1]])
+        }
+        !c
     }
 }
