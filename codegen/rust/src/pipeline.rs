@@ -152,7 +152,7 @@ impl<'a> PipelineGenerator<'a> {
                 let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
                 if !accept {
                     // drop the packet
-                    dtrace_provider::parser_dropped!(||());
+                    softnpu_provider::parser_dropped!(||());
                     println!("parser drop");
                     return None
                 }
@@ -160,7 +160,7 @@ impl<'a> PipelineGenerator<'a> {
                 let dump = parsed.dump();
                 println!("{}", "<<<".dimmed());
                 println!("{}", &dump); //XXX
-                dtrace_provider::parser_accepted!(||(&dump));
+                softnpu_provider::parser_accepted!(||(&dump));
 
                 //
                 // 4. Calculate parsed header size
@@ -185,7 +185,7 @@ impl<'a> PipelineGenerator<'a> {
 
                 let port = if egress_metadata.port.is_empty()
                     || egress_metadata.drop {
-                    dtrace_provider::control_dropped!(||(&dump));
+                    softnpu_provider::control_dropped!(||(&dump));
                     println!("{}", "no match".red());
                     println!("{}", "---".dimmed());
                     return None;
@@ -197,7 +197,7 @@ impl<'a> PipelineGenerator<'a> {
                 println!("{}", ">>>".dimmed());
                 println!("{}", &dump); //XXX
 
-                dtrace_provider::control_accepted!(||(&dump));
+                softnpu_provider::control_accepted!(||(&dump));
                 println!("{}", "control pass".green());
                 println!("{}", "---".dimmed());
 

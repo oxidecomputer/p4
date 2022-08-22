@@ -151,11 +151,15 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
 fn dtrace_probes() -> TokenStream {
     quote! {
         #[usdt::provider]
-        mod dtrace_provider {
+        mod softnpu_provider {
             fn parser_accepted(_: &str) {}
+            fn parser_transition(_: &str) {}
             fn parser_dropped() {}
+            fn control_apply(_: &str) {}
             fn control_dropped(_: &str) {}
             fn control_accepted(_: &str) {}
+            fn control_table_hit(_: &str) {}
+            fn control_table_miss(_: &str) {}
         }
     }
 }

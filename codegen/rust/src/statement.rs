@@ -206,7 +206,10 @@ impl<'a> StatementGenerator<'a> {
                                     let name = format_ident!("{}", arg.name);
                                     args.push(quote! { #name });
                                 }
-                                quote! { return #state_name( #(#args),* ); }
+                                quote! { 
+                                    softnpu_provider::parser_transition!(||(#state_ref));
+                                    return #state_name( #(#args),* ); 
+                                }
                             }
                         }
                     }
@@ -417,9 +420,11 @@ impl<'a> StatementGenerator<'a> {
                 args.push(quote! { #name });
             }
 
+            let cname = &control_instance.name;
             let call = format_ident!("{}_apply", control_instance.name);
 
             tokens.extend(quote! {
+                softnpu_provider::control_apply!(||(#cname));
                 #call(#(#args),*);
             });
 
@@ -442,6 +447,9 @@ impl<'a> StatementGenerator<'a> {
 
         let table_name =
             format_ident!("{}_table_{}", control_instance.name, table.name,);
+
+        let table_name_str =
+            format!("{}_table_{}", control_instance.name, table.name,);
 
         let mut action_args = Vec::new();
         for p in &control.parameters {
@@ -474,7 +482,7 @@ impl<'a> StatementGenerator<'a> {
             let names = control.names();
 
             if is_header(&lval.pop_right(), self.ast, &names) {
-                //TODO: to_bitvec is bad here, copying on data path
+                //TODO: to_biguint is bad here, copying on data path
                 selector_components.push(quote! {
                     p4rs::bitvec_to_biguint(
                         &#(#lvref).*
@@ -487,19 +495,27 @@ impl<'a> StatementGenerator<'a> {
             }
         }
         let default_action =
-            format_ident!("{}_action_{}", control.name, table.default_action,);
+            format_ident!("{}_action_{}", control.name, table.default_action);
         tokens.extend(quote! {
             let matches = #table_name.match_selector(
                 &[#(#selector_components),*]
             );
             if matches.len() > 0 {
+                softnpu_provider::control_table_hit!(||#table_name_str);
                 (matches[0].action)(#(#action_args),*)
             }
         });
         if table.default_action != "NoAction" {
             tokens.extend(quote! {
                 else {
+                    softnpu_provider::control_table_miss!(||#table_name_str);
                     #default_action(#(#action_args),*);
+                }
+            });
+        } else {
+            tokens.extend(quote! {
+                else {
+                    softnpu_provider::control_table_miss!(||#table_name_str);
                 }
             });
         }
