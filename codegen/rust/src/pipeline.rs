@@ -77,12 +77,15 @@ impl<'a> PipelineGenerator<'a> {
 
         let table_modifiers = self.table_modifiers(control);
 
+        let c_create_fn = format_ident!("_{}_pipeline_create", inst.name);
+
         let pipeline = quote! {
             pub struct #pipeline_name {
                 #(#table_members),*,
                 #parse_member,
                 #control_member
             }
+
 
             impl #pipeline_name {
                 pub fn new() -> Self {
@@ -103,6 +106,13 @@ impl<'a> PipelineGenerator<'a> {
             }
 
             unsafe impl Send for #pipeline_name { }
+
+            #[no_mangle]
+            pub extern "C" fn #c_create_fn() -> *mut dyn p4rs::Pipeline {
+                let pipeline = main_pipeline::new();
+                let boxpipe: Box<dyn p4rs::Pipeline> = Box::new(pipeline);
+                Box::into_raw(boxpipe)
+            }
         };
 
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);

@@ -81,7 +81,7 @@ pub struct packet_out<'a> {
     pub payload_data: &'a [u8],
 }
 
-pub trait Pipeline {
+pub trait Pipeline: Send {
     /// Process a packet for the specified port optionally producing an output
     /// packet and output port number.
     fn process_packet<'a>(
