@@ -38,5 +38,23 @@ cargo test
 
 pushd test
 
-banner "mac rewrite"
+banner "mac rewr"
 RUST_BACKTRACE=1 cargo test mac_rewrite -- --nocapture
+
+banner "dyn load"
+RUST_BACKTRACE=1 cargo test dload -- --nocapture
+
+banner "disag"
+RUST_BACKTRACE=1 cargo test disag_router -- --nocapture
+
+banner "dyn rtr"
+RUST_BACKTRACE=1 cargo test dynamic_router -- --nocapture
+
+banner "hub"
+RUST_BACKTRACE=1 cargo test hub -- --nocapture
+
+banner "router"
+RUST_BACKTRACE=1 cargo test basic_router -- --nocapture
+
+banner "headers"
+RUST_BACKTRACE=1 cargo test headers -- --nocapture

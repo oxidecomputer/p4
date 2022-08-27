@@ -4,7 +4,7 @@ use std::thread::{sleep, spawn};
 use std::time::Duration;
 use xfr::{ring, FrameBuffer};
 
-p4_macro::use_p4!("p4/examples/codegen/hub.p4");
+p4_macro::use_p4!(p4 = "p4/examples/codegen/hub.p4", pipeline_name = "hub");
 
 ///
 ///                           ~~~~~~~~~~
@@ -45,11 +45,13 @@ fn hub() -> Result<(), anyhow::Error> {
     phy1.run(tx1_c, phy1_egress);
     phy2.run(tx2_c, phy2_egress);
 
+    let mut pipeline = main_pipeline::new();
+
     // run the softnpu with the compiled p4 pipelines
     spawn(move || {
         let rx = &[rx1_c, rx2_c];
         let tx = &[tx1_p, tx2_p];
-        softnpu::run(rx, tx, ingress_table_tbl(), parse_start, ingress_apply);
+        softnpu::run_pipeline(rx, tx, &mut pipeline);
     });
 
     // shove some test data through the soft npu

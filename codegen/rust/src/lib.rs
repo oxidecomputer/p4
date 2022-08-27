@@ -39,6 +39,11 @@ struct Context {
     pipelines: HashMap<String, TokenStream>,
 }
 
+pub struct Settings {
+    /// Name to give to the C-ABI constructor.
+    pub pipeline_name: String,
+}
+
 pub fn sanitize(ast: &mut AST) {
     for h in &mut ast.headers {
         for m in &mut h.members {
@@ -59,8 +64,13 @@ pub fn sanitize_string(s: &mut String) {
     }
 }
 
-pub fn emit(ast: &AST, hlir: &Hlir, filename: &str) -> io::Result<()> {
-    let tokens = emit_tokens(ast, hlir);
+pub fn emit(
+    ast: &AST,
+    hlir: &Hlir,
+    filename: &str,
+    settings: Settings,
+) -> io::Result<()> {
+    let tokens = emit_tokens(ast, hlir, settings);
 
     //
     // format the code and write it out to a Rust source file
@@ -90,7 +100,7 @@ fn write_to_tempfile(tokens: &TokenStream) -> io::Result<()> {
     Ok(())
 }
 
-pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
+pub fn emit_tokens(ast: &AST, hlir: &Hlir, settings: Settings) -> TokenStream {
     //
     // initialize a context to track state while we generate code
     //
@@ -113,7 +123,7 @@ pub fn emit_tokens(ast: &AST, hlir: &Hlir) -> TokenStream {
     let mut cg = ControlGenerator::new(ast, hlir, &mut ctx);
     cg.generate();
 
-    let mut pg = PipelineGenerator::new(ast, hlir, &mut ctx);
+    let mut pg = PipelineGenerator::new(ast, hlir, &mut ctx, &settings);
     pg.generate();
 
     //

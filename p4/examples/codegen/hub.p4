@@ -18,6 +18,7 @@ header ethernet_t {
 parser parse(
     packet_in pkt,
     out headers_t headers,
+    inout IngressMetadata ingress,
 ){
     state start {
         pkt.extract(headers.ethernet);
@@ -51,8 +52,8 @@ control ingress(
         }
         default_action = drop;
         const entries = {
-            8w1 : forward(2);
-            8w2 : forward(1);
+            8w0 : forward(1);
+            8w1 : forward(0);
         }
     }
 
@@ -113,7 +114,11 @@ extern packet_out {
 // XXX import from softnpu.p4
 struct IngressMetadata {
     bit<8> port;
+    bool nat;
+    bit<16> l4_dst_port;
 }
 struct EgressMetadata {
     bit<8> port;
+    bit<128> nexthop;
+    bool drop;
 }

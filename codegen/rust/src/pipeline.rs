@@ -1,4 +1,4 @@
-use crate::{rust_type, type_size, Context};
+use crate::{rust_type, type_size, Context, Settings};
 use p4::ast::{Control, MatchKind, PackageInstance, Parser, Table, Type, AST};
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
@@ -8,6 +8,7 @@ pub(crate) struct PipelineGenerator<'a> {
     ast: &'a AST,
     ctx: &'a mut Context,
     hlir: &'a Hlir,
+    settings: &'a Settings,
 }
 
 impl<'a> PipelineGenerator<'a> {
@@ -15,8 +16,14 @@ impl<'a> PipelineGenerator<'a> {
         ast: &'a AST,
         hlir: &'a Hlir,
         ctx: &'a mut Context,
+        settings: &'a Settings,
     ) -> Self {
-        Self { ast, hlir, ctx }
+        Self {
+            ast,
+            hlir,
+            ctx,
+            settings,
+        }
     }
 
     pub(crate) fn generate(&mut self) {
@@ -77,7 +84,8 @@ impl<'a> PipelineGenerator<'a> {
 
         let table_modifiers = self.table_modifiers(control);
 
-        let c_create_fn = format_ident!("_{}_pipeline_create", inst.name);
+        let c_create_fn =
+            format_ident!("_{}_pipeline_create", self.settings.pipeline_name);
 
         let pipeline = quote! {
             pub struct #pipeline_name {

@@ -168,6 +168,8 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 let key: u128 = addr.into();
                 let mask = if p.len == 128 {
                     u128::MAX
+                } else if p.len == 0 {
+                    0u128
                 } else {
                     ((1u128 << p.len) - 1) << (128 - p.len)
                 };

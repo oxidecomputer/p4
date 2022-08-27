@@ -3,7 +3,27 @@ use std::fs;
 use p4::check::Diagnostics;
 use p4::{check, error, error::SemanticError, lexer, parser, preprocessor};
 use proc_macro::TokenStream;
+use serde::Deserialize;
+use serde_tokenstream::ParseWrapper;
 use syn::{parse, LitStr};
+
+#[derive(Deserialize)]
+struct MacroSettings {
+    p4: ParseWrapper<LitStr>,
+    pipeline_name: ParseWrapper<LitStr>,
+}
+
+struct GenerationSettings {
+    pipeline_name: String,
+}
+
+impl Default for GenerationSettings {
+    fn default() -> Self {
+        Self {
+            pipeline_name: "main".to_owned(),
+        }
+    }
+}
 
 #[proc_macro]
 pub fn use_p4(item: TokenStream) -> TokenStream {
@@ -15,13 +35,27 @@ pub fn use_p4(item: TokenStream) -> TokenStream {
 }
 
 fn do_use_p4(item: TokenStream) -> Result<TokenStream, syn::Error> {
-    match parse::<LitStr>(item) {
-        Ok(filename) => generate_rs(filename.value()),
-        Err(e) => Err(syn::Error::new(e.span(), "expected filename")),
-    }
+    let (filename, settings) =
+        if let Ok(filename) = parse::<LitStr>(item.clone()) {
+            (filename.value(), GenerationSettings::default())
+        } else {
+            let MacroSettings { p4, pipeline_name } =
+                serde_tokenstream::from_tokenstream(&item.into())?;
+            (
+                p4.into_inner().value(),
+                GenerationSettings {
+                    pipeline_name: pipeline_name.into_inner().value(),
+                },
+            )
+        };
+
+    generate_rs(filename, settings)
 }
 
-fn generate_rs(filename: String) -> Result<TokenStream, syn::Error> {
+fn generate_rs(
+    filename: String,
+    settings: GenerationSettings,
+) -> Result<TokenStream, syn::Error> {
     //TODO gracefull error handling
 
     let contents = fs::read_to_string(filename).unwrap();
@@ -33,7 +67,13 @@ fn generate_rs(filename: String) -> Result<TokenStream, syn::Error> {
     let ast = psr.run().unwrap();
     let (hlir, diags) = check::all(&ast);
     check(&lines, &diags);
-    let tokens = p4_rust::emit_tokens(&ast, &hlir);
+    let tokens = p4_rust::emit_tokens(
+        &ast,
+        &hlir,
+        p4_rust::Settings {
+            pipeline_name: settings.pipeline_name,
+        },
+    );
 
     Ok(tokens.into())
 }

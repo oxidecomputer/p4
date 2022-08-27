@@ -83,7 +83,14 @@ fn main() -> Result<()> {
     match opts.target {
         Target::Rust => {
             p4_rust::sanitize(&mut ast);
-            p4_rust::emit(&ast, &hlir, &opts.out)?;
+            p4_rust::emit(
+                &ast,
+                &hlir,
+                &opts.out,
+                p4_rust::Settings {
+                    pipeline_name: "main".to_owned(),
+                },
+            )?;
         }
         Target::RedHawk => {
             todo!("RedHawk code generator");

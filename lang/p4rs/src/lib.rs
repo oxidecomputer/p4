@@ -66,6 +66,7 @@ impl<'a> std::cmp::Eq for Bit<'a, 8> {}
 /// Every packet that goes through a P4 pipeline is represented as a `packet_in`
 /// instance. `packet_in` objects wrap an underlying mutable data reference that
 /// is ultimately rooted in a memory mapped region containing a ring of packets.
+#[derive(Debug)]
 pub struct packet_in<'a> {
     /// The underlying data. Owned by an external, memory-mapped packet ring.
     pub data: &'a [u8],
@@ -76,6 +77,7 @@ pub struct packet_in<'a> {
     pub index: usize,
 }
 
+#[derive(Debug)]
 pub struct packet_out<'a> {
     pub header_data: Vec<u8>,
     pub payload_data: &'a [u8],

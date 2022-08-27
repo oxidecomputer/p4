@@ -11,7 +11,7 @@ const R: usize = 1024;
 const N: usize = 4096;
 const F: usize = 1500;
 
-p4_macro::use_p4!("test/src/p4/router.p4");
+p4_macro::use_p4!(p4 = "test/src/p4/router.p4", pipeline_name = "disag",);
 
 ///
 ///   ~~~~~~~~~~                 
