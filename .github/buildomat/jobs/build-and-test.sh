@@ -29,7 +29,7 @@ done
 
 banner "check"
 cargo fmt -- --check
-cargo clippy
+cargo clippy -- --deny warnings
 cargo check
 
 banner "test"
