@@ -837,6 +837,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sidecar-lite"
+version = "0.1.0"
+dependencies = [
+ "bitvec",
+ "colored",
+ "num",
+ "p4-macro",
+ "p4rs",
+ "usdt",
+]
+
+[[package]]
 name = "slog"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

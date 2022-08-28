@@ -64,9 +64,10 @@ fn generate_rs(
     let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
     let lxr = lexer::Lexer::new(lines.clone());
     let mut psr = parser::Parser::new(lxr);
-    let ast = psr.run().unwrap();
+    let mut ast = psr.run().unwrap();
     let (hlir, diags) = check::all(&ast);
     check(&lines, &diags);
+    p4_rust::sanitize(&mut ast);
     let tokens = p4_rust::emit_tokens(
         &ast,
         &hlir,
