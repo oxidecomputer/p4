@@ -163,7 +163,7 @@ parser parse(
 
     state ipv6 {
         pkt.extract(hdr.ipv6);
-        if (hdr.ipv6.next_hdr == 8w1) {
+        if (hdr.ipv6.next_hdr == 8w58) {
             transition icmp;
         }
         if (hdr.ipv6.next_hdr == 8w17) {
