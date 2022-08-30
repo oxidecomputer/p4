@@ -21,6 +21,36 @@ impl Default for Key {
     }
 }
 
+impl Key {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Key::Exact(x) => x.to_bytes_be(),
+            Key::Range(a, z) => {
+                let mut v = a.to_bytes_be();
+                v.extend_from_slice(&z.to_bytes_be());
+                v
+            }
+            Key::Ternary(t) => match t {
+                Ternary::DontCare => Vec::new(),
+                Ternary::Value(v) => v.to_bytes_be(),
+                Ternary::Masked(v, m) => {
+                    let mut x = v.to_bytes_be();
+                    x.extend_from_slice(&m.to_bytes_be());
+                    x
+                }
+            },
+            Key::Lpm(p) => {
+                let mut v: Vec<u8> = match p.addr {
+                    IpAddr::V4(a) => a.octets().into(),
+                    IpAddr::V6(a) => a.octets().into(),
+                };
+                v.push(p.len);
+                v
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Ternary {
     DontCare,
@@ -209,6 +239,11 @@ pub struct TableEntry<const D: usize, A: Clone> {
     pub action: A,
     pub priority: u32,
     pub name: String,
+
+    // the following are not used operationally, strictly for observability as
+    // the closure contained in `A` is hard to get at.
+    pub action_id: u32,
+    pub parameter_data: Vec<u8>,
 }
 
 // TODO: Cannot hash on just the key, this does not work for multipath.

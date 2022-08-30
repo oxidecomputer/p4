@@ -206,9 +206,9 @@ impl<'a> StatementGenerator<'a> {
                                     let name = format_ident!("{}", arg.name);
                                     args.push(quote! { #name });
                                 }
-                                quote! { 
+                                quote! {
                                     softnpu_provider::parser_transition!(||(#state_ref));
-                                    return #state_name( #(#args),* ); 
+                                    return #state_name( #(#args),* );
                                 }
                             }
                         }

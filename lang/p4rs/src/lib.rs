@@ -5,6 +5,7 @@ use std::fmt;
 use std::net::IpAddr;
 
 pub use error::TryFromSliceError;
+use serde::{Deserialize, Serialize};
 
 use bitvec::prelude::*;
 
@@ -83,6 +84,13 @@ pub struct packet_out<'a> {
     pub payload_data: &'a [u8],
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TableEntry {
+    pub action_id: u32,
+    pub keyset_data: Vec<u8>,
+    pub parameter_data: Vec<u8>,
+}
+
 pub trait Pipeline: Send {
     /// Process a packet for the specified port optionally producing an output
     /// packet and output port number.
@@ -92,6 +100,7 @@ pub trait Pipeline: Send {
         pkt: &mut packet_in<'a>,
     ) -> Option<(packet_out<'a>, u8)>;
 
+    //TODO use struct TableEntry?
     /// Add an entry to a table identified by table_id.
     fn add_table_entry(
         &mut self,
@@ -103,6 +112,12 @@ pub trait Pipeline: Send {
 
     /// Remove an entry from a table identified by table_id.
     fn remove_table_entry(&mut self, table_id: u32, keyset_data: &[u8]);
+
+    /// Get all the entries in a table.
+    fn get_table_entries(&self, table_id: u32) -> Option<Vec<TableEntry>>;
+
+    /// Get the number of tables.
+    fn get_table_count(&self) -> u32;
 }
 
 /// A fixed length header trait.

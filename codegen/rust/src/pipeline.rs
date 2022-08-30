@@ -81,6 +81,8 @@ impl<'a> PipelineGenerator<'a> {
         let add_table_entry_method = self.add_table_entry_method(control);
 
         let remove_table_entry_method = self.remove_table_entry_method(control);
+        let get_table_entries_method = self.get_table_entries_method(control);
+        let get_table_count_method = self.get_table_count_method(control);
 
         let table_modifiers = self.table_modifiers(control);
 
@@ -111,6 +113,8 @@ impl<'a> PipelineGenerator<'a> {
                 #pipeline_impl_process_packet
                 #add_table_entry_method
                 #remove_table_entry_method
+                #get_table_entries_method
+                #get_table_count_method
             }
 
             unsafe impl Send for #pipeline_name { }
@@ -159,7 +163,14 @@ impl<'a> PipelineGenerator<'a> {
                 //
                 // 2. Instantiate ingress/egress metadata
                 //
-                let mut ingress_metadata = IngressMetadata::default();
+                let mut ingress_metadata = IngressMetadata{
+                    port: {
+                        let mut x = bitvec![mut u8, Msb0; 0; 8];
+                        x.store(port);
+                        x
+                    },
+                    ..Default::default()
+                };
                 let mut egress_metadata = EgressMetadata::default();
 
                 println!("{}", "begin".green());
@@ -345,12 +356,50 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
+    fn get_table_count_method(&mut self, control: &Control) -> TokenStream {
+        let count = control.tables(self.ast).len() as u32;
+        quote! {
+            fn get_table_count(&self) -> u32 {
+                #count
+            }
+        }
+    }
+
+    fn get_table_entries_method(&mut self, control: &Control) -> TokenStream {
+        let mut body = TokenStream::new();
+
+        let tables = control.tables(self.ast);
+        for (i, (_control, table)) in tables.iter().enumerate() {
+            let i = i as u32;
+            let call = format_ident!("get_{}_table_entries", table.name);
+            body.extend(quote! {
+                #i => Some(self.#call()),
+            });
+        }
+
+        body.extend(quote! {
+            x => None,
+        });
+
+        quote! {
+            fn get_table_entries(
+                &self,
+                table_id: u32,
+            ) -> Option<Vec<p4rs::TableEntry>> {
+                match table_id {
+                    #body
+                }
+            }
+        }
+    }
+
     fn table_modifiers(&mut self, control: &Control) -> TokenStream {
         let mut tokens = TokenStream::new();
         let tables = control.tables(self.ast);
         for (control, table) in tables {
             tokens.extend(self.add_table_entry_function(table, control));
             tokens.extend(self.remove_table_entry_function(table, control));
+            tokens.extend(self.get_table_entries_function(table, control));
         }
 
         tokens
@@ -506,7 +555,6 @@ impl<'a> PipelineGenerator<'a> {
                 }
             }
 
-            //XXX let tname = format_ident!("{}", table.name);
             let tname = format_ident!("{}_table_{}", control.name, table.name);
             action_match_body.extend(quote! {
                 #i => {
@@ -534,6 +582,8 @@ impl<'a> PipelineGenerator<'a> {
                             priority: 0, //TODO
                             name: "your name here".into(), //TODO
                             action,
+                            action_id: #i,
+                            parameter_data: parameter_data.to_owned(),
                         });
                 }
             });
@@ -628,9 +678,45 @@ impl<'a> PipelineGenerator<'a> {
                             priority: 0, //TODO
                             name: "your name here".into(), //TODO
                             action,
+                            action_id: 0,
+                            parameter_data: Vec::new(),
                         }
                     );
 
+            }
+        }
+    }
+
+    fn get_table_entries_function(
+        &mut self,
+        table: &Table,
+        control: &Control,
+    ) -> TokenStream {
+        let name = format_ident!("get_{}_table_entries", table.name);
+        let tname = format_ident!("{}_table_{}", control.name, table.name);
+
+        quote! {
+            pub fn #name(&self) -> Vec<p4rs::TableEntry> {
+                let mut result = Vec::new();
+
+                for e in &self.#tname.entries{
+
+                    let mut keyset_data = Vec::new();
+                    for k in &e.key {
+                        keyset_data.extend_from_slice(&k.to_bytes());
+                    }
+
+                    let x = p4rs::TableEntry{
+                        action_id: e.action_id,
+                        keyset_data,
+                        parameter_data: e.parameter_data.clone(),
+                    };
+
+                    result.push(x);
+
+                }
+
+                result
             }
         }
     }
