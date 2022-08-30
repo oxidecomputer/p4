@@ -457,5 +457,9 @@ fn add_router_table_entry_forward(
         priority,
         name,
         action,
+
+        //TODO actual data
+        action_id: 0,
+        parameter_data: Vec::new(),
     });
 }

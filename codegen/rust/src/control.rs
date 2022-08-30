@@ -386,6 +386,11 @@ impl<'a> ControlGenerator<'a> {
                         priority: 0,
                         name: "your name here".into(),
                         action,
+
+                        //TODO actual data, does this actually matter for
+                        //constant entries?
+                        action_id: 0,
+                        parameter_data: Vec::new(),
                     });
             })
         }

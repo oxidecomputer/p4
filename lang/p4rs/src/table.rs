@@ -306,6 +306,8 @@ mod tests {
             priority,
             name: name.into(),
             action: (),
+            action_id: 0,
+            parameter_data: Vec::new(),
         }
     }
 
@@ -415,6 +417,8 @@ mod tests {
             priority: 1,
             name: name.into(),
             action: (),
+            action_id: 0,
+            parameter_data: Vec::new(),
         }
     }
 
@@ -511,6 +515,8 @@ mod tests {
             priority,
             name: name.into(),
             action: (),
+            action_id: 0,
+            parameter_data: Vec::new(),
         }
     }
 
@@ -562,6 +568,8 @@ mod tests {
             priority,
             name: name.into(),
             action: (),
+            action_id: 0,
+            parameter_data: Vec::new(),
         }
     }
 
@@ -655,6 +663,8 @@ mod tests {
                     action: Arc::new(|a: &mut ActionData| {
                         a.value += 10;
                     }),
+                    action_id: 0,
+                    parameter_data: Vec::new(),
                 },
                 TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
                     key: [Key::Exact(2u8.into())],
@@ -663,6 +673,8 @@ mod tests {
                     action: Arc::new(|a: &mut ActionData| {
                         a.value -= 10;
                     }),
+                    action_id: 0,
+                    parameter_data: Vec::new(),
                 },
             ]),
         };
