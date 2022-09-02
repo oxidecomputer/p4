@@ -420,13 +420,13 @@ control local(
 
     apply {
         local.apply();
-
-        bit<16> ll = 16w0xff02;
-
-        //TODO this is backwards should be
-        //if(hdr.ipv6.dst[127:112] == ll) {
-        if(hdr.ipv6.dst[15:0] == ll) {
-            is_local = true;
+        if(hdr.ipv6.isValid()) {
+            bit<16> ll = 16w0xff02;
+            //TODO this is backwards should be
+            //if(hdr.ipv6.dst[127:112] == ll) {
+            if(hdr.ipv6.dst[15:0] == ll) {
+                is_local = true;
+            }
         }
     }
     
