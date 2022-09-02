@@ -1,6 +1,7 @@
-use crate::lexer::Token;
+use crate::lexer::{Kind, Lexer, Token};
 use colored::Colorize;
 use std::fmt;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct SemanticError {
@@ -16,31 +17,19 @@ pub struct SemanticError {
 
 impl fmt::Display for SemanticError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let loc = format!("\n[{}:{}]", self.at.line + 1, self.at.col + 1)
+        let loc = format!("[{}:{}]", self.at.line + 1, self.at.col + 1)
             .as_str()
             .bright_red();
-        writeln!(f, "{} {}\n", loc, self.message.bright_white())?;
+        writeln!(
+            f,
+            "{}\n{} {}\n",
+            self.message.bright_white(),
+            loc,
+            *self.at.file,
+        )?;
         writeln!(f, "  {}", self.source)?;
 
-        // The presence of tabs makes presenting error indicators purely based
-        // on column position impossible, so here we iterrate over the existing
-        // string and mask out the non whitespace text inserting the error
-        // indicators and preserving any tab/space mixture.
-        let carat_line: String = self
-            .source
-            .chars()
-            .enumerate()
-            .map(|(i, x)| {
-                if i == self.at.col {
-                    return '^';
-                }
-                if x.is_whitespace() {
-                    x
-                } else {
-                    ' '
-                }
-            })
-            .collect();
+        let carat_line = carat_line(&self.source, &self.at);
         write!(f, "  {}", carat_line.bright_red())
     }
 }
@@ -64,28 +53,16 @@ impl fmt::Display for ParserError {
         let loc = format!("[{}:{}]", self.at.line + 1, self.at.col + 1)
             .as_str()
             .bright_red();
-        writeln!(f, "{} {}\n", loc, self.message.bright_white())?;
+        writeln!(
+            f,
+            "{}\n{} {}\n",
+            self.message.bright_white(),
+            loc,
+            *self.at.file,
+        )?;
         writeln!(f, "  {}", self.source)?;
 
-        // The presence of tabs makes presenting error indicators purely based
-        // on column position impossible, so here we iterrate over the existing
-        // string and mask out the non whitespace text inserting the error
-        // indicators and preserving any tab/space mixture.
-        let carat_line: String = self
-            .source
-            .chars()
-            .enumerate()
-            .map(|(i, x)| {
-                if i == self.at.col {
-                    return '^';
-                }
-                if x.is_whitespace() {
-                    x
-                } else {
-                    ' '
-                }
-            })
-            .collect();
+        let carat_line = carat_line(&self.source, &self.at);
         write!(f, "  {}", carat_line.bright_red())
     }
 }
@@ -105,6 +82,9 @@ pub struct TokenError {
 
     /// The source line the token error occured on.
     pub source: String,
+
+    /// The soruce file where the token error was encountered.
+    pub file: Arc<String>,
 }
 
 impl fmt::Display for TokenError {
@@ -112,28 +92,22 @@ impl fmt::Display for TokenError {
         let loc = format!("[{}:{}]", self.line + 1, self.col + 1)
             .as_str()
             .bright_red();
-        writeln!(f, "{} {}\n", loc, "unrecognized token".bright_white())?;
+        writeln!(
+            f,
+            "{}\n{} {}\n",
+            "unrecognized token".bright_white(),
+            loc,
+            *self.file,
+        )?;
         writeln!(f, "  {}", self.source)?;
 
-        // The presence of tabs makes presenting error indicators purely based
-        // on column position impossible, so here we iterrate over the existing
-        // string and mask out the non whitespace text inserting the error
-        // indicators and preserving any tab/space mixture.
-        let carat_line: String = self
-            .source
-            .chars()
-            .enumerate()
-            .map(|(i, x)| {
-                if i >= self.col && i < self.col + self.len {
-                    return '^';
-                }
-                if x.is_whitespace() {
-                    x
-                } else {
-                    ' '
-                }
-            })
-            .collect();
+        let at = Token {
+            kind: Kind::Eof,
+            line: self.line,
+            col: self.col,
+            file: Arc::new(self.source.clone()),
+        };
+        let carat_line = carat_line(&self.source, &at);
         write!(f, "  {}", carat_line.bright_red())
     }
 }
@@ -153,9 +127,11 @@ impl fmt::Display for Error {
             Self::Lexer(e) => e.fmt(f),
             Self::Parser(e) => e.fmt(f),
             Self::Semantic(errors) => {
-                for e in errors {
+                for e in &errors[..errors.len() - 1] {
                     e.fmt(f)?;
+                    writeln!(f)?;
                 }
+                errors[errors.len() - 1].fmt(f)?;
                 Ok(())
             }
         }
@@ -192,6 +168,9 @@ pub struct PreprocessorError {
 
     /// The source line the token error occured on.
     pub source: String,
+
+    /// The soruce file where the token error was encountered.
+    pub file: Arc<String>,
 }
 
 impl fmt::Display for PreprocessorError {
@@ -199,13 +178,36 @@ impl fmt::Display for PreprocessorError {
         let loc = format!("[{}]", self.line + 1).as_str().bright_red();
         writeln!(
             f,
-            "{} {}: {}\n",
-            loc,
-            "preporcessor error".bright_white(),
+            "{}\n{} {}\n",
             self.message.bright_white(),
+            loc,
+            *self.file,
         )?;
         writeln!(f, "  {}", self.source)
     }
 }
 
 impl std::error::Error for PreprocessorError {}
+
+fn carat_line(line: &str, at: &Token) -> String {
+    // The presence of tabs makes presenting error indicators purely based
+    // on column position impossible, so here we iterrate over the existing
+    // string and mask out the non whitespace text inserting the error
+    // indicators and preserving any tab/space mixture.
+    let mut carat_line = String::new();
+    for x in line[..at.col].chars() {
+        if x.is_whitespace() {
+            carat_line.push(x);
+        } else {
+            carat_line.push(' ');
+        }
+    }
+    for x in line[at.col..].chars() {
+        if x.is_whitespace() || Lexer::is_separator(x) {
+            break;
+        } else {
+            carat_line.push('^');
+        }
+    }
+    carat_line
+}

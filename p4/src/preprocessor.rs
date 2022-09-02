@@ -1,5 +1,6 @@
 use crate::error::PreprocessorError;
 use std::fmt::Write;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 struct Macro {
@@ -18,9 +19,11 @@ pub struct PreprocessorElements {
     pub includes: Vec<String>,
 }
 
-pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
+pub fn run(
+    source: &str,
+    filename: Arc<String>,
+) -> Result<PreprocessorResult, PreprocessorError> {
     let mut result = PreprocessorResult::default();
-    //let mut macros = Vec::new();
     let mut macros_to_process = Vec::new();
     let mut current_macro: Option<Macro> = None;
 
@@ -44,7 +47,6 @@ pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
             None => {}
             Some(ref mut m) => {
                 if !line.ends_with('\\') {
-                    //m.body += &format!("\n{}", line);
                     write!(m.body, "\n{}", line).unwrap();
                     macros_to_process.push(m.clone());
                     current_macro = None;
@@ -60,7 +62,7 @@ pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
         //
 
         if line.starts_with("#include") {
-            process_include(i, line, &mut result)?;
+            process_include(i, line, &mut result, &filename)?;
             continue;
         }
 
@@ -69,7 +71,7 @@ pub fn run(source: &str) -> Result<PreprocessorResult, PreprocessorError> {
         //
 
         if line.starts_with("#define") {
-            let (name, value) = process_macro_begin(i, line)?;
+            let (name, value) = process_macro_begin(i, line, &filename)?;
             let m = Macro { name, body: value };
             if !line.ends_with('\\') {
                 macros_to_process.push(m.clone());
@@ -107,6 +109,7 @@ fn process_include(
     i: usize,
     line: &str,
     result: &mut PreprocessorResult,
+    filename: &Arc<String>,
 ) -> Result<(), PreprocessorError> {
     let (begin, end) = if let Some(begin) = line.find('<') {
         match line[begin..].find('>') {
@@ -116,6 +119,7 @@ fn process_include(
                     line: i,
                     message: "Unterminated '<'".into(),
                     source: line.to_string(),
+                    file: filename.clone(),
                 })
             }
         }
@@ -127,6 +131,7 @@ fn process_include(
                     line: i,
                     message: "Unterminated '\"'".into(),
                     source: line.to_string(),
+                    file: filename.clone(),
                 })
             }
         }
@@ -135,6 +140,7 @@ fn process_include(
             line: i,
             message: "Invalid #include".into(),
             source: line.to_string(),
+            file: filename.clone(),
         });
     };
 
@@ -148,6 +154,7 @@ fn process_include(
                         c,
                     ),
                     source: line.to_string(),
+                    file: filename.clone(),
                 });
             }
         }
@@ -160,6 +167,7 @@ fn process_include(
 fn process_macro_begin(
     i: usize,
     line: &str,
+    filename: &Arc<String>,
 ) -> Result<(String, String), PreprocessorError> {
     let mut parts = line.split_whitespace();
     // discard #define
@@ -172,6 +180,7 @@ fn process_macro_begin(
                 line: i,
                 message: "Macros must have a name".into(),
                 source: line.to_string(),
+                file: filename.clone(),
             })
         }
     };

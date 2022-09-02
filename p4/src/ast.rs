@@ -723,6 +723,7 @@ impl Lvalue {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col + parts[0].len() + 1,
+                file: self.token.file.clone(),
             },
         }
     }
@@ -734,6 +735,7 @@ impl Lvalue {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col,
+                file: self.token.file.clone(),
             },
         }
     }

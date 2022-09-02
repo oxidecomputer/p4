@@ -24,10 +24,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn run(&mut self) -> Result<AST, Error> {
+    pub fn run(&mut self, ast: &mut AST) -> Result<(), Error> {
         let mut gp = GlobalParser::new(self);
-        let ast = gp.run()?;
-        Ok(ast)
+        gp.run(ast)?;
+        Ok(())
     }
 
     pub fn next_token(&mut self) -> Result<Token, Error> {
@@ -622,22 +622,20 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         Self { parser }
     }
 
-    pub fn run(&'b mut self) -> Result<AST, Error> {
-        let mut prog = AST::default();
-
+    pub fn run(&'b mut self, ast: &mut AST) -> Result<(), Error> {
         loop {
             match self.parser.next_token() {
                 Ok(token) => {
                     if token.kind == lexer::Kind::Eof {
                         break;
                     }
-                    self.handle_token(token, &mut prog)?;
+                    self.handle_token(token, ast)?;
                 }
                 Err(e) => return Err(e),
             };
         }
 
-        Ok(prog)
+        Ok(())
     }
 
     pub fn handle_token(

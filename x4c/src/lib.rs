@@ -1,103 +1,87 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use p4::check::Diagnostics;
-use p4::{check, error, error::SemanticError, lexer, parser, preprocessor};
+use p4::{
+    ast::AST, check, error, error::SemanticError, lexer, parser, preprocessor,
+};
 use std::fs;
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[clap(version = "0.1")]
-struct Opts {
+pub struct Opts {
     /// Show parsed lexical tokens.
     #[clap(long)]
-    show_tokens: bool,
+    pub show_tokens: bool,
 
     /// Show parsed abstract syntax tree.
     #[clap(long)]
-    show_ast: bool,
+    pub show_ast: bool,
 
     /// Show parsed preprocessor info.
     #[clap(long)]
-    show_pre: bool,
+    pub show_pre: bool,
 
     /// Show high-level intermediate representation info.
     #[clap(long)]
-    show_hlir: bool,
+    pub show_hlir: bool,
 
     /// File to compile.
-    filename: String,
+    pub filename: String,
 
     /// What target to generate code for.
     #[clap(arg_enum, default_value_t = Target::Rust)]
-    target: Target,
+    pub target: Target,
 
     /// Just check code, do not compile.
     #[clap(long)]
-    check: bool,
+    pub check: bool,
 
     /// Filename to write generated code to.
     #[clap(short, long, default_value = "out.rs")]
-    out: String,
+    pub out: String,
 }
 
 #[derive(clap::ArgEnum, Clone)]
-enum Target {
+pub enum Target {
     Rust,
     RedHawk,
     Docs,
 }
 
-fn main() -> Result<()> {
-    let opts: Opts = Opts::parse();
+pub fn process_file(
+    filename: Arc<String>,
+    ast: &mut AST,
+    opts: &Opts,
+) -> Result<()> {
+    let contents = fs::read_to_string(&*filename)
+        .map_err(|e| anyhow!("read input: {}: {}", &*filename, e))?;
 
-    let contents = fs::read_to_string(opts.filename)
-        .map_err(|e| anyhow!("read input: {}", e))?;
-
-    let ppr = preprocessor::run(&contents)?;
+    let ppr = preprocessor::run(&contents, filename.clone())?;
     if opts.show_pre {
         println!("{:#?}", ppr.elements);
     }
 
-    let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
-    //println!("lines\n{:#?}", lines);
+    for included in &ppr.elements.includes {
+        process_file(Arc::new(included.clone()), ast, opts)?
+    }
 
-    let mut lxr = lexer::Lexer::new(lines.clone());
+    let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
+
+    let mut lxr = lexer::Lexer::new(lines.clone(), filename);
     lxr.show_tokens = opts.show_tokens;
 
     let mut psr = parser::Parser::new(lxr);
-    let mut ast = psr.run()?;
+    psr.run(ast)?;
     if opts.show_ast {
         println!("{:#?}", ast);
     }
 
-    let (hlir, diags) = check::all(&ast);
+    let (hlir, diags) = check::all(ast);
     check(&lines, &diags)?;
 
     if opts.show_hlir {
         println!("{:#?}", hlir);
-    }
-
-    if opts.check {
-        return Ok(());
-    }
-
-    match opts.target {
-        Target::Rust => {
-            p4_rust::sanitize(&mut ast);
-            p4_rust::emit(
-                &ast,
-                &hlir,
-                &opts.out,
-                p4_rust::Settings {
-                    pipeline_name: "main".to_owned(),
-                },
-            )?;
-        }
-        Target::RedHawk => {
-            todo!("RedHawk code generator");
-        }
-        Target::Docs => {
-            todo!("Docs code generator");
-        }
     }
 
     Ok(())

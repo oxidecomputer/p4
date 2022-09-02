@@ -1,5 +1,6 @@
 use crate::error::TokenError;
 use std::fmt;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Kind {
@@ -243,6 +244,9 @@ pub struct Token {
 
     /// Column number of the first character in this token.
     pub col: usize,
+
+    /// The file this token came from.
+    pub file: Arc<String>,
 }
 
 impl fmt::Display for Token {
@@ -252,17 +256,17 @@ impl fmt::Display for Token {
 }
 
 pub struct Lexer<'a> {
-    //pub input: &'a str,
     pub line: usize,
     pub col: usize,
     pub show_tokens: bool,
 
     pub(crate) lines: Vec<&'a str>,
     cursor: &'a str,
+    file: Arc<String>,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(lines: Vec<&'a str>) -> Self {
+    pub fn new(lines: Vec<&'a str>, filename: Arc<String>) -> Self {
         if lines.is_empty() {
             return Self {
                 cursor: "",
@@ -270,6 +274,7 @@ impl<'a> Lexer<'a> {
                 col: 0,
                 lines,
                 show_tokens: false,
+                file: filename,
             };
         }
 
@@ -281,6 +286,7 @@ impl<'a> Lexer<'a> {
             col: 0,
             lines,
             show_tokens: false,
+            file: filename,
         }
     }
 
@@ -300,6 +306,7 @@ impl<'a> Lexer<'a> {
                 kind: Kind::Eof,
                 col: self.col,
                 line: self.line,
+                file: self.file.clone(),
             });
         }
 
@@ -310,6 +317,7 @@ impl<'a> Lexer<'a> {
                 kind: Kind::Eof,
                 col: self.col,
                 line: self.line,
+                file: self.file.clone(),
             });
         }
         self.skip_whitespace();
@@ -666,6 +674,7 @@ impl<'a> Lexer<'a> {
             line: self.line,
             col: self.col - len,
             source: self.lines[self.line].into(),
+            file: self.file.clone(),
             len,
         })
     }
@@ -689,6 +698,7 @@ impl<'a> Lexer<'a> {
             kind: Kind::Identifier(tok.into()),
             col: self.col,
             line: self.line,
+            file: self.file.clone(),
         };
         self.col += len;
         self.cursor = &self.cursor[len..];
@@ -724,6 +734,7 @@ impl<'a> Lexer<'a> {
             kind: ctor(bits, value),
             col: self.col,
             line: self.line,
+            file: self.file.clone(),
         };
         Some(token)
     }
@@ -755,6 +766,7 @@ impl<'a> Lexer<'a> {
             kind: ctor(bits, value),
             col: self.col,
             line: self.line,
+            file: self.file.clone(),
         };
         Some(token)
     }
@@ -833,6 +845,7 @@ impl<'a> Lexer<'a> {
             kind: Kind::IntLiteral(value),
             col: self.col,
             line: self.line,
+            file: self.file.clone(),
         };
         self.col += len;
         self.cursor = &self.cursor[len..];
@@ -949,6 +962,7 @@ impl<'a> Lexer<'a> {
                 kind,
                 col: self.col,
                 line: self.line,
+                file: self.file.clone(),
             };
             self.col += len;
             self.cursor = &self.cursor[len..];
@@ -1018,7 +1032,7 @@ impl<'a> Lexer<'a> {
         &self.cursor[..len]
     }
 
-    fn is_separator(c: char) -> bool {
+    pub(crate) fn is_separator(c: char) -> bool {
         if c.is_whitespace() {
             return true;
         }

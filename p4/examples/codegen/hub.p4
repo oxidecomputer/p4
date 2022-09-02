@@ -1,4 +1,4 @@
-#include <softnpu.p4>
+#include <p4/examples/codegen/softnpu.p4>
 
 SoftNPU(
     parse(),

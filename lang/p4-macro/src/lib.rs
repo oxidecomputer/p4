@@ -1,7 +1,10 @@
 use std::fs;
+use std::sync::Arc;
 
 use p4::check::Diagnostics;
-use p4::{check, error, error::SemanticError, lexer, parser, preprocessor};
+use p4::{
+    ast::AST, check, error, error::SemanticError, lexer, parser, preprocessor,
+};
 use proc_macro::TokenStream;
 use serde::Deserialize;
 use serde_tokenstream::ParseWrapper;
@@ -58,25 +61,42 @@ fn generate_rs(
 ) -> Result<TokenStream, syn::Error> {
     //TODO gracefull error handling
 
-    let contents = fs::read_to_string(filename).unwrap();
+    let mut ast = AST::default();
+    process_file(Arc::new(filename), &mut ast, &settings)?;
 
-    let ppr = preprocessor::run(&contents).unwrap();
-    let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
-    let lxr = lexer::Lexer::new(lines.clone());
-    let mut psr = parser::Parser::new(lxr);
-    let mut ast = psr.run().unwrap();
-    let (hlir, diags) = check::all(&ast);
-    check(&lines, &diags);
-    p4_rust::sanitize(&mut ast);
-    let tokens = p4_rust::emit_tokens(
+    let (hlir, _) = check::all(&ast);
+
+    let tokens: TokenStream = p4_rust::emit_tokens(
         &ast,
         &hlir,
         p4_rust::Settings {
-            pipeline_name: settings.pipeline_name,
+            pipeline_name: settings.pipeline_name.clone(),
         },
-    );
+    )
+    .into();
 
-    Ok(tokens.into())
+    Ok(tokens)
+}
+
+fn process_file(
+    filename: Arc<String>,
+    ast: &mut AST,
+    settings: &GenerationSettings,
+) -> Result<(), syn::Error> {
+    let contents = fs::read_to_string(&*filename).unwrap();
+    let ppr = preprocessor::run(&contents, filename.clone()).unwrap();
+    for included in &ppr.elements.includes {
+        process_file(Arc::new(included.clone()), ast, settings)?;
+    }
+
+    let (_, diags) = check::all(ast);
+    let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
+    check(&lines, &diags);
+    let lxr = lexer::Lexer::new(lines.clone(), filename);
+    let mut psr = parser::Parser::new(lxr);
+    psr.run(ast).unwrap();
+    p4_rust::sanitize(ast);
+    Ok(())
 }
 
 // TODO copy pasta from x4c
