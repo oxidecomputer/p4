@@ -1273,10 +1273,13 @@ impl<'a, 'b> TableParser<'a, 'b> {
             }
             self.parser.backlog.push(token);
 
-            let (action_name, _) = self.parser.parse_identifier()?;
+            let (action_name, atk) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            table.actions.push(action_name);
+            table.actions.push(Lvalue{
+                name: action_name,
+                token: atk,
+            });
         }
 
         Ok(())

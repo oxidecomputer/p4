@@ -591,7 +591,7 @@ pub struct ActionParameter {
 #[derive(Debug, Clone)]
 pub struct Table {
     pub name: String,
-    pub actions: Vec<String>,
+    pub actions: Vec<Lvalue>,
     pub default_action: String,
     pub key: Vec<(Lvalue, MatchKind)>,
     pub const_entries: Vec<ConstTableEntry>,

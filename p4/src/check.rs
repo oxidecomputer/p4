@@ -81,6 +81,7 @@ impl ControlChecker {
         Self::check_params(c, ast, &mut diags);
         Self::check_tables(c, &names, ast, &mut diags);
         Self::check_variables(c, ast, &mut diags);
+        Self::check_actions(c, ast, &mut diags);
         diags
     }
 
@@ -142,6 +143,33 @@ impl ControlChecker {
                     message: format!("Typename {} not found", typename),
                     token: v.token.clone(),
                 })
+            }
+        }
+    }
+
+    pub fn check_actions(c: &Control, ast: &AST, diags: &mut Diagnostics) {
+        for t in &c.tables {
+            Self::check_table_action_reference(c, t, ast, diags);
+        }
+    }
+
+    pub fn check_table_action_reference(
+        c: &Control,
+        t: &Table,
+        ast: &AST,
+        diags: &mut Diagnostics,
+    ) {
+        for a in &t.actions {
+            if let None = c.get_action(&a.name) {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "Table {} does not have action {}",
+                        t.name,
+                        &a.name,
+                    ),
+                    token: a.token.clone(), //TODO plumb token for lvalue
+                });
             }
         }
     }
