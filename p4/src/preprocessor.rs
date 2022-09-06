@@ -63,6 +63,7 @@ pub fn run(
 
         if line.starts_with("#include") {
             process_include(i, line, &mut result, &filename)?;
+            new_lines.push("");
             continue;
         }
 
