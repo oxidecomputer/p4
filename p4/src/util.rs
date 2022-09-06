@@ -24,19 +24,12 @@ pub fn resolve_lvalue(
         Type::UserDefined(name) => {
             if lval.degree() == 1 {
                 root.clone()
-                //Type::UserDefined(name.clone())
             } else if let Some(parent) = ast.get_struct(name) {
-                let mut tm = names.clone();
-                tm.extend(parent.names());
-                resolve_lvalue(&lval.pop_left(), ast, &tm)?
+                resolve_lvalue(&lval.pop_left(), ast, &parent.names())?
             } else if let Some(parent) = ast.get_header(name) {
-                let mut tm = names.clone();
-                tm.extend(parent.names());
-                resolve_lvalue(&lval.pop_left(), ast, &tm)?
+                resolve_lvalue(&lval.pop_left(), ast, &parent.names())?
             } else if let Some(parent) = ast.get_extern(name) {
-                let mut tm = names.clone();
-                tm.extend(parent.names());
-                resolve_lvalue(&lval.pop_left(), ast, &tm)?
+                resolve_lvalue(&lval.pop_left(), ast, &parent.names())?
             } else {
                 return Err(format!(
                     "codegen: User defined name '{}' does not exist",

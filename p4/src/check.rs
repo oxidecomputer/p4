@@ -156,17 +156,16 @@ impl ControlChecker {
     pub fn check_table_action_reference(
         c: &Control,
         t: &Table,
-        ast: &AST,
+        _ast: &AST,
         diags: &mut Diagnostics,
     ) {
         for a in &t.actions {
-            if let None = c.get_action(&a.name) {
+            if c.get_action(&a.name).is_none() {
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "Table {} does not have action {}",
-                        t.name,
-                        &a.name,
+                        t.name, &a.name,
                     ),
                     token: a.token.clone(), //TODO plumb token for lvalue
                 });

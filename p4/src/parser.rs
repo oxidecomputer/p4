@@ -1276,7 +1276,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
             let (action_name, atk) = self.parser.parse_identifier()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
-            table.actions.push(Lvalue{
+            table.actions.push(Lvalue {
                 name: action_name,
                 token: atk,
             });
