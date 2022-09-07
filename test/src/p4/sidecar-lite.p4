@@ -300,7 +300,7 @@ control local(
         is_local = true;
     }
 
-    table local {
+    table local_v6 {
         key = {
             hdr.ipv6.dst: exact;
         }
@@ -311,15 +311,29 @@ control local(
         default_action = nonlocal;
     }
 
+    table local_v4 {
+        key = {
+            hdr.ipv4.dst: exact;
+        }
+        actions = {
+            local;
+            nonlocal;
+        }
+        default_action = nonlocal;
+    }
+
     apply {
-        local.apply();
         if(hdr.ipv6.isValid()) {
+            local_v6.apply();
             bit<16> ll = 16w0xff02;
             //TODO this is backwards should be
             //if(hdr.ipv6.dst[127:112] == ll) {
             if(hdr.ipv6.dst[15:0] == ll) {
                 is_local = true;
             }
+        }
+        if(hdr.ipv4.isValid()) {
+            local_v4.apply();
         }
     }
     
@@ -342,16 +356,29 @@ control resolver(
         egress.drop = true;
     }
 
-    table resolver {
+    table resolver_v4 {
         key = {
-            egress.nexthop: exact;
+            egress.nexthop_v4: exact;
+        }
+        actions = { rewrite_dst; drop; }
+        default_action = drop;
+    }
+
+    table resolver_v6 {
+        key = {
+            egress.nexthop_v6: exact;
         }
         actions = { rewrite_dst; drop; }
         default_action = drop;
     }
 
     apply {
-        resolver.apply();
+        if (hdr.ipv4.isValid()) {
+            resolver_v4.apply();
+        }
+        if (hdr.ipv6.isValid()) {
+            resolver_v6.apply();
+        }
     }
             
 }
@@ -367,24 +394,45 @@ control router(
 
     action drop() { }
 
-    action forward(bit<8> port, bit<128> nexthop) {
+    action forward_v6(bit<8> port, bit<128> nexthop) {
         egress.port = port;
-        egress.nexthop = nexthop;
+        egress.nexthop_v6 = nexthop;
     }
 
-    table router {
+    action forward_v4(bit<8> port, bit<32> nexthop) {
+        egress.port = port;
+        egress.nexthop_v4 = nexthop;
+    }
+
+    table router_v6 {
         key = {
             hdr.ipv6.dst: lpm;
         }
         actions = {
             drop;
-            forward;
+            forward_v6;
+        }
+        default_action = drop;
+    }
+
+    table router_v4 {
+        key = {
+            hdr.ipv4.dst: lpm;
+        }
+        actions = {
+            drop;
+            forward_v4;
         }
         default_action = drop;
     }
 
     apply {
-        router.apply();
+        if (hdr.ipv4.isValid()) {
+            router_v4.apply();
+        }
+        if (hdr.ipv6.isValid()) {
+            router_v6.apply();
+        }
         if (egress.port != 8w0) {
             resolver.apply(hdr, egress);
         }
@@ -439,7 +487,7 @@ control ingress(
             // from within the rack.
             if (hdr.geneve.isValid()) {
 
-                // TODO also check for boundary services VNI
+                // TODO also need check for boundary services VNI?
 
                 // strip the geneve header and try to route
                 hdr.geneve.setInvalid();
@@ -468,7 +516,6 @@ control ingress(
         //
         // Otherwise route the packet using the L3 routing table.
         //
-
 
         else {
 

@@ -101,7 +101,7 @@ control resolver(
 
     table resolver {
         key = {
-            egress.nexthop: exact;
+            egress.nexthop_v6: exact;
         }
         actions = { rewrite_dst; drop; }
         default_action = drop;
@@ -126,7 +126,7 @@ control router(
 
     action forward(bit<8> port, bit<128> nexthop) {
         egress.port = port;
-        egress.nexthop = nexthop;
+        egress.nexthop_v6 = nexthop;
     }
 
     table router {
