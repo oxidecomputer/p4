@@ -117,7 +117,7 @@ parser parse(
     }
     
     state inner_ipv4 {
-        pkt.extract(hdr.ipv4);
+        pkt.extract(hdr.inner_ipv4);
         if (hdr.inner_ipv4.protocol == 8w17) {
             transition inner_udp;
         }
@@ -491,6 +491,30 @@ control ingress(
 
                 // strip the geneve header and try to route
                 hdr.geneve.setInvalid();
+                hdr.ethernet = hdr.inner_eth;
+                hdr.inner_eth.setInvalid();
+                if (hdr.inner_ipv4.isValid()) {
+                    hdr.ipv4 = hdr.inner_ipv4;
+                    hdr.ipv4.setValid();
+                    hdr.ipv6.setInvalid();
+                    hdr.inner_ipv4.setInvalid();
+                }
+                if (hdr.inner_ipv6.isValid()) {
+                    hdr.ipv6 = hdr.inner_ipv6;
+                    hdr.ipv6.setValid();
+                    hdr.ipv4.setInvalid();
+                    hdr.inner_ipv6.setInvalid();
+                }
+                if (hdr.inner_tcp.isValid()) {
+                    hdr.tcp = hdr.inner_tcp;
+                    hdr.tcp.setValid();
+                    hdr.inner_tcp.setInvalid();
+                }
+                if (hdr.inner_udp.isValid()) {
+                    hdr.udp = hdr.inner_udp;
+                    hdr.udp.setValid();
+                    hdr.inner_udp.setInvalid();
+                }
                 router.apply(hdr, ingress, egress);
             }
 
