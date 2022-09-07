@@ -460,14 +460,18 @@ impl<'a> PipelineGenerator<'a> {
         let mut action_match_body = TokenStream::new();
         for (i, action) in table.actions.iter().enumerate() {
             let i = i as u32;
-            let call = format_ident!("{}_action_{}", control.name, action);
+            let call =
+                format_ident!("{}_action_{}", control.name, &action.name);
             let n = table.key.len();
             //XXX hack
-            if action == "NoAction" {
+            if &action.name == "NoAction" {
                 continue;
             }
-            let a = control.get_action(action).unwrap_or_else(|| {
-                panic!("control {} must have action {}", control.name, action,)
+            let a = control.get_action(&action.name).unwrap_or_else(|| {
+                panic!(
+                    "control {} must have action {}",
+                    control.name, &action.name,
+                )
             });
             let mut parameter_tokens = Vec::new();
             let mut parameter_refs = Vec::new();
