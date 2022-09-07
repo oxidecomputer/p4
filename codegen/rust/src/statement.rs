@@ -481,7 +481,7 @@ impl<'a> StatementGenerator<'a> {
 
             let names = control.names();
 
-            if is_header(&lval.pop_right(), self.ast, &names) {
+            if lval.degree() > 1 && is_header(&lval.pop_right(), self.ast, &names) {
                 //TODO: to_biguint is bad here, copying on data path
                 selector_components.push(quote! {
                     p4rs::bitvec_to_biguint(
