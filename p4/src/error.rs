@@ -203,7 +203,7 @@ fn carat_line(line: &str, at: &Token) -> String {
         }
     }
     for x in line[at.col..].chars() {
-        if x.is_whitespace() || Lexer::is_separator(x) {
+        if x.is_whitespace() || (Lexer::is_separator(x) && x != '.') {
             break;
         } else {
             carat_line.push('^');
