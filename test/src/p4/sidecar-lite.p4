@@ -153,6 +153,7 @@ parser parse(
 control nat_ingress(
     inout headers_t hdr,
     inout IngressMetadata ingress,
+    inout EgressMetadata egress,
 ) {
 
     Checksum() csum;
@@ -167,16 +168,23 @@ control nat_ingress(
         // move L2 to inner L2
 
         hdr.inner_eth = hdr.ethernet;
+        hdr.inner_eth.dst = 48w0xA84025ff0001; //XXX hardcode A8:40:25:FF:00:01 
+        hdr.inner_eth.setValid();
+
+        // fix up outer L2
+        hdr.ethernet.ether_type = 16w0x86dd;
 
         // move L3 to inner L3
 
         if (hdr.ipv4.isValid()) {
             hdr.inner_ipv4 = hdr.ipv4;
             orig_l3_len = hdr.ipv4.total_len;
+            hdr.inner_ipv4.setValid();
         }
         if (hdr.ipv6.isValid()) {
             hdr.inner_ipv6 = hdr.ipv6;
             orig_l3_len = hdr.ipv6.payload_len + 16w40;
+            hdr.inner_ipv6.setValid();
         }
 
         // move L4 to inner L4
@@ -193,12 +201,15 @@ control nat_ingress(
         }
 
         // set up outer l3
+        hdr.ipv4.setInvalid();
 
         // original l2 + original l3 + encapsulating udp + encapsulating geneve
+        hdr.ipv6.version = 4w6; 
         hdr.ipv6.payload_len = 16w14 + orig_l3_len + 16w8 + 16w8; 
         hdr.ipv6.next_hdr = 8w17;
         hdr.ipv6.hop_limit = 8w255;
-        hdr.ipv6.src = 128w0; // TODO set to boundary services addr
+        // XXX hardcoded boundary services addr
+        hdr.ipv6.src = 128w0xfd000099000000000000000000000001;
         hdr.ipv6.dst = target;
         hdr.ipv6.setValid();
 
@@ -211,12 +222,15 @@ control nat_ingress(
 
         // set up geneve
         hdr.geneve.version = 2w0;
-        hdr.geneve.opt_len = 2w0;
+        hdr.geneve.opt_len = 6w0;
         hdr.geneve.ctrl = 1w0;
         hdr.geneve.crit = 1w0;
         hdr.geneve.reserved = 6w0;
-        hdr.geneve.protocol = hdr.inner_eth.ether_type;
-        hdr.geneve.vni = 24w99; // XXX hard coded implicit boundary services vni
+        hdr.geneve.protocol = 16w0x6558;
+
+        // XXX hard coded implicit boundary services vni
+        hdr.geneve.vni = 24w0x63;
+
         hdr.geneve.reserved2 = 8w0;
         hdr.geneve.setValid();
 
@@ -326,7 +340,7 @@ control local(
         if(hdr.ipv6.isValid()) {
             local_v6.apply();
             bit<16> ll = 16w0xff02;
-            //TODO this is backwards should be
+            //TODO this is backwards should be?
             //if(hdr.ipv6.dst[127:112] == ll) {
             if(hdr.ipv6.dst[15:0] == ll) {
                 is_local = true;
@@ -344,11 +358,6 @@ control resolver(
     inout EgressMetadata egress,
 ) {
     action rewrite_dst(bit<48> dst) {
-        //TODO the following creates a code generation error that should get
-        //caught at compile time
-        //
-        //  hdr.ethernet = dst;
-        //
         hdr.ethernet.dst = dst;
     }
 
@@ -389,8 +398,6 @@ control router(
     inout IngressMetadata ingress,
     inout EgressMetadata egress,
 ) {
-
-    resolver() resolver;
 
     action drop() { }
 
@@ -433,9 +440,6 @@ control router(
         if (hdr.ipv6.isValid()) {
             router_v6.apply();
         }
-        if (egress.port != 8w0) {
-            resolver.apply(hdr, egress);
-        }
     }
 
 }
@@ -448,6 +452,7 @@ control ingress(
     local() local;
     router() router;
     nat_ingress() nat;
+    resolver() resolver;
 
     apply {
 
@@ -487,8 +492,6 @@ control ingress(
             // from within the rack.
             if (hdr.geneve.isValid()) {
 
-                // TODO also need check for boundary services VNI?
-
                 // strip the geneve header and try to route
                 hdr.geneve.setInvalid();
                 hdr.ethernet = hdr.inner_eth;
@@ -516,6 +519,9 @@ control ingress(
                     hdr.inner_udp.setInvalid();
                 }
                 router.apply(hdr, ingress, egress);
+                if (egress.port != 8w0) {
+                    resolver.apply(hdr, egress);
+                }
             }
 
             // check if this packet is destined to boundary services from
@@ -542,17 +548,12 @@ control ingress(
         //
 
         else {
+            // check for ingress nat
+            nat.apply(hdr, ingress, egress);
 
-            nat.apply(hdr, ingress);
-
-            if (ingress.nat != true) {
-                // XXX? should be covered by sidecar check above
-                // if the packet came from the scrimlet invalidate the header
-                // sidecar header before routing.
-                if (ingress.port == 8w1) {
-                    hdr.sidecar.setInvalid();
-                }
-                router.apply(hdr, ingress, egress);
+            router.apply(hdr, ingress, egress);
+            if (egress.port != 8w0) {
+                resolver.apply(hdr, egress);
             }
         }
     }

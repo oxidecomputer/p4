@@ -99,7 +99,6 @@ impl<'a> ExpressionGenerator<'a> {
         }
     }
 
-    //TODO consistent byte order
     pub(crate) fn generate_bit_literal(
         &self,
         width: u16,
@@ -109,47 +108,12 @@ impl<'a> ExpressionGenerator<'a> {
 
         let width = width as usize;
 
-        if width <= 8 {
-            let v = value as u8;
-            quote! { #v.view_bits::<Msb0>().to_bitvec() }
-        } else if width <= 16 {
-            let v = (value as u16).to_be();
-            quote! {
-                {
-                    let mut x = bitvec![mut u8, Msb0; 0; 16];
-                    x.store(#v);
-                    x
-                }
+        quote! {
+            {
+                let mut x = bitvec![mut u8, Msb0; 0; #width];
+                x.store_be(#value);
+                x
             }
-        } else if width <= 32 {
-            let v = value as u32;
-            quote! {
-                {
-                    let mut x = bitvec![mut u8, Msb0; 0; 32];
-                    x.store(#v);
-                    x
-                }
-            }
-        } else if width <= 64 {
-            let v = value as u64;
-            quote! {
-                {
-                    let mut x = bitvec![mut u8, Msb0; 0; 64];
-                    x.store(#v);
-                    x
-                }
-            }
-        } else if width <= 128 {
-            let v = value as u128;
-            quote! {
-                {
-                    let mut x = bitvec![mut u8, Msb0; 0; 128];
-                    x.store(#v);
-                    x
-                }
-            }
-        } else {
-            todo!("bit<x> where x > 128");
         }
     }
 

@@ -137,7 +137,11 @@ impl<'a> HeaderGenerator<'a> {
                     self.valid
                 }
                 fn dump(&self) -> String {
-                    #dump
+                    if self.isValid() {
+                        #dump
+                    } else {
+                        "∅".to_owned()
+                    }
                 }
             }
         });

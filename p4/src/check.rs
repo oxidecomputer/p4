@@ -54,11 +54,15 @@ impl Diagnostics {
 
 pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     let mut diags = Diagnostics::new();
+    let mut hg = HlirGenerator::new(ast);
+    hg.run();
+    diags.extend(&hg.diags);
+
     for p in &ast.parsers {
         diags.extend(&ParserChecker::check(p, ast));
     }
     for c in &ast.controls {
-        diags.extend(&ControlChecker::check(c, ast));
+        diags.extend(&ControlChecker::check(c, ast, &hg.hlir));
     }
     for s in &ast.structs {
         diags.extend(&StructChecker::check(s, ast));
@@ -66,22 +70,19 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     for h in &ast.headers {
         diags.extend(&HeaderChecker::check(h, ast));
     }
-    let mut hg = HlirGenerator::new(ast);
-    hg.run();
-    diags.extend(&hg.diags);
     (hg.hlir, diags)
 }
 
 pub struct ControlChecker {}
 
 impl ControlChecker {
-    pub fn check(c: &Control, ast: &AST) -> Diagnostics {
+    pub fn check(c: &Control, ast: &AST, hlir: &Hlir) -> Diagnostics {
         let mut diags = Diagnostics::new();
         let names = c.names();
         Self::check_params(c, ast, &mut diags);
         Self::check_tables(c, &names, ast, &mut diags);
         Self::check_variables(c, ast, &mut diags);
-        Self::check_actions(c, ast, &mut diags);
+        Self::check_actions(c, ast, hlir, &mut diags);
         diags
     }
 
@@ -147,9 +148,17 @@ impl ControlChecker {
         }
     }
 
-    pub fn check_actions(c: &Control, ast: &AST, diags: &mut Diagnostics) {
+    pub fn check_actions(
+        c: &Control,
+        ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
         for t in &c.tables {
             Self::check_table_action_reference(c, t, ast, diags);
+        }
+        for a in &c.actions {
+            check_statement_block(&a.statement_block, hlir, diags);
         }
     }
 
@@ -169,6 +178,62 @@ impl ControlChecker {
                     ),
                     token: a.token.clone(), //TODO plumb token for lvalue
                 });
+            }
+        }
+    }
+}
+
+fn check_statement_block(
+    block: &StatementBlock,
+    hlir: &Hlir,
+    diags: &mut Diagnostics,
+) {
+    for s in &block.statements {
+        match s {
+            Statement::Assignment(lval, xpr) => {
+                let name_info = match hlir.lvalue_decls.get(lval) {
+                    Some(info) => info,
+                    None => {
+                        diags.push(Diagnostic {
+                            level: Level::Error,
+                            message: format!(
+                                "Could not resolve lvalue {}",
+                                &lval.name,
+                            ),
+                            token: lval.token.clone(),
+                        });
+                        return;
+                    }
+                };
+
+                let expression_type =
+                    match hlir.expression_types.get(xpr.as_ref()) {
+                        Some(ty) => ty,
+                        None => {
+                            diags.push(Diagnostic {
+                                level: Level::Error,
+                                message: "Could not determine expression type"
+                                    .to_owned(),
+                                token: xpr.token.clone(),
+                            });
+                            return;
+                        }
+                    };
+
+                if &name_info.ty != expression_type {
+                    diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!(
+                            "Cannot assign {} to {}",
+                            expression_type, &name_info.ty,
+                        ),
+                        token: xpr.token.clone(),
+                    });
+                }
+            }
+            Statement::Empty => {}
+            _ => {
+                // TODO
             }
         }
     }

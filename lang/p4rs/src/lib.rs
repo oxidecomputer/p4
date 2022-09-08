@@ -194,36 +194,11 @@ pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
 }
 
 pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
-    let mut aligned = x.clone();
-    aligned.force_align();
-    let buf = aligned.as_raw_slice();
-    match buf.len() {
-        0 => "∅".into(),
-        1 => {
-            let v = buf[0];
-            format!("0x{:02x}", v)
-        }
-        2 => {
-            let v = u16::from_be_bytes(buf.try_into().unwrap());
-            format!("0x{:04x}", v)
-        }
-        4 => {
-            let v = u32::from_be_bytes(buf.try_into().unwrap());
-            format!("0x{:08x}", v)
-        }
-        8 => {
-            let v = u64::from_be_bytes(buf.try_into().unwrap());
-            format!("0x{:016x}", v)
-        }
-        16 => {
-            let v = u128::from_be_bytes(buf.try_into().unwrap());
-            format!("{:032x}", v)
-        }
-        _ => buf
-            .iter()
-            .map(|x| format!("{:02x}", x))
-            .collect::<Vec<String>>()
-            .join(""),
+    if x.is_empty() {
+        "∅".into()
+    } else {
+        let v: u128 = x.load_be();
+        format!("{:x}", v)
     }
 }
 
