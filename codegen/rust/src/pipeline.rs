@@ -500,7 +500,7 @@ impl<'a> PipelineGenerator<'a> {
                             );
                         });
                         parameter_refs.push(quote! { #pname.clone() });
-                        offset += 1;
+                        offset += n >> 3;
                     }
                     Type::Varbit(_n) => {
                         todo!();

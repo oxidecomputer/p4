@@ -158,7 +158,7 @@ control nat_ingress(
 
     Checksum() csum;
 
-    action forward_to_sled(bit<128> target) {
+    action forward_to_sled(bit<128> target, bit<24> vni, bit<48> mac) {
 
         ingress.nat = true;
 
@@ -168,7 +168,7 @@ control nat_ingress(
         // move L2 to inner L2
 
         hdr.inner_eth = hdr.ethernet;
-        hdr.inner_eth.dst = 48w0xA84025ff0001; //XXX hardcode A8:40:25:FF:00:01 
+        hdr.inner_eth.dst = mac;
         hdr.inner_eth.setValid();
 
         // fix up outer L2
@@ -228,8 +228,7 @@ control nat_ingress(
         hdr.geneve.reserved = 6w0;
         hdr.geneve.protocol = 16w0x6558;
 
-        // XXX hard coded implicit boundary services vni
-        hdr.geneve.vni = 24w0x63;
+        hdr.geneve.vni = vni;
 
         hdr.geneve.reserved2 = 8w0;
         hdr.geneve.setValid();
