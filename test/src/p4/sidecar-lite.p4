@@ -509,6 +509,7 @@ control ingress(
                 }
                 if (hdr.inner_tcp.isValid()) {
                     hdr.tcp = hdr.inner_tcp;
+                    hdr.udp.setInvalid();
                     hdr.tcp.setValid();
                     hdr.inner_tcp.setInvalid();
                 }
@@ -517,6 +518,7 @@ control ingress(
                     hdr.udp.setValid();
                     hdr.inner_udp.setInvalid();
                 }
+                hdr.ethernet.src = 48w0xa8e1de01701f; // hack for upstream router source
                 router.apply(hdr, ingress, egress);
                 if (egress.port != 8w0) {
                     resolver.apply(hdr, egress);
