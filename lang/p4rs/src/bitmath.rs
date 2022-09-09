@@ -84,7 +84,5 @@ mod tests {
 
         let ee: u128 = e.load_be();
         assert_eq!(ee, 47u128 + 74u128 + 123u128 + 9876u128);
-
     }
-
 }
