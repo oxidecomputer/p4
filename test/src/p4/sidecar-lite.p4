@@ -203,8 +203,8 @@ control nat_ingress(
         // set up outer l3
         hdr.ipv4.setInvalid();
 
-        // original l2 + original l3 + encapsulating udp + encapsulating geneve
         hdr.ipv6.version = 4w6; 
+        // original l2 + original l3 + encapsulating udp + encapsulating geneve
         hdr.ipv6.payload_len = 16w14 + orig_l3_len + 16w8 + 16w8; 
         hdr.ipv6.next_hdr = 8w17;
         hdr.ipv6.hop_limit = 8w255;
