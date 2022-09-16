@@ -63,11 +63,26 @@ impl<'a> StructGenerator<'a> {
                         );
                     }
                 }
-                Type::Bit(_size) => {
+                Type::Bit(size) => {
                     members.push(quote! { pub #name: BitVec::<u8, Msb0> });
+                    dump_statements.push(quote! {
+                        #name_s.blue(),
+                        p4rs::dump_bv(&self.#name)
+                    });
+                    valid_member_size.push(quote! {
+                            x += #size;
+                    });
+                    to_bitvec_stmts.push(quote! {
+                        x[off..off+#size] |= self.#name.to_bitvec();
+                        off += #size;
+                    });
                 }
                 Type::Bool => {
                     members.push(quote! { pub #name: bool });
+                    dump_statements.push(quote! {
+                        #name_s.blue(),
+                        self.#name
+                    });
                 }
                 x => {
                     todo!("struct member {}", x)

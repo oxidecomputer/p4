@@ -1,9 +1,10 @@
 use bitvec::prelude::*;
 
-struct Csum(u16);
+#[derive(Default)]
+pub struct Csum(u16);
 
 impl Csum {
-    fn add(&mut self, a: u8, b: u8) {
+    pub fn add(&mut self, a: u8, b: u8) {
         let x = u16::from_be_bytes([a, b]);
         let (mut result, overflow) = self.0.overflowing_add(x);
         if overflow {
@@ -11,7 +12,20 @@ impl Csum {
         }
         self.0 = result;
     }
-    fn result(&self) -> u16 {
+    pub fn add128(&mut self, data: [u8; 16]) {
+        self.add(data[0], data[1]);
+        self.add(data[2], data[3]);
+        self.add(data[4], data[5]);
+        self.add(data[6], data[7]);
+        self.add(data[8], data[9]);
+        self.add(data[10], data[11]);
+        self.add(data[12], data[13]);
+        self.add(data[14], data[15]);
+    }
+    pub fn add16(&mut self, data: [u8; 2]) {
+        self.add(data[0], data[1]);
+    }
+    pub fn result(&self) -> u16 {
         !self.0
     }
 }
