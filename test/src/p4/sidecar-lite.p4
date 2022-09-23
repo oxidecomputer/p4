@@ -443,6 +443,27 @@ control router(
 
 }
 
+control mac_rewrite(
+    inout headers_t hdr,
+    inout EgressMetadata egress,
+) {
+
+    action rewrite(bit<48> mac) {
+        hdr.ethernet.src = mac;
+    }
+
+    table mac_rewrite {
+        key = { egress.port: exact; }
+        actions = { rewrite; }
+        default_action = NoAction;
+    }
+
+    apply {
+        mac_rewrite.apply();
+    }
+
+}
+
 control ingress(
     inout headers_t hdr,
     inout IngressMetadata ingress,
@@ -452,6 +473,7 @@ control ingress(
     router() router;
     nat_ingress() nat;
     resolver() resolver;
+    mac_rewrite() mac;
 
     apply {
 
@@ -518,7 +540,6 @@ control ingress(
                     hdr.udp.setValid();
                     hdr.inner_udp.setInvalid();
                 }
-                hdr.ethernet.src = 48w0xa8e1de01701f; // hack for upstream router source
                 router.apply(hdr, ingress, egress);
                 if (egress.port != 8w0) {
                     resolver.apply(hdr, egress);
@@ -557,5 +578,11 @@ control ingress(
                 resolver.apply(hdr, egress);
             }
         }
+
+        //
+        // Rewrite the mac on the way out the door.
+        //
+
+        mac.apply(hdr, egress);
     }
 }
