@@ -35,7 +35,7 @@ fn hub() -> Result<(), anyhow::Error> {
 
     // egress rings
     let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
-    let (tx2_p, tx2_c) = ring::<R, N, F>(fb.clone());
+    let (tx2_p, tx2_c) = ring::<R, N, F>(fb);
 
     // create phys
     let phy1 = Phy::new(1, rx1_p);

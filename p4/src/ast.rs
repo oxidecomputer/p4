@@ -26,48 +26,23 @@ pub enum UserDefinedType<'a> {
 
 impl AST {
     pub fn get_struct(&self, name: &str) -> Option<&Struct> {
-        for s in &self.structs {
-            if s.name == name {
-                return Some(s);
-            }
-        }
-        None
+        self.structs.iter().find(|&s| s.name == name)
     }
 
     pub fn get_header(&self, name: &str) -> Option<&Header> {
-        for h in &self.headers {
-            if h.name == name {
-                return Some(h);
-            }
-        }
-        None
+        self.headers.iter().find(|&h| h.name == name)
     }
 
     pub fn get_extern(&self, name: &str) -> Option<&Extern> {
-        for e in &self.externs {
-            if e.name == name {
-                return Some(e);
-            }
-        }
-        None
+        self.externs.iter().find(|&e| e.name == name)
     }
 
     pub fn get_control(&self, name: &str) -> Option<&Control> {
-        for c in &self.controls {
-            if c.name == name {
-                return Some(c);
-            }
-        }
-        None
+        self.controls.iter().find(|&c| c.name == name)
     }
 
     pub fn get_parser(&self, name: &str) -> Option<&Parser> {
-        for p in &self.parsers {
-            if p.name == name {
-                return Some(p);
-            }
-        }
-        None
+        self.parsers.iter().find(|&p| p.name == name)
     }
 
     pub fn get_user_defined_type(&self, name: &str) -> Option<UserDefinedType> {
@@ -356,30 +331,15 @@ impl Control {
     }
 
     pub fn get_parameter(&self, name: &str) -> Option<&ControlParameter> {
-        for p in &self.parameters {
-            if p.name == name {
-                return Some(p);
-            }
-        }
-        None
+        self.parameters.iter().find(|&p| p.name == name)
     }
 
     pub fn get_action(&self, name: &str) -> Option<&Action> {
-        for a in &self.actions {
-            if a.name == name {
-                return Some(a);
-            }
-        }
-        None
+        self.actions.iter().find(|&a| a.name == name)
     }
 
     pub fn get_table(&self, name: &str) -> Option<&Table> {
-        for t in &self.tables {
-            if t.name == name {
-                return Some(t);
-            }
-        }
-        None
+        self.tables.iter().find(|&t| t.name == name)
     }
 
     /// Return all the tables in this control block, recursively expanding local
@@ -506,12 +466,7 @@ impl Parser {
     }
 
     pub fn get_start_state(&self) -> Option<&State> {
-        for s in &self.states {
-            if s.name == "start" {
-                return Some(s);
-            }
-        }
-        None
+        self.states.iter().find(|&s| s.name == "start")
     }
 }
 
@@ -824,12 +779,7 @@ impl Extern {
     }
 
     pub fn get_method(&self, name: &str) -> Option<&ExternMethod> {
-        for m in &self.methods {
-            if m.name == name {
-                return Some(m);
-            }
-        }
-        None
+        self.methods.iter().find(|&m| m.name == name)
     }
 }
 

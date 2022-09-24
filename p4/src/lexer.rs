@@ -323,349 +323,281 @@ impl<'a> Lexer<'a> {
         self.skip_whitespace();
         //self.skip_comment();
 
-        match self.match_token("#include", Kind::PoundInclude) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("#include", Kind::PoundInclude) {
+            return Ok(t);
         }
 
-        match self.match_token("#define", Kind::PoundDefine) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("#define", Kind::PoundDefine) {
+            return Ok(t);
         }
 
-        match self.match_token("&&&", Kind::Mask) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("&&&", Kind::Mask) {
+            return Ok(t);
         }
 
-        match self.match_token("inout", Kind::InOut) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("inout", Kind::InOut) {
+            return Ok(t);
         }
 
-        match self.match_token("in", Kind::In) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("in", Kind::In) {
+            return Ok(t);
         }
 
-        match self.match_token("out", Kind::Out) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("out", Kind::Out) {
+            return Ok(t);
         }
 
-        match self.match_token("transition", Kind::Transition) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("transition", Kind::Transition) {
+            return Ok(t);
         }
 
-        match self.match_token("state", Kind::State) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("state", Kind::State) {
+            return Ok(t);
         }
 
-        match self.match_token("select", Kind::Select) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("select", Kind::Select) {
+            return Ok(t);
         }
 
-        match self.match_token("apply", Kind::Apply) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("apply", Kind::Apply) {
+            return Ok(t);
         }
 
-        match self.match_token("package", Kind::Package) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("package", Kind::Package) {
+            return Ok(t);
         }
 
-        match self.match_token("extern", Kind::Extern) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("extern", Kind::Extern) {
+            return Ok(t);
         }
 
-        match self.match_token("if", Kind::If) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("if", Kind::If) {
+            return Ok(t);
         }
 
-        match self.match_token("else", Kind::Else) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("else", Kind::Else) {
+            return Ok(t);
         }
 
-        match self.match_token("return", Kind::Return) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("return", Kind::Return) {
+            return Ok(t);
         }
 
-        match self.match_token("&&", Kind::LogicalAnd) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("&&", Kind::LogicalAnd) {
+            return Ok(t);
         }
 
-        match self.match_token("&", Kind::And) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("&", Kind::And) {
+            return Ok(t);
         }
 
-        match self.match_token("==", Kind::DoubleEquals) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("==", Kind::DoubleEquals) {
+            return Ok(t);
         }
 
-        match self.match_token("!=", Kind::NotEquals) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("!=", Kind::NotEquals) {
+            return Ok(t);
         }
 
-        match self.match_token("|", Kind::Pipe) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("|", Kind::Pipe) {
+            return Ok(t);
         }
 
-        match self.match_token("<<", Kind::Shl) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("<<", Kind::Shl) {
+            return Ok(t);
         }
 
-        match self.match_token("<", Kind::AngleOpen) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("<", Kind::AngleOpen) {
+            return Ok(t);
         }
 
-        match self.match_token(">", Kind::AngleClose) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(">", Kind::AngleClose) {
+            return Ok(t);
         }
 
-        match self.match_token(">=", Kind::GreaterThanEquals) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(">=", Kind::GreaterThanEquals) {
+            return Ok(t);
         }
 
-        match self.match_token(">", Kind::AngleClose) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(">", Kind::AngleClose) {
+            return Ok(t);
         }
 
-        match self.match_token("{", Kind::CurlyOpen) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("{", Kind::CurlyOpen) {
+            return Ok(t);
         }
 
-        match self.match_token("}", Kind::CurlyClose) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("}", Kind::CurlyClose) {
+            return Ok(t);
         }
 
-        match self.match_token("(", Kind::ParenOpen) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("(", Kind::ParenOpen) {
+            return Ok(t);
         }
 
-        match self.match_token(")", Kind::ParenClose) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(")", Kind::ParenClose) {
+            return Ok(t);
         }
 
-        match self.match_token("[", Kind::SquareOpen) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("[", Kind::SquareOpen) {
+            return Ok(t);
         }
 
-        match self.match_token("]", Kind::SquareClose) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("]", Kind::SquareClose) {
+            return Ok(t);
         }
 
-        match self.match_token("+", Kind::Plus) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("+", Kind::Plus) {
+            return Ok(t);
         }
 
-        match self.match_token("-", Kind::Minus) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("-", Kind::Minus) {
+            return Ok(t);
         }
 
-        match self.match_token("=", Kind::Equals) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("=", Kind::Equals) {
+            return Ok(t);
         }
 
-        match self.match_token(":", Kind::Colon) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(":", Kind::Colon) {
+            return Ok(t);
         }
 
-        match self.match_token("_", Kind::Underscore) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("_", Kind::Underscore) {
+            return Ok(t);
         }
 
-        match self.match_token(";", Kind::Semicolon) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(";", Kind::Semicolon) {
+            return Ok(t);
         }
 
-        match self.match_token(".", Kind::Dot) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(".", Kind::Dot) {
+            return Ok(t);
         }
 
-        match self.match_token("^", Kind::Carat) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("^", Kind::Carat) {
+            return Ok(t);
         }
 
-        match self.match_token(",", Kind::Comma) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token(",", Kind::Comma) {
+            return Ok(t);
         }
 
-        match self.match_token("!", Kind::Bang) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("!", Kind::Bang) {
+            return Ok(t);
         }
 
-        match self.match_token("~", Kind::Tilde) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("~", Kind::Tilde) {
+            return Ok(t);
         }
 
-        match self.match_token("\\", Kind::Backslash) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("\\", Kind::Backslash) {
+            return Ok(t);
         }
 
-        match self.match_token("/", Kind::Forwardslash) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("/", Kind::Forwardslash) {
+            return Ok(t);
         }
 
-        match self.match_token("bool", Kind::Bool) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("bool", Kind::Bool) {
+            return Ok(t);
         }
 
-        match self.match_token("varbit", Kind::Varbit) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("varbit", Kind::Varbit) {
+            return Ok(t);
         }
 
-        match self.match_token("bit", Kind::Bit) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("bit", Kind::Bit) {
+            return Ok(t);
         }
 
-        match self.match_token("int", Kind::Int) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("int", Kind::Int) {
+            return Ok(t);
         }
 
-        match self.match_token("typedef", Kind::Typedef) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("typedef", Kind::Typedef) {
+            return Ok(t);
         }
 
-        match self.match_token("header", Kind::Header) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("header", Kind::Header) {
+            return Ok(t);
         }
 
-        match self.match_token("const", Kind::Const) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("const", Kind::Const) {
+            return Ok(t);
         }
 
-        match self.match_token("control", Kind::Control) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("control", Kind::Control) {
+            return Ok(t);
         }
 
-        match self.match_token("struct", Kind::Struct) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("struct", Kind::Struct) {
+            return Ok(t);
         }
 
-        match self.match_token("actions", Kind::Actions) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("actions", Kind::Actions) {
+            return Ok(t);
         }
 
-        match self.match_token("default_action", Kind::DefaultAction) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("default_action", Kind::DefaultAction)
+        {
+            return Ok(t);
         }
 
-        match self.match_token("action", Kind::Action) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("action", Kind::Action) {
+            return Ok(t);
         }
 
-        match self.match_token("parser", Kind::Parser) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("parser", Kind::Parser) {
+            return Ok(t);
         }
 
-        match self.match_token("entries", Kind::Entries) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("entries", Kind::Entries) {
+            return Ok(t);
         }
 
-        match self.match_token("table", Kind::Table) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("table", Kind::Table) {
+            return Ok(t);
         }
 
-        match self.match_token("size", Kind::Size) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("size", Kind::Size) {
+            return Ok(t);
         }
 
-        match self.match_token("key", Kind::Key) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("key", Kind::Key) {
+            return Ok(t);
         }
 
-        match self.match_token("exact", Kind::Exact) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("exact", Kind::Exact) {
+            return Ok(t);
         }
 
-        match self.match_token("ternary", Kind::Ternary) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("ternary", Kind::Ternary) {
+            return Ok(t);
         }
 
-        match self.match_token("lpm", Kind::Lpm) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("lpm", Kind::Lpm) {
+            return Ok(t);
         }
 
-        match self.match_token("range", Kind::Range) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("range", Kind::Range) {
+            return Ok(t);
         }
 
-        match self.match_token("true", Kind::TrueLiteral) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("true", Kind::TrueLiteral) {
+            return Ok(t);
         }
 
-        match self.match_token("false", Kind::FalseLiteral) {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_token("false", Kind::FalseLiteral) {
+            return Ok(t);
         }
 
-        match self.match_integer() {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_integer() {
+            return Ok(t);
         }
 
-        match self.match_identifier() {
-            Some(t) => return Ok(t),
-            None => {}
+        if let Some(t) = self.match_identifier() {
+            return Ok(t);
         }
 
         let len = self.skip_token();
@@ -725,7 +657,7 @@ impl<'a> Lexer<'a> {
                 Err(_) => return None,
             }
         } else {
-            match (&tok[n + 1..]).parse::<u128>() {
+            match tok[n + 1..].parse::<u128>() {
                 Ok(n) => n,
                 Err(_) => return None,
             }
@@ -757,7 +689,7 @@ impl<'a> Lexer<'a> {
                 Err(_) => return None,
             }
         } else {
-            match (&tok[n + 1..]).parse::<i128>() {
+            match tok[n + 1..].parse::<i128>() {
                 Ok(n) => n,
                 Err(_) => return None,
             }
@@ -789,16 +721,15 @@ impl<'a> Lexer<'a> {
             None
         };
 
-        match leading {
-            Some(n) => match self.parse_bitsized(tok, n, Kind::BitLiteral) {
+        if let Some(n) = leading {
+            match self.parse_bitsized(tok, n, Kind::BitLiteral) {
                 Some(token) => {
                     self.col += len;
                     self.cursor = &self.cursor[len..];
                     return Some(token);
                 }
                 None => return None,
-            },
-            None => {}
+            }
         }
 
         let mut chars = tok.chars();
@@ -812,16 +743,15 @@ impl<'a> Lexer<'a> {
             None
         };
 
-        match leading {
-            Some(n) => match self.parse_intsized(tok, n, Kind::SignedLiteral) {
+        if let Some(n) = leading {
+            match self.parse_intsized(tok, n, Kind::SignedLiteral) {
                 Some(token) => {
                     self.col += len;
                     self.cursor = &self.cursor[len..];
                     return Some(token);
                 }
                 None => return None,
-            },
-            None => {}
+            }
         }
 
         let value = if let Some(tok) = tok.strip_prefix("0x") {

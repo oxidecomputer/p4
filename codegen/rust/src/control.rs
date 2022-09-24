@@ -445,11 +445,6 @@ impl<'a> ControlGenerator<'a> {
         control: &'b Control,
         arg_name: &str,
     ) -> Option<&'b ControlParameter> {
-        for arg in &control.parameters {
-            if arg.name == arg_name {
-                return Some(arg);
-            }
-        }
-        None
+        control.parameters.iter().find(|&arg| arg.name == arg_name)
     }
 }

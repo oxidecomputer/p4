@@ -179,12 +179,7 @@ fn get_parser_arg<'a>(
     parser: &'a Parser,
     arg_name: &str,
 ) -> Option<&'a ControlParameter> {
-    for arg in &parser.parameters {
-        if arg.name == arg_name {
-            return Some(arg);
-        }
-    }
-    None
+    parser.parameters.iter().find(|&arg| arg.name == arg_name)
 }
 
 /// Return the rust type for a given P4 type.
