@@ -24,7 +24,8 @@ ptime -m cargo build --release
 for x in debug release
 do
     mkdir -p /work/$x
-    cp target/$x/x4c /work/$x/x4c
+    cp target/$x/x4c /work/$x/
+    cp target/$x/libsidecar_lite.so /work/$x/
 done
 
 banner "check"
