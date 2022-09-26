@@ -22,6 +22,10 @@ impl Csum {
         self.add(data[12], data[13]);
         self.add(data[14], data[15]);
     }
+    pub fn add32(&mut self, data: [u8; 4]) {
+        self.add(data[0], data[1]);
+        self.add(data[2], data[3]);
+    }
     pub fn add16(&mut self, data: [u8; 2]) {
         self.add(data[0], data[1]);
     }
