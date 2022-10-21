@@ -10,6 +10,7 @@ SoftNPU(
 struct headers_t {
     ethernet_h ethernet;
     sidecar_h sidecar;
+    arp_h arp;
     ipv4_h ipv4;
     ipv6_h ipv6;
     icmp_h icmp;
@@ -40,6 +41,9 @@ parser parse(
         if (hdr.ethernet.ether_type == 16w0x0901) {
             transition sidecar;
         }
+        if (hdr.ethernet.ether_type == 16w0x0806) {
+            transition arp;
+        }
         transition reject;
     }
 
@@ -52,6 +56,11 @@ parser parse(
             transition ipv4;
         }
         transition reject;
+    }
+
+    state arp {
+        pkt.extract(hdr.arp);
+        transition accept;
     }
 
     state ipv6 {
@@ -464,6 +473,39 @@ control mac_rewrite(
 
 }
 
+control proxy_arp(
+    inout headers_t hdr,
+    inout IngressMetadata ingress,
+    inout EgressMetadata egress,
+) {
+    action proxy_arp_reply(bit<48> mac) {
+        egress.port = ingress.port;
+        hdr.ethernet.dst = hdr.ethernet.src;
+        hdr.ethernet.src = mac;
+        hdr.arp.target_mac = hdr.arp.sender_mac;
+        hdr.arp.sender_mac = mac;
+        hdr.arp.opcode = 16w2;
+
+        //TODO compiler broken for this, should be able to do this in one line.
+        bit<32> tmp = 0;
+        tmp = hdr.arp.sender_ip;
+        /// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+        hdr.arp.sender_ip = hdr.arp.target_ip;
+        hdr.arp.target_ip = tmp;
+    }
+
+    table proxy_arp {
+        key = { hdr.arp.target_ip: range; }
+        actions = { proxy_arp_reply; }
+        default_action = NoAction;
+    }
+
+    apply {
+        proxy_arp.apply();
+    }
+}
+
 control ingress(
     inout headers_t hdr,
     inout IngressMetadata ingress,
@@ -474,6 +516,7 @@ control ingress(
     nat_ingress() nat;
     resolver() resolver;
     mac_rewrite() mac;
+    proxy_arp() pxarp;
 
     apply {
 
@@ -496,6 +539,11 @@ control ingress(
             // port. No sort of hairpin back to the scrimlet is supported.
             // Similarly sending packets from one scrimlet port out a different
             // sidecar port is also not supported.
+            return;
+        }
+
+        if (hdr.arp.isValid()) {
+            pxarp.apply(hdr, ingress, egress);
             return;
         }
 

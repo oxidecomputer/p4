@@ -75,3 +75,18 @@ header geneve_h {
     bit<24> vni;
     bit<8> reserved2;
 }
+
+header arp_h {
+	bit<16>		hw_type;
+	bit<16>		proto_type;
+	bit<8>		hw_addr_len;
+	bit<8>		proto_addr_len;
+	bit<16>		opcode;
+
+	// In theory, the remaining fields should be <varbit>
+	// based on the the two x_len fields.
+	bit<48> sender_mac;
+	bit<32> sender_ip;
+	bit<48> target_mac;
+	bit<32> target_ip;
+}
