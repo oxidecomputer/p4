@@ -90,3 +90,11 @@ header arp_h {
 	bit<48> target_mac;
 	bit<32> target_ip;
 }
+
+header ddm_h {
+    bit<8> next_header;
+    bit<8> header_length;
+    bit<8> version;
+    bit<1> ack;
+    bit<7> reserved;
+}

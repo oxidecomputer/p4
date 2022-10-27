@@ -65,6 +65,9 @@ parser parse(
 
     state ipv6 {
         pkt.extract(hdr.ipv6);
+        if (hdr.ipv6.next_hdr == 8w0xdd) {
+            transition ddm;
+        }
         if (hdr.ipv6.next_hdr == 8w58) {
             transition icmp;
         }
@@ -74,6 +77,10 @@ parser parse(
         if (hdr.ipv6.next_hdr == 8w6) {
             transition tcp;
         }
+        transition accept;
+    }
+
+    state ddm {
         transition accept;
     }
 
