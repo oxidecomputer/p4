@@ -192,7 +192,7 @@ impl<'a> StatementGenerator<'a> {
                 };
                 match transition {
                     Transition::Reference(next_state) => {
-                        match next_state.as_str() {
+                        match next_state.name.as_str() {
                             "accept" => quote! { return true; },
                             "reject" => quote! { return false; },
                             state_ref => {
@@ -586,6 +586,7 @@ impl<'a> StatementGenerator<'a> {
             Type::Table => todo!(),
             Type::Void => todo!(),
             Type::List(_) => todo!(),
+            Type::State => todo!(),
         }
     }
 

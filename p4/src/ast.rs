@@ -123,6 +123,7 @@ pub enum Type {
     Table,
     Void,
     List(Vec<Box<Type>>),
+    State,
 }
 
 impl fmt::Display for Type {
@@ -138,6 +139,7 @@ impl fmt::Display for Type {
             Type::ExternFunction => write!(f, "extern function"),
             Type::Table => write!(f, "table"),
             Type::Void => write!(f, "void"),
+            Type::State => write!(f, "state"),
             Type::List(elems) => {
                 write!(f, "list<")?;
                 for e in elems {
@@ -462,6 +464,15 @@ impl Parser {
                 },
             );
         }
+        for s in &self.states {
+            names.insert(
+                s.name.clone(),
+                NameInfo {
+                    ty: Type::State,
+                    decl: DeclarationInfo::State,
+                },
+            );
+        }
         names
     }
 
@@ -740,7 +751,7 @@ impl State {
 
 #[derive(Debug, Clone)]
 pub enum Transition {
-    Reference(String),
+    Reference(Lvalue),
     Select(Select),
 }
 
@@ -800,6 +811,7 @@ pub enum DeclarationInfo {
     Local,
     ControlTable,
     ControlMember,
+    State,
 }
 
 #[derive(Debug, Clone)]

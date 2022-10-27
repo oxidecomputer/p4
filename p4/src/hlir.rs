@@ -240,6 +240,14 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
+            Type::State => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "cannot index a state".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
             Type::Error => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,

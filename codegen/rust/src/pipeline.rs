@@ -491,6 +491,9 @@ impl<'a> PipelineGenerator<'a> {
                     Type::Error => {
                         todo!();
                     }
+                    Type::State => {
+                        todo!();
+                    }
                     Type::Bit(n) => {
                         parameter_tokens.push(quote! {
                             let #pname = p4rs::extract_bit_action_parameter(
