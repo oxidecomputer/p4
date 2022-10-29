@@ -98,3 +98,8 @@ header ddm_h {
     bit<1> ack;
     bit<7> reserved;
 }
+
+header ddm_element_t {
+    bit<8> id;
+    bit<24> timestamp;
+}
