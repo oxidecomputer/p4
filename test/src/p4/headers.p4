@@ -1,7 +1,7 @@
 header sidecar_h {
     bit<8> sc_code;
-    bit<8> sc_ingress;
-    bit<8> sc_egress;
+    bit<16> sc_ingress;
+    bit<16> sc_egress;
     bit<16> sc_ether_type;
     bit<128> sc_payload;
 }

@@ -454,12 +454,12 @@ control router(
 ) {
     action drop() { }
 
-    action forward_v6(bit<8> port, bit<128> nexthop) {
+    action forward_v6(bit<16> port, bit<128> nexthop) {
         egress.port = port;
         egress.nexthop_v6 = nexthop;
     }
 
-    action forward_v4(bit<8> port, bit<32> nexthop) {
+    action forward_v4(bit<16> port, bit<32> nexthop) {
         egress.port = port;
         egress.nexthop_v4 = nexthop;
     }
@@ -573,7 +573,7 @@ control ingress(
 
             //  Direct packets to the sidecar port corresponding to the scrimlet
             //  port they came from.
-            egress.port = hdr.sidecar.sc_ingress;
+            egress.port = hdr.sidecar.sc_egress;
 
             // Decap the sidecar header.
             hdr.sidecar.setInvalid();
@@ -634,7 +634,7 @@ control ingress(
                     hdr.inner_udp.setInvalid();
                 }
                 router.apply(hdr, ingress, egress);
-                if (egress.port != 8w0) {
+                if (egress.port != 16w0) {
                     resolver.apply(hdr, egress);
                 }
             }
@@ -654,7 +654,10 @@ control ingress(
                 hdr.sidecar.sc_payload = 128w0x1701d;
 
                 // scrimlet port
-                egress.port = 0;
+                // TODO simply stating 0 here causes bad conversion, initializes
+                // egress.port as a 128 bit value due to
+                // StatementGenerator::converter using int_to_bitvec
+                egress.port = 16w0;
             }
         }
 
@@ -667,7 +670,7 @@ control ingress(
             nat.apply(hdr, ingress, egress);
 
             router.apply(hdr, ingress, egress);
-            if (egress.port != 8w0) {
+            if (egress.port != 16w0) {
                 resolver.apply(hdr, egress);
             }
         }

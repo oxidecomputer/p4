@@ -96,9 +96,9 @@ pub trait Pipeline: Send {
     /// packet and output port number.
     fn process_packet<'a>(
         &mut self,
-        port: u8,
+        port: u16,
         pkt: &mut packet_in<'a>,
-    ) -> Option<(packet_out<'a>, u8)>;
+    ) -> Option<(packet_out<'a>, u16)>;
 
     //TODO use struct TableEntry?
     /// Add an entry to a table identified by table_id.

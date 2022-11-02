@@ -150,9 +150,9 @@ impl<'a> PipelineGenerator<'a> {
         quote! {
             fn process_packet<'a>(
                 &mut self,
-                port: u8,
+                port: u16,
                 pkt: &mut packet_in<'a>,
-            ) -> Option<(packet_out<'a>, u8)> {
+            ) -> Option<(packet_out<'a>, u16)> {
 
                 //
                 // 1. Instantiate the parser out type
@@ -165,8 +165,8 @@ impl<'a> PipelineGenerator<'a> {
                 //
                 let mut ingress_metadata = IngressMetadata{
                     port: {
-                        let mut x = bitvec![mut u8, Msb0; 0; 8];
-                        x.store(port);
+                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        x.store_be(port);
                         x
                     },
                     ..Default::default()
@@ -212,14 +212,15 @@ impl<'a> PipelineGenerator<'a> {
                 // 6. Determine egress port
                 //
 
-                let port = if egress_metadata.port.is_empty()
+                let port: u16 = if egress_metadata.port.is_empty()
                     || egress_metadata.drop {
                     softnpu_provider::control_dropped!(||(&dump));
                     //println!("{}", "no match".red());
                     //println!("{}", "---".dimmed());
                     return None;
                 } else {
-                    egress_metadata.port.as_raw_slice()[0]
+                    egress_metadata.port.load_be()
+                    //egress_metadata.port.as_raw_slice()[0]
                 };
 
                 let dump = parsed.dump();
