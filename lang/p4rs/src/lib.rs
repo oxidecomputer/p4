@@ -86,7 +86,7 @@ pub struct packet_out<'a> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableEntry {
-    pub action_id: u32,
+    pub action_id: String,
     pub keyset_data: Vec<u8>,
     pub parameter_data: Vec<u8>,
 }
@@ -104,20 +104,20 @@ pub trait Pipeline: Send {
     /// Add an entry to a table identified by table_id.
     fn add_table_entry(
         &mut self,
-        table_id: u32,
-        action_id: u32,
+        table_id: &str,
+        action_id: &str,
         keyset_data: &[u8],
         parameter_data: &[u8],
     );
 
     /// Remove an entry from a table identified by table_id.
-    fn remove_table_entry(&mut self, table_id: u32, keyset_data: &[u8]);
+    fn remove_table_entry(&mut self, table_id: &str, keyset_data: &[u8]);
 
     /// Get all the entries in a table.
-    fn get_table_entries(&self, table_id: u32) -> Option<Vec<TableEntry>>;
+    fn get_table_entries(&self, table_id: &str) -> Option<Vec<TableEntry>>;
 
-    /// Get the number of tables.
-    fn get_table_count(&self) -> u32;
+    /// Get a list of table ids
+    fn get_table_ids(&self) -> Vec<&str>;
 }
 
 /// A fixed length header trait.

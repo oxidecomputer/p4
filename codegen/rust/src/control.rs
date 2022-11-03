@@ -48,7 +48,8 @@ impl<'a> ControlGenerator<'a> {
         }
 
         let tables = control.tables(self.ast);
-        for (c, table) in tables {
+        for (cs, table) in tables {
+            let c = *cs.last().unwrap();
             let (_, mut param_types) = self.control_parameters(c);
             for var in &c.variables {
                 if let Type::UserDefined(typename) = &var.ty {

@@ -414,7 +414,8 @@ impl<'a> StatementGenerator<'a> {
             }
 
             let tables = control_instance.tables(self.ast);
-            for (control, table) in tables {
+            for (cs, table) in tables {
+                let control = cs.last().unwrap();
                 let name =
                     format_ident!("{}_table_{}", control.name, table.name,);
                 args.push(quote! { #name });

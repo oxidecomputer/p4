@@ -659,6 +659,7 @@ control ingress(
                 // StatementGenerator::converter using int_to_bitvec
                 egress.port = 16w0;
             }
+            return;
         }
 
         //

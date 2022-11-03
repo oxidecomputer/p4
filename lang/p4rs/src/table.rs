@@ -242,7 +242,7 @@ pub struct TableEntry<const D: usize, A: Clone> {
 
     // the following are not used operationally, strictly for observability as
     // the closure contained in `A` is hard to get at.
-    pub action_id: u32,
+    pub action_id: String,
     pub parameter_data: Vec<u8>,
 }
 

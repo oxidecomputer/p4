@@ -82,7 +82,7 @@ impl<'a> PipelineGenerator<'a> {
 
         let remove_table_entry_method = self.remove_table_entry_method(control);
         let get_table_entries_method = self.get_table_entries_method(control);
-        let get_table_count_method = self.get_table_count_method(control);
+        let get_table_ids_method = self.get_table_ids_method(control);
 
         let table_modifiers = self.table_modifiers(control);
 
@@ -114,7 +114,7 @@ impl<'a> PipelineGenerator<'a> {
                 #add_table_entry_method
                 #remove_table_entry_method
                 #get_table_entries_method
-                #get_table_count_method
+                #get_table_ids_method
             }
 
             unsafe impl Send for #pipeline_name { }
@@ -140,7 +140,8 @@ impl<'a> PipelineGenerator<'a> {
         // determine table arguments
         let tables = control.tables(self.ast);
         let mut tbl_args = Vec::new();
-        for (c, t) in tables {
+        for (cs, t) in tables {
+            let c = cs.last().unwrap();
             let name = format_ident!("{}_table_{}", c.name, t.name);
             tbl_args.push(quote! {
                 &self.#name
@@ -257,7 +258,8 @@ impl<'a> PipelineGenerator<'a> {
             crate::ControlGenerator::new(self.ast, self.hlir, self.ctx);
 
         let tables = control.tables(self.ast);
-        for (control, table) in tables {
+        for (cs, table) in tables {
+            let control = cs.last().unwrap();
             let (_, mut param_types) = cg.control_parameters(control);
 
             for var in &control.variables {
@@ -291,15 +293,24 @@ impl<'a> PipelineGenerator<'a> {
         (members, initializers)
     }
 
+    fn qualified_table_name(chain: &Vec<&Control>, table: &Table) -> String {
+        let mut qname = String::new();
+        for c in chain {
+            qname += &format!("{}.", c.name);
+        }
+        qname += &table.name;
+        qname
+    }
+
     fn add_table_entry_method(&mut self, control: &Control) -> TokenStream {
         let mut body = TokenStream::new();
 
         let tables = control.tables(self.ast);
-        for (i, (_control, table)) in tables.iter().enumerate() {
-            let i = i as u32;
+        for (cs, table) in tables.iter() {
+            let qtn = Self::qualified_table_name(cs, table);
             let call = format_ident!("add_{}_table_entry", table.name);
             body.extend(quote! {
-                #i => self.#call(
+                #qtn => self.#call(
                     action_id,
                     keyset_data,
                     parameter_data,
@@ -314,8 +325,8 @@ impl<'a> PipelineGenerator<'a> {
         quote! {
             fn add_table_entry(
                 &mut self,
-                table_id: u32,
-                action_id: u32,
+                table_id: &str,
+                action_id: &str,
                 keyset_data: &[u8],
                 parameter_data: &[u8],
             ) {
@@ -330,13 +341,13 @@ impl<'a> PipelineGenerator<'a> {
         let mut body = TokenStream::new();
 
         let tables = control.tables(self.ast);
-        for (i, (_control, table)) in tables.iter().enumerate() {
-            let i = i as u32;
+        for (cs, table) in tables.iter() {
+            let qtn = Self::qualified_table_name(cs, table);
             //TODO probably a conflict with the same table name in multiple control
             //blocks
             let call = format_ident!("remove_{}_table_entry", table.name);
             body.extend(quote! {
-                #i => self.#call(keyset_data),
+                #qtn => self.#call(keyset_data),
             });
         }
 
@@ -347,7 +358,7 @@ impl<'a> PipelineGenerator<'a> {
         quote! {
             fn remove_table_entry(
                 &mut self,
-                table_id: u32,
+                table_id: &str,
                 keyset_data: &[u8],
             ) {
                 match table_id {
@@ -357,11 +368,15 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
-    fn get_table_count_method(&mut self, control: &Control) -> TokenStream {
-        let count = control.tables(self.ast).len() as u32;
+    fn get_table_ids_method(&mut self, control: &Control) -> TokenStream {
+        let mut names = Vec::new();
+        let tables = control.tables(self.ast);
+        for (cs, table) in &tables {
+            names.push(Self::qualified_table_name(cs, table));
+        }
         quote! {
-            fn get_table_count(&self) -> u32 {
-                #count
+            fn get_table_ids(&self) -> Vec<&str> {
+                vec![#(#names),*]
             }
         }
     }
@@ -370,11 +385,11 @@ impl<'a> PipelineGenerator<'a> {
         let mut body = TokenStream::new();
 
         let tables = control.tables(self.ast);
-        for (i, (_control, table)) in tables.iter().enumerate() {
-            let i = i as u32;
+        for (cs, table) in tables.iter() {
+            let qtn = Self::qualified_table_name(cs, table);
             let call = format_ident!("get_{}_table_entries", table.name);
             body.extend(quote! {
-                #i => Some(self.#call()),
+                #qtn => Some(self.#call()),
             });
         }
 
@@ -385,7 +400,7 @@ impl<'a> PipelineGenerator<'a> {
         quote! {
             fn get_table_entries(
                 &self,
-                table_id: u32,
+                table_id: &str,
             ) -> Option<Vec<p4rs::TableEntry>> {
                 match table_id {
                     #body
@@ -397,7 +412,8 @@ impl<'a> PipelineGenerator<'a> {
     fn table_modifiers(&mut self, control: &Control) -> TokenStream {
         let mut tokens = TokenStream::new();
         let tables = control.tables(self.ast);
-        for (control, table) in tables {
+        for (cs, table) in tables {
+            let control = cs.last().unwrap();
             tokens.extend(self.add_table_entry_function(table, control));
             tokens.extend(self.remove_table_entry_function(table, control));
             tokens.extend(self.get_table_entries_function(table, control));
@@ -459,8 +475,7 @@ impl<'a> PipelineGenerator<'a> {
         let keys = self.table_entry_keys(table);
 
         let mut action_match_body = TokenStream::new();
-        for (i, action) in table.actions.iter().enumerate() {
-            let i = i as u32;
+        for action in table.actions.iter() {
             let call =
                 format_ident!("{}_action_{}", control.name, &action.name);
             let n = table.key.len();
@@ -563,9 +578,10 @@ impl<'a> PipelineGenerator<'a> {
                 }
             }
 
+            let aname = &action.name;
             let tname = format_ident!("{}_table_{}", control.name, table.name);
             action_match_body.extend(quote! {
-                #i => {
+                #aname => {
                     #(#parameter_tokens)*
                     let action: std::sync::Arc<dyn Fn(
                         #(#control_param_types),*
@@ -590,7 +606,7 @@ impl<'a> PipelineGenerator<'a> {
                             priority: 0, //TODO
                             name: "your name here".into(), //TODO
                             action,
-                            action_id: #i,
+                            action_id: #aname.to_owned(),
                             parameter_data: parameter_data.to_owned(),
                         });
                 }
@@ -607,7 +623,7 @@ impl<'a> PipelineGenerator<'a> {
             // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
             pub fn #name<'a>(
                 &mut self,
-                action_id: u32,
+                action_id: &str,
                 keyset_data: &'a [u8],
                 parameter_data: &'a [u8],
             ) {
@@ -686,7 +702,7 @@ impl<'a> PipelineGenerator<'a> {
                             priority: 0, //TODO
                             name: "your name here".into(), //TODO
                             action,
-                            action_id: 0,
+                            action_id: String::new(),
                             parameter_data: Vec::new(),
                         }
                     );
@@ -711,11 +727,16 @@ impl<'a> PipelineGenerator<'a> {
 
                     let mut keyset_data = Vec::new();
                     for k in &e.key {
+                        //TODO this is broken, to_bytes can squash N byte
+                        //objects into smaller than N bytes which violates
+                        //expectations of consumers. For example if this is a
+                        //16-bit integer with a value of 47 it will get squashed
+                        //down into 8-bits.
                         keyset_data.extend_from_slice(&k.to_bytes());
                     }
 
                     let x = p4rs::TableEntry{
-                        action_id: e.action_id,
+                        action_id: e.action_id.clone(),
                         keyset_data,
                         parameter_data: e.parameter_data.clone(),
                     };
