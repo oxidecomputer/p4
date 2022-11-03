@@ -358,7 +358,31 @@ impl<'a> ControlGenerator<'a> {
                                     });
                                 }
                             }
-                            x => todo!("action praam expression type {:?}", x),
+                            x => {
+                                todo!("action int lit expression type {:?}", x)
+                            }
+                        }
+                    }
+                    ExpressionKind::BitLit(width, v) => {
+                        match &action.parameters[i].ty {
+                            Type::Bit(n) => {
+                                let n = *n as usize;
+                                if n != *width as usize {
+                                    panic!(
+                                        "{:?} not compatible with {:?}",
+                                        expr.kind, action.parameters[i],
+                                    );
+                                }
+                                let size = n as usize;
+                                action_fn_args.push(quote! {{
+                                    let mut x = bitvec![mut u8, Msb0; 0; #size];
+                                    x.store_be(#v);
+                                    x
+                                }});
+                            }
+                            x => {
+                                todo!("action bit lit expression type {:?}", x)
+                            }
                         }
                     }
                     x => todo!("action parameter type {:?}", x),
@@ -390,7 +414,7 @@ impl<'a> ControlGenerator<'a> {
 
                         //TODO actual data, does this actually matter for
                         //constant entries?
-                        action_id: 0,
+                        action_id: String::new(),
                         parameter_data: Vec::new(),
                     });
             })

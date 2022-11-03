@@ -366,7 +366,8 @@ impl Control {
             if let Type::UserDefined(name) = &v.ty {
                 if let Some(control_inst) = ast.get_control(name) {
                     result.extend_from_slice(
-                        &control_inst.tables_rec(ast, chain.clone()));
+                        &control_inst.tables_rec(ast, chain.clone()),
+                    );
                 }
             }
         }

@@ -1,28 +1,6 @@
-// XXX import from core.p4
-extern packet_in {
-    void extract<T>(out T headerLvalue);
-    void extract<T>(out T variableSizeHeader, in bit<32> varFieldSizeBits);
-    T lookahead<T>();
-    bit<32> length();  // This method may be unavailable in some architectures
-    void advance(bit<32> bits);
-}
-
-// XXX import from core.p4
-extern packet_out {
-    void emit<T>(in T hdr);
-}
-
-// XXX import from softnpu.p4
-struct IngressMetadata {
-    bit<8> port;
-    bool nat;
-    bit<16> l4_dst_port;
-}
-struct EgressMetadata {
-    bit<8> port;
-    bit<128> nexthop;
-    bool drop;
-}
+#include <test/src/p4/core.p4>
+#include <test/src/p4/softnpu.p4>
+#include <test/src/p4/headers.p4>
 
 SoftNPU(
     parse(),
@@ -30,34 +8,9 @@ SoftNPU(
 ) main;
 
 struct headers_t {
-    ethernet_t ethernet;
-    sidecar_t sidecar;
-    ipv6_t ipv6;
-}
-
-header sidecar_t {
-    bit<8> sc_code;
-    bit<8> sc_ingress;
-    bit<8> sc_egress;
-    bit<16> sc_ether_type;
-    bit<128> sc_payload;
-}
-
-header ethernet_t {
-    bit<48> dst;
-    bit<48> src;
-    bit<16> ether_type;
-}
-
-header ipv6_t {
-	bit<4>	    version;
-	bit<8>	    traffic_class;
-	bit<20>	    flow_label;
-	bit<16>	    payload_len;
-	bit<8>	    next_hdr;
-	bit<8>	    hop_limit;
-	bit<128>    src;
-	bit<128>    dst;
+    ethernet_h ethernet;
+    sidecar_h sidecar;
+    ipv6_h ipv6;
 }
 
 parser parse(
@@ -147,7 +100,7 @@ control router(
 
     action drop() { }
 
-    action forward(bit<8> port) {
+    action forward(bit<16> port) {
         egress.port = port;
     }
 
@@ -165,17 +118,17 @@ control router(
             // fd00:1000::/24
             128w0xfd001000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(1);
+            forward(16w1);
 
             // fd00:2000::/24
             128w0xfd002000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(2);
+            forward(16w2);
 
             // fd00:3000::/24
             128w0xfd003000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(3);
+            forward(16w3);
 
         }
     }
@@ -238,7 +191,7 @@ control ingress(
             hdr.sidecar.sc_payload = 128w0x1701d;
 
             // scrimlet port
-            egress.port = 0;
+            egress.port = 16w0;
         }
 
         //
@@ -248,7 +201,7 @@ control ingress(
         else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.
-            if (ingress.port == 8w1) {
+            if (ingress.port == 16w1) {
                 hdr.sidecar.setInvalid();
             }
             router.apply(hdr, ingress, egress);

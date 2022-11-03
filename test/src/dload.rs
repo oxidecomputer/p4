@@ -7,7 +7,7 @@ p4_macro::use_p4!(
 fn pipeline_create() -> Result<(), anyhow::Error> {
     let p = unsafe { &mut *_dload_pipeline_create() };
 
-    let port: u8 = 47;
+    let port: u16 = 47;
     let data = [0u8; 500];
     let mut pkt: packet_in = packet_in {
         data: &data,
@@ -44,7 +44,7 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
 
     let mut p = unsafe { Box::from_raw(func()) };
 
-    let port: u8 = 47;
+    let port: u16 = 47;
     let data = [0u8; 500];
     let mut pkt: packet_in = packet_in {
         data: &data,

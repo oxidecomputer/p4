@@ -203,12 +203,14 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
     );
 
     let p = b"i know the muffin man";
-    let mut sc = [0u8; 21];
+    let mut sc = [0u8; 23];
     sc[0] = 1;
-    sc[1] = 3;
-    sc[2] = 2;
-    sc[3] = 0x86;
-    sc[4] = 0xdd;
+    sc[1] = 0;
+    sc[2] = 3;
+    sc[3] = 0;
+    sc[4] = 2;
+    sc[5] = 0x86;
+    sc[6] = 0xdd;
     write(
         &phy0,
         101,
@@ -259,13 +261,13 @@ fn write(
     dst: Ipv6Addr,
     smac: [u8; 6],
     dmac: [u8; 6],
-    sc: Option<[u8; 21]>,
+    sc: Option<[u8; 23]>,
 ) {
     let mut data = [0u8; 256];
     let (index, et) = match sc {
         Some(sc) => {
-            data[..21].copy_from_slice(&sc);
-            (21, 0x0901u16)
+            data[..23].copy_from_slice(&sc);
+            (23, 0x0901u16)
         }
         None => (0, 0x86ddu16),
     };
@@ -312,39 +314,39 @@ fn v6_pkt<'a>(
 
 #[cfg(test)]
 fn phy0_egress(frame: &[u8]) {
-    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
-    let sc = &frame[14..35];
-    let _dump = format!(
+    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[37..77]).unwrap();
+    let sc = &frame[14..37];
+    let dump = format!(
         "{:#?} | {:x?} | {}",
         pkt,
         sc,
-        String::from_utf8_lossy(&frame[75..]),
+        String::from_utf8_lossy(&frame[77..]),
     );
-    //println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
+    println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let _dump =
+    let dump =
         format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
-    //println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
+    println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let _dump =
+    let dump =
         format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
-    //println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
+    println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
 }
 
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let _dump =
+    let dump =
         format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
-    //println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
+    println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
 }
 
 // XXX generate
@@ -375,7 +377,7 @@ fn add_router_table_entry_forward(
         action,
 
         //TODO actual data
-        action_id: 0,
+        action_id: String::new(),
         parameter_data: Vec::new(),
     });
 }

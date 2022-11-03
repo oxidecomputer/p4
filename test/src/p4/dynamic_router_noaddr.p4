@@ -90,7 +90,7 @@ control router(
 
     action drop() { }
 
-    action forward(bit<8> port) {
+    action forward(bit<16> port) {
         egress.port = port;
     }
 
