@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::ast::{
     BinOp, Constant, Control, DeclarationInfo, Expression, ExpressionKind,
     Lvalue, NameInfo, Parser, Statement, StatementBlock, Type, AST,

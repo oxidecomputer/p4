@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::{rust_type, type_size, Context, Settings};
 use p4::ast::{Control, MatchKind, PackageInstance, Parser, Table, Type, AST};
 use p4::hlir::Hlir;

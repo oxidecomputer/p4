@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::ast::{Lvalue, NameInfo, Type, AST};
 use std::collections::HashMap;
 

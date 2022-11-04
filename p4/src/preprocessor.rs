@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::error::PreprocessorError;
 use std::fmt::Write;
 use std::sync::Arc;

@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::error::TokenError;
 use std::fmt;
 use std::sync::Arc;

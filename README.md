@@ -32,7 +32,7 @@ generated code to be optimized in terms of the P4 abstract machine model.
 
 The goal here is to compile P4 programs as pipeline objects with simple
 low-level interfaces. These low-level interfaces may be wrapped with
-higher-level runtimes as desired but the user, but such runtimes are outside the
+higher-level runtimes as desired by the user, but such runtimes are outside the
 scope of this project.
 
 - I/O handling.

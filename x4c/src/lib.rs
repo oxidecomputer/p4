@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use p4::check::Diagnostics;

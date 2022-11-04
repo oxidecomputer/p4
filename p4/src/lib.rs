@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 pub mod ast;
 pub mod check;
 pub mod error;

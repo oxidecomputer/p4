@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 //! This is the runtime support create for `x4c` generated programs.
 //!
 //! The main abstraction in this crate is the [`Pipeline`] trait. Rust code that

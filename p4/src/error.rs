@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::lexer::{Kind, Lexer, Token};
 use colored::Colorize;
 use std::fmt;

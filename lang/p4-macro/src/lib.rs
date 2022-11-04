@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::fs;
 use std::sync::Arc;
 

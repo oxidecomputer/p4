@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use slog::{Logger, trace, debug, warn};
 use num::bigint::BigUint;
 use num::Zero;

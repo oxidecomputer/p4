@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
     Constant, Control, ControlParameter, Direction, ElseIfBlock, Expression,

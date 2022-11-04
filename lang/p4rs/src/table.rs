@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::net::IpAddr;

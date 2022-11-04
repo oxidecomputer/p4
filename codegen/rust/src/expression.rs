@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use p4::ast::{BinOp, DeclarationInfo, Expression, ExpressionKind, Lvalue};
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;

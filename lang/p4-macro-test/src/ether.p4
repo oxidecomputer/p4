@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 parser parsadillo(packet_in pkt, out headers_t headers){
     state start { transition accept; }
 }

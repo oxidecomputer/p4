@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::collections::HashMap;
 
 use crate::ast::{

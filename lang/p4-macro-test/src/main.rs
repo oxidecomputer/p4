@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 p4_macro::use_p4!("lang/p4-macro-test/src/ether.p4");
 
 fn main() {

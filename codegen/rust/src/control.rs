@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::{
     expression::ExpressionGenerator,
     rust_type,
