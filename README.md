@@ -9,7 +9,7 @@ programs. `x4c` generated Rust code implements a `Pipeline` trait that allows
 generic harnesses to be written.
 
 To get started with generated Rust code, see the 
-[Documentation](https://oxidecomputer.github.io/p4rs/index.html).
+[Documentation](https://oxidecomputer.github.io/p4/p4rs/index.html).
 
 ## Goals
 
