@@ -1,9 +1,11 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::collections::HashMap;
 
 use crate::ast::{
     Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
-    NameInfo, Parser, State, Statement, StatementBlock, Struct, Table, Type,
-    AST,
+    NameInfo, Parser, State, Statement, StatementBlock, Struct, Table,
+    Transition, Type, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -454,8 +456,17 @@ fn check_statement_lvalues(
                 ));
             }
         }
-        Statement::Transition(_transition) => {
-            //TODO
+        Statement::Transition(transition) => {
+            match transition {
+                Transition::Reference(lval) => {
+                    if lval.name != "accept" && lval.name != "reject" {
+                        diags.extend(&check_lvalue(lval, ast, names, None));
+                    }
+                }
+                Transition::Select(_sel) => {
+                    //TODO
+                }
+            }
         }
         Statement::Return(xpr) => {
             if let Some(xpr) = xpr {
@@ -534,6 +545,18 @@ fn check_lvalue(
                     level: Level::Error,
                     message: format!(
                         "type bool does not have a member {}",
+                        parts[1]
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::State => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type state does not have a member {}",
                         parts[1]
                     ),
                     token: lval.token.clone(),

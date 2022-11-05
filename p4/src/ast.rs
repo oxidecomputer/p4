@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
 use std::fmt;
@@ -123,6 +125,7 @@ pub enum Type {
     Table,
     Void,
     List(Vec<Box<Type>>),
+    State,
 }
 
 impl fmt::Display for Type {
@@ -138,6 +141,7 @@ impl fmt::Display for Type {
             Type::ExternFunction => write!(f, "extern function"),
             Type::Table => write!(f, "table"),
             Type::Void => write!(f, "void"),
+            Type::State => write!(f, "state"),
             Type::List(elems) => {
                 write!(f, "list<")?;
                 for e in elems {
@@ -346,15 +350,26 @@ impl Control {
     /// control block variables and including their tables. In the returned
     /// vector, the table in the second element of the tuple belongs to the
     /// control in the first element.
-    pub fn tables<'a>(&'a self, ast: &'a AST) -> Vec<(&Control, &Table)> {
+    pub fn tables<'a>(&'a self, ast: &'a AST) -> Vec<(Vec<&Control>, &Table)> {
+        self.tables_rec(ast, Vec::new())
+    }
+
+    fn tables_rec<'a>(
+        &'a self,
+        ast: &'a AST,
+        mut chain: Vec<&'a Control>,
+    ) -> Vec<(Vec<&Control>, &Table)> {
         let mut result = Vec::new();
+        chain.push(self);
         for table in &self.tables {
-            result.push((self, table));
+            result.push((chain.clone(), table));
         }
         for v in &self.variables {
             if let Type::UserDefined(name) = &v.ty {
                 if let Some(control_inst) = ast.get_control(name) {
-                    result.extend_from_slice(&control_inst.tables(ast));
+                    result.extend_from_slice(
+                        &control_inst.tables_rec(ast, chain.clone()),
+                    );
                 }
             }
         }
@@ -459,6 +474,15 @@ impl Parser {
                 NameInfo {
                     ty: p.ty.clone(),
                     decl: DeclarationInfo::Parameter(p.direction),
+                },
+            );
+        }
+        for s in &self.states {
+            names.insert(
+                s.name.clone(),
+                NameInfo {
+                    ty: Type::State,
+                    decl: DeclarationInfo::State,
                 },
             );
         }
@@ -740,7 +764,7 @@ impl State {
 
 #[derive(Debug, Clone)]
 pub enum Transition {
-    Reference(String),
+    Reference(Lvalue),
     Select(Select),
 }
 
@@ -800,6 +824,7 @@ pub enum DeclarationInfo {
     Local,
     ControlTable,
     ControlMember,
+    State,
 }
 
 #[derive(Debug, Clone)]

@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::net::IpAddr;
@@ -242,7 +244,7 @@ pub struct TableEntry<const D: usize, A: Clone> {
 
     // the following are not used operationally, strictly for observability as
     // the closure contained in `A` is hard to get at.
-    pub action_id: u32,
+    pub action_id: String,
     pub parameter_data: Vec<u8>,
 }
 
@@ -306,7 +308,7 @@ mod tests {
             priority,
             name: name.into(),
             action: (),
-            action_id: 0,
+            action_id: String::new(),
             parameter_data: Vec::new(),
         }
     }
@@ -417,7 +419,7 @@ mod tests {
             priority: 1,
             name: name.into(),
             action: (),
-            action_id: 0,
+            action_id: String::new(),
             parameter_data: Vec::new(),
         }
     }
@@ -515,7 +517,7 @@ mod tests {
             priority,
             name: name.into(),
             action: (),
-            action_id: 0,
+            action_id: String::new(),
             parameter_data: Vec::new(),
         }
     }
@@ -568,7 +570,7 @@ mod tests {
             priority,
             name: name.into(),
             action: (),
-            action_id: 0,
+            action_id: String::new(),
             parameter_data: Vec::new(),
         }
     }
@@ -663,7 +665,7 @@ mod tests {
                     action: Arc::new(|a: &mut ActionData| {
                         a.value += 10;
                     }),
-                    action_id: 0,
+                    action_id: String::new(),
                     parameter_data: Vec::new(),
                 },
                 TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
@@ -673,7 +675,7 @@ mod tests {
                     action: Arc::new(|a: &mut ActionData| {
                         a.value -= 10;
                     }),
-                    action_id: 0,
+                    action_id: String::new(),
                     parameter_data: Vec::new(),
                 },
             ]),

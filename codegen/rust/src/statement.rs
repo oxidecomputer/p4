@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::{
     expression::ExpressionGenerator, is_header, is_header_member,
     is_rust_reference, rust_type,
@@ -192,7 +194,7 @@ impl<'a> StatementGenerator<'a> {
                 };
                 match transition {
                     Transition::Reference(next_state) => {
-                        match next_state.as_str() {
+                        match next_state.name.as_str() {
                             "accept" => quote! { return true; },
                             "reject" => quote! { return false; },
                             state_ref => {
@@ -414,7 +416,8 @@ impl<'a> StatementGenerator<'a> {
             }
 
             let tables = control_instance.tables(self.ast);
-            for (control, table) in tables {
+            for (cs, table) in tables {
+                let control = cs.last().unwrap();
                 let name =
                     format_ident!("{}_table_{}", control.name, table.name,);
                 args.push(quote! { #name });
@@ -586,6 +589,7 @@ impl<'a> StatementGenerator<'a> {
             Type::Table => todo!(),
             Type::Void => todo!(),
             Type::List(_) => todo!(),
+            Type::State => todo!(),
         }
     }
 

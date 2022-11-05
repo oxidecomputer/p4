@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::ast::{
     BinOp, Constant, Control, DeclarationInfo, Expression, ExpressionKind,
     Lvalue, NameInfo, Parser, Statement, StatementBlock, Type, AST,
@@ -236,6 +238,14 @@ impl<'a> HlirGenerator<'a> {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index a bool".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
+            Type::State => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "cannot index a state".into(),
                     token: lval.token.clone(),
                 });
                 None

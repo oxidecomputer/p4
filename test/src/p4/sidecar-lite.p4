@@ -13,6 +13,28 @@ struct headers_t {
     arp_h arp;
     ipv4_h ipv4;
     ipv6_h ipv6;
+
+    ddm_h ddm;
+    // The ddm original p4 code used a header stack, but Intel says this is not
+    // efficient on Tofino, and x4c does not currently support header stacks. So
+    // the following is an unrolled version. This is not easy on the eyes.
+    ddm_element_t ddm0;
+    ddm_element_t ddm1;
+    ddm_element_t ddm2;
+    ddm_element_t ddm3;
+    ddm_element_t ddm4;
+    ddm_element_t ddm5;
+    ddm_element_t ddm6;
+    ddm_element_t ddm7;
+    ddm_element_t ddm8;
+    ddm_element_t ddm9;
+    ddm_element_t ddm10;
+    ddm_element_t ddm11;
+    ddm_element_t ddm12;
+    ddm_element_t ddm13;
+    ddm_element_t ddm14;
+    ddm_element_t ddm15;
+
     icmp_h icmp;
     tcp_h tcp;
     udp_h udp;
@@ -65,6 +87,9 @@ parser parse(
 
     state ipv6 {
         pkt.extract(hdr.ipv6);
+        if (hdr.ipv6.next_hdr == 8w0xdd) {
+            transition ddm;
+        }
         if (hdr.ipv6.next_hdr == 8w58) {
             transition icmp;
         }
@@ -74,6 +99,27 @@ parser parse(
         if (hdr.ipv6.next_hdr == 8w6) {
             transition tcp;
         }
+        transition accept;
+    }
+
+    state ddm {
+        pkt.extract(hdr.ddm);
+        if (hdr.ddm.header_length >= 8w7) { pkt.extract(hdr.ddm0); }
+        if (hdr.ddm.header_length >= 8w11) { pkt.extract(hdr.ddm1); }
+        if (hdr.ddm.header_length >= 8w15) { pkt.extract(hdr.ddm2); }
+        if (hdr.ddm.header_length >= 8w19) { pkt.extract(hdr.ddm3); }
+        if (hdr.ddm.header_length >= 8w23) { pkt.extract(hdr.ddm4); }
+        if (hdr.ddm.header_length >= 8w27) { pkt.extract(hdr.ddm5); }
+        if (hdr.ddm.header_length >= 8w31) { pkt.extract(hdr.ddm6); }
+        if (hdr.ddm.header_length >= 8w35) { pkt.extract(hdr.ddm7); }
+        if (hdr.ddm.header_length >= 8w39) { pkt.extract(hdr.ddm8); }
+        if (hdr.ddm.header_length >= 8w43) { pkt.extract(hdr.ddm9); }
+        if (hdr.ddm.header_length >= 8w47) { pkt.extract(hdr.ddm10); }
+        if (hdr.ddm.header_length >= 8w51) { pkt.extract(hdr.ddm11); }
+        if (hdr.ddm.header_length >= 8w55) { pkt.extract(hdr.ddm12); }
+        if (hdr.ddm.header_length >= 8w59) { pkt.extract(hdr.ddm13); }
+        if (hdr.ddm.header_length >= 8w63) { pkt.extract(hdr.ddm14); }
+        if (hdr.ddm.header_length >= 8w67) { pkt.extract(hdr.ddm15); }
         transition accept;
     }
 
@@ -406,15 +452,14 @@ control router(
     inout IngressMetadata ingress,
     inout EgressMetadata egress,
 ) {
-
     action drop() { }
 
-    action forward_v6(bit<8> port, bit<128> nexthop) {
+    action forward_v6(bit<16> port, bit<128> nexthop) {
         egress.port = port;
         egress.nexthop_v6 = nexthop;
     }
 
-    action forward_v4(bit<8> port, bit<32> nexthop) {
+    action forward_v4(bit<16> port, bit<32> nexthop) {
         egress.port = port;
         egress.nexthop_v4 = nexthop;
     }
@@ -528,7 +573,7 @@ control ingress(
 
             //  Direct packets to the sidecar port corresponding to the scrimlet
             //  port they came from.
-            egress.port = hdr.sidecar.sc_ingress;
+            egress.port = hdr.sidecar.sc_egress;
 
             // Decap the sidecar header.
             hdr.sidecar.setInvalid();
@@ -589,7 +634,7 @@ control ingress(
                     hdr.inner_udp.setInvalid();
                 }
                 router.apply(hdr, ingress, egress);
-                if (egress.port != 8w0) {
+                if (egress.port != 16w0) {
                     resolver.apply(hdr, egress);
                 }
             }
@@ -609,8 +654,12 @@ control ingress(
                 hdr.sidecar.sc_payload = 128w0x1701d;
 
                 // scrimlet port
-                egress.port = 0;
+                // TODO simply stating 0 here causes bad conversion, initializes
+                // egress.port as a 128 bit value due to
+                // StatementGenerator::converter using int_to_bitvec
+                egress.port = 16w0;
             }
+            return;
         }
 
         //
@@ -622,7 +671,7 @@ control ingress(
             nat.apply(hdr, ingress, egress);
 
             router.apply(hdr, ingress, egress);
-            if (egress.port != 8w0) {
+            if (egress.port != 16w0) {
                 resolver.apply(hdr, egress);
             }
         }

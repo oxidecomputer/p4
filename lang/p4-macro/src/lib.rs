@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::fs;
 use std::sync::Arc;
 
@@ -81,12 +83,12 @@ fn generate_rs(
 fn process_file(
     filename: Arc<String>,
     ast: &mut AST,
-    settings: &GenerationSettings,
+    _settings: &GenerationSettings,
 ) -> Result<(), syn::Error> {
     let contents = fs::read_to_string(&*filename).unwrap();
     let ppr = preprocessor::run(&contents, filename.clone()).unwrap();
     for included in &ppr.elements.includes {
-        process_file(Arc::new(included.clone()), ast, settings)?;
+        process_file(Arc::new(included.clone()), ast, _settings)?;
     }
 
     let (_, diags) = check::all(ast);

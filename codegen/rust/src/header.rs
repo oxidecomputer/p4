@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::{rust_type, type_size, Context};
 use p4::ast::{Header, AST};
 use quote::{format_ident, quote};

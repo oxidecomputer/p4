@@ -124,7 +124,7 @@ control router(
 
     action drop() { }
 
-    action forward(bit<8> port, bit<128> nexthop) {
+    action forward(bit<16> port, bit<128> nexthop) {
         egress.port = port;
         egress.nexthop_v6 = nexthop;
     }
@@ -142,7 +142,7 @@ control router(
 
     apply {
         router.apply();
-        if (egress.port != 8w0) {
+        if (egress.port != 16w0) {
             resolver.apply(hdr, egress);
         }
     }
@@ -201,7 +201,7 @@ control ingress(
             hdr.sidecar.sc_payload = 128w0x1701d;
 
             // scrimlet port
-            egress.port = 0;
+            egress.port = 16w0;
         }
 
         //
@@ -211,7 +211,7 @@ control ingress(
         else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.
-            if (ingress.port == 8w1) {
+            if (ingress.port == 16w1) {
                 hdr.sidecar.setInvalid();
             }
             router.apply(hdr, ingress, egress);

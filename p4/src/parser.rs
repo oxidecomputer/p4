@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
     Constant, Control, ControlParameter, Direction, ElseIfBlock, Expression,
@@ -516,8 +518,11 @@ impl<'a> Parser<'a> {
                 let select = sp.run()?;
                 Ok(Transition::Select(select))
             }
-            lexer::Kind::Identifier(name) => {
-                let result = Transition::Reference(name);
+            lexer::Kind::Identifier(ref name) => {
+                let result = Transition::Reference(Lvalue {
+                    name: name.clone(),
+                    token: token.clone(),
+                });
                 self.expect_token(lexer::Kind::Semicolon)?;
                 Ok(result)
             }

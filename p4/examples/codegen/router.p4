@@ -14,13 +14,15 @@ extern packet_out {
 
 // XXX import from softnpu.p4
 struct IngressMetadata {
-    bit<8> port;
+    bit<16> port;
     bool nat;
-    bit<16> l4_dst_port;
+    bit<16> nat_id;
 }
+
 struct EgressMetadata {
-    bit<8> port;
-    bit<128> nexthop;
+    bit<16> port;
+    bit<128> nexthop_v6;
+    bit<32> nexthop_v4;
     bool drop;
 }
 
@@ -71,7 +73,7 @@ control ingress(
 
     action drop() { }
 
-    action forward(bit<8> port) {
+    action forward(bit<16> port) {
         egress.port = port;
     }
 
@@ -89,12 +91,12 @@ control ingress(
             // fd00:1000::/24
             128w0xfd001000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(0);
+            forward(16w0);
 
             // fd00:2000::/24
             128w0xfd002000000000000000000000000000 &&&
             128w0xffffff00000000000000000000000000 :
-            forward(1);
+            forward(16w1);
 
         }
     }

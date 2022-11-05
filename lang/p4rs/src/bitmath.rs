@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use bitvec::prelude::*;
 
 pub fn add(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {

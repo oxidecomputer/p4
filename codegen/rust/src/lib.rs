@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
@@ -207,6 +209,9 @@ fn rust_type(ty: &Type) -> TokenStream {
             quote! { () }
         }
         Type::List(_) => todo!("rust type for list"),
+        Type::State => {
+            todo!("rust type for state");
+        }
     }
 }
 
@@ -250,6 +255,9 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         }
         Type::Void => 0,
         Type::List(_) => todo!("type size for list"),
+        Type::State => {
+            todo!("type size for state");
+        }
     }
 }
 
@@ -317,6 +325,7 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
             DeclarationInfo::HeaderMember => false,
             DeclarationInfo::ControlTable => false,
             DeclarationInfo::ControlMember => false,
+            DeclarationInfo::State => false,
         }
     } else {
         false

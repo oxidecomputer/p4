@@ -1,7 +1,7 @@
 header sidecar_h {
     bit<8> sc_code;
-    bit<8> sc_ingress;
-    bit<8> sc_egress;
+    bit<16> sc_ingress;
+    bit<16> sc_egress;
     bit<16> sc_ether_type;
     bit<128> sc_payload;
 }
@@ -89,4 +89,17 @@ header arp_h {
 	bit<32> sender_ip;
 	bit<48> target_mac;
 	bit<32> target_ip;
+}
+
+header ddm_h {
+    bit<8> next_header;
+    bit<8> header_length;
+    bit<8> version;
+    bit<1> ack;
+    bit<7> reserved;
+}
+
+header ddm_element_t {
+    bit<8> id;
+    bit<24> timestamp;
 }

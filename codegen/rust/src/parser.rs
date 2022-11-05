@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use crate::{
     rust_type,
     statement::{StatementContext, StatementGenerator},

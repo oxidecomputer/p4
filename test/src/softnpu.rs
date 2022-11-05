@@ -92,7 +92,7 @@ pub fn run_pipeline<
 
                 let mut pkt = packet_in::new(content);
 
-                match pipeline.process_packet(i as u8, &mut pkt) {
+                match pipeline.process_packet(i as u16, &mut pkt) {
                     Some((out_pkt, port)) => {
                         let port = port as usize;
 

@@ -79,17 +79,17 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
         let addr_e: Ipv6Addr = "fe80::aae1:deff:fe01:701e".parse().unwrap();
 
         pipeline.add_local_table_entry(
-            0,
+            "local".into(),
             addr_c.octets().as_ref(),
             &Vec::new(),
         );
         pipeline.add_local_table_entry(
-            0,
+            "local".into(),
             addr_d.octets().as_ref(),
             &Vec::new(),
         );
         pipeline.add_local_table_entry(
-            0,
+            "local".into(),
             addr_e.octets().as_ref(),
             &Vec::new(),
         );
@@ -97,19 +97,19 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
         // resolver table entries
 
         pipeline.add_resolver_table_entry(
-            0,
+            "rewrite_dst".into(),
             addr_c.octets().as_ref(),
             &[0x44, 0x44, 0x44, 0x44, 0x44, 0x44],
         );
 
         pipeline.add_resolver_table_entry(
-            0,
+            "rewrite_dst".into(),
             addr_d.octets().as_ref(),
             &[0x33, 0x33, 0x33, 0x33, 0x33, 0x33],
         );
 
         pipeline.add_resolver_table_entry(
-            0,
+            "rewrite_dst".into(),
             addr_e.octets().as_ref(),
             &[0x22, 0x22, 0x22, 0x22, 0x22, 0x22],
         );
@@ -262,12 +262,14 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
     );
 
     let p = b"i know the muffin man";
-    let mut sc = [0u8; 21];
+    let mut sc = [0u8; 23];
     sc[0] = 1;
-    sc[1] = 3;
-    sc[2] = 2;
-    sc[3] = 0x86;
-    sc[4] = 0xdd;
+    sc[1] = 0;
+    sc[2] = 3;
+    sc[3] = 0;
+    sc[4] = 2;
+    sc[5] = 0x86;
+    sc[6] = 0xdd;
     write(
         &phy0,
         101,
@@ -318,13 +320,13 @@ fn write(
     dst: Ipv6Addr,
     smac: [u8; 6],
     dmac: [u8; 6],
-    sc: Option<[u8; 21]>,
+    sc: Option<[u8; 23]>,
 ) {
     let mut data = [0u8; 256];
     let (index, et) = match sc {
         Some(sc) => {
-            data[..21].copy_from_slice(&sc);
-            (21, 0x0901u16)
+            data[..23].copy_from_slice(&sc);
+            (23, 0x0901u16)
         }
         None => (0, 0x86ddu16),
     };
@@ -371,13 +373,13 @@ fn v6_pkt<'a>(
 
 #[cfg(test)]
 fn phy0_egress(frame: &[u8]) {
-    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[35..75]).unwrap();
-    let sc = &frame[14..35];
+    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[37..77]).unwrap();
+    let sc = &frame[14..37];
     let _dump = format!(
         "{:#?} | {:x?} | {}",
         pkt,
         sc,
-        String::from_utf8_lossy(&frame[75..]),
+        String::from_utf8_lossy(&frame[77..]),
     );
 
     let ip3: Ipv6Addr = "fe80::aae1:deff:fe01:701c".parse().unwrap();
@@ -459,7 +461,7 @@ fn add_router_table_entry_forward(
         action,
 
         //TODO actual data
-        action_id: 0,
+        action_id: "forward".into(),
         parameter_data: Vec::new(),
     });
 }

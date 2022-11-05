@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use std::error::Error;
 use std::fmt;
 

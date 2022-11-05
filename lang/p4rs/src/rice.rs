@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 //! Rice: Ry's Incremental Cutting Engine
 //!
 //! Rice is based on experience implementing HiCuts. The key differentiators

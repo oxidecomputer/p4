@@ -1,3 +1,5 @@
+// Copyright 2022 Oxide Computer Company
+
 use bitvec::prelude::*;
 
 #[derive(Default)]

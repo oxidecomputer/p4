@@ -100,7 +100,7 @@ control router(
 
     action drop() { }
 
-    action forward(bit<8> port) {
+    action forward(bit<16> port) {
         egress.port = port;
     }
 
@@ -173,7 +173,7 @@ control ingress(
             hdr.sidecar.sc_payload = 128w0x1701d;
 
             // scrimlet port
-            egress.port = 0;
+            egress.port = 16w0;
         }
 
         //
