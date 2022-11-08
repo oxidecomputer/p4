@@ -1,5 +1,28 @@
 // Copyright 2022 Oxide Computer Company
 
+//! The [`use_p4!`] macro allows for P4 programs to be directly integrated into
+//! Rust programs.
+//!
+//! ```ignore
+//! p4_macro::use_p4!("path/to/p4/program.p4");
+//! ```
+//!
+//! This will generate a `main_pipeline` struct that implements the
+//! [Pipeline](../p4rs/trait.Pipeline.html) trait. The [`use_p4!`] macro expands
+//! directly in to `x4c` compiled code. This includes all data structures,
+//! parsers and control blocks.
+//!
+//! To customize the name of the generated pipeline use the `pipeline_name`
+//! parameter.
+//!
+//! ```ignore
+//! p4_macro::use_p4!(p4 = "path/to/p4/program.p4", pipeline_name = "muffin");
+//! ```
+//! This will result in a `muffin_pipeline` struct being being generated.
+//!
+//! For documentation on using [Pipeline](../p4rs/trait.Pipeline.html) trait, see the
+//! [p4rs](../p4rs/index.html) docs.
+
 use std::fs;
 use std::sync::Arc;
 
@@ -30,9 +53,15 @@ impl Default for GenerationSettings {
     }
 }
 
+/// The `use_p4!` macro uses the `x4c` compiler to generate Rust code from a P4
+/// program. The macro itself expands into the generated code. The macro can be
+/// called with only the path to the P4 program as an argument or, it can be
+/// called with the path to the P4 program plus the name to use for the
+/// generated pipeline object.
+///
+/// For usage examples, see the [p4-macro](index.html) module documentation.
 #[proc_macro]
 pub fn use_p4(item: TokenStream) -> TokenStream {
-    //do_use_p4(item).unwrap()
     match do_use_p4(item) {
         Err(err) => err.to_compile_error().into(),
         Ok(out) => out,

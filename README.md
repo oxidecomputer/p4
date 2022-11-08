@@ -8,8 +8,41 @@ organically based on the concrete needs of users toward that end.
 programs. `x4c` generated Rust code implements a `Pipeline` trait that allows
 generic harnesses to be written.
 
-To get started with generated Rust code, see the 
-[Documentation](https://oxidecomputer.github.io/p4/p4rs/index.html).
+## Getting started
+
+There are two main forms of using the compiler.
+
+1. Generating Rust code from your P4 code using the `x4c` CLI interface.
+2. Importing P4 code directly into your rust code with the `use_p4!` macro.
+
+### Compile with `x4c`
+
+To build the `x4c` compiler simply run the following.
+
+```
+cargo build --bin x4c
+```
+
+There are no non-rust dependencies. Typically, compiling P4 code is as simple as
+`x4c <path to p4 code>`. This will generate an `out.rs` file. For more advanced
+`x4c` usage see `x4c --help`.
+
+To get started with Rust code `x4c` generates, see the 
+[p4rs module documentation](https://oxidecomputer.github.io/p4/p4rs/index.html).
+
+### Using P4 directly in Rust.
+
+To get started with the Rust macro interface, see the
+[p4_macro module documentation](http://oxidecomputer.github.io/p4/p4_macro/index.html).
+
+An example of using this approach to generate a shared library is in 
+[lang/prog/sidecar-lite](lang/prog/sidecar-lite).
+This code can be statically included in other programs. Automatically generated
+documentation for the compiled code can be found 
+[here](https://oxidecomputer.github.io/p4/sidecar_lite/index.html).
+Because this crate is compiled as a shared libary, a `Pipeline` can also be
+dynamically loaded using the `_main_pipeline_create` function symbol which
+returns a `*mut dyn Pipeline` object.
 
 ## Goals
 
