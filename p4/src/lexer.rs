@@ -784,8 +784,10 @@ impl<'a> Lexer<'a> {
         Some(token)
     }
 
-    pub fn check_end_of_line(&mut self) {
+    pub fn check_end_of_line(&mut self) -> bool {
+        let mut end = false;
         while self.cursor.is_empty() {
+            end = true;
             self.line += 1;
             self.col = 0;
             if self.line < self.lines.len() {
@@ -794,6 +796,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
+        end
     }
 
     fn skip_whitespace(&mut self) -> bool {
@@ -806,7 +809,7 @@ impl<'a> Lexer<'a> {
             skipped = true;
             self.cursor = &self.cursor[1..];
             self.col += 1;
-            self.check_end_of_line()
+            self.check_end_of_line();
         }
         skipped
     }
@@ -839,30 +842,50 @@ impl<'a> Lexer<'a> {
 
     fn skip_block_comment(&mut self) {
         let mut chars = self.cursor.chars();
-        let mut len = 0;
+        match chars.next() {
+            Some('/') => {}
+            _ => return,
+        }
+        match chars.next() {
+            Some('*') => {}
+            _ => return,
+        }
+        self.cursor = &self.cursor[2..];
         loop {
-            match chars.next() {
-                Some('*') => {
-                    len += 1;
-                    match chars.next() {
-                        Some('/') => {
-                            len += 1;
-                            self.col += len;
-                            self.cursor = &self.cursor[len..];
-                            self.check_end_of_line();
-                            self.skip_whitespace();
-                            return;
+            loop {
+                match chars.next() {
+                    Some('*') => {
+                        self.cursor = &self.cursor[1..];
+                        match chars.next() {
+                            Some('/') => {
+                                self.col += 1;
+                                self.cursor = &self.cursor[1..];
+                                self.check_end_of_line();
+                                self.skip_whitespace();
+                                return;
+                            }
+                            _ => {
+                                if self.check_end_of_line() {
+                                    break;
+                                }
+                                self.cursor = &self.cursor[1..];
+                                continue;
+                            }
                         }
-                        _ => {
+                    }
+                    None => {
+                        self.skip_whitespace();
+                        if self.check_end_of_line() {
                             break;
                         }
                     }
-                }
-                _ => {
-                    len += 1;
-                    continue;
+                    _ => {
+                        self.cursor = &self.cursor[1..];
+                        continue;
+                    }
                 }
             }
+            chars = self.cursor.chars();
         }
     }
 

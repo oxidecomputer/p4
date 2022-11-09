@@ -1,3 +1,6 @@
+/*
+ * This is core.p4
+ */
 extern packet_in {
     void extract<T>(out T headerLvalue);
     void extract<T>(out T variableSizeHeader, in bit<32> varFieldSizeBits);
