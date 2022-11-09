@@ -78,17 +78,17 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
         let addr_d: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
         let addr_e: Ipv6Addr = "fe80::aae1:deff:fe01:701e".parse().unwrap();
 
-        pipeline.add_local_table_entry(
+        pipeline.add_local_local_entry(
             "local".into(),
             addr_c.octets().as_ref(),
             &Vec::new(),
         );
-        pipeline.add_local_table_entry(
+        pipeline.add_local_local_entry(
             "local".into(),
             addr_d.octets().as_ref(),
             &Vec::new(),
         );
-        pipeline.add_local_table_entry(
+        pipeline.add_local_local_entry(
             "local".into(),
             addr_e.octets().as_ref(),
             &Vec::new(),
@@ -96,19 +96,19 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
 
         // resolver table entries
 
-        pipeline.add_resolver_table_entry(
+        pipeline.add_router_resolver_resolver_entry(
             "rewrite_dst".into(),
             addr_c.octets().as_ref(),
             &[0x44, 0x44, 0x44, 0x44, 0x44, 0x44],
         );
 
-        pipeline.add_resolver_table_entry(
+        pipeline.add_router_resolver_resolver_entry(
             "rewrite_dst".into(),
             addr_d.octets().as_ref(),
             &[0x33, 0x33, 0x33, 0x33, 0x33, 0x33],
         );
 
-        pipeline.add_resolver_table_entry(
+        pipeline.add_router_resolver_resolver_entry(
             "rewrite_dst".into(),
             addr_e.octets().as_ref(),
             &[0x22, 0x22, 0x22, 0x22, 0x22, 0x22],
@@ -133,7 +133,7 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
             },
             0,
             "control plane rule 1".into(),
-            &mut pipeline.router_table_router,
+            &mut pipeline.router_router,
         );
 
         add_router_table_entry_forward(
@@ -153,7 +153,7 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
             },
             0,
             "control plane rule 2".into(),
-            &mut pipeline.router_table_router,
+            &mut pipeline.router_router,
         );
 
         add_router_table_entry_forward(
@@ -173,7 +173,7 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
             },
             0,
             "control plane rule 3".into(),
-            &mut pipeline.router_table_router,
+            &mut pipeline.router_router,
         );
 
         softnpu::run_pipeline(rx, tx, &mut pipeline);

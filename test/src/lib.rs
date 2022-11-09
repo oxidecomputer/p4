@@ -11,6 +11,8 @@
 #[cfg(test)]
 mod basic_router;
 #[cfg(test)]
+mod controller_multiple_instantiation;
+#[cfg(test)]
 mod disag_router;
 #[cfg(test)]
 mod dynamic_router;

@@ -350,26 +350,32 @@ impl Control {
     /// control block variables and including their tables. In the returned
     /// vector, the table in the second element of the tuple belongs to the
     /// control in the first element.
-    pub fn tables<'a>(&'a self, ast: &'a AST) -> Vec<(Vec<&Control>, &Table)> {
-        self.tables_rec(ast, Vec::new())
+    pub fn tables<'a>(
+        &'a self,
+        ast: &'a AST,
+    ) -> Vec<(Vec<(String, &Control)>, &Table)> {
+        self.tables_rec(ast, String::new(), Vec::new())
     }
 
     fn tables_rec<'a>(
         &'a self,
         ast: &'a AST,
-        mut chain: Vec<&'a Control>,
-    ) -> Vec<(Vec<&Control>, &Table)> {
+        name: String,
+        mut chain: Vec<(String, &'a Control)>,
+    ) -> Vec<(Vec<(String, &Control)>, &Table)> {
         let mut result = Vec::new();
-        chain.push(self);
+        chain.push((name, self));
         for table in &self.tables {
             result.push((chain.clone(), table));
         }
         for v in &self.variables {
-            if let Type::UserDefined(name) = &v.ty {
-                if let Some(control_inst) = ast.get_control(name) {
-                    result.extend_from_slice(
-                        &control_inst.tables_rec(ast, chain.clone()),
-                    );
+            if let Type::UserDefined(typename) = &v.ty {
+                if let Some(control_inst) = ast.get_control(typename) {
+                    result.extend_from_slice(&control_inst.tables_rec(
+                        ast,
+                        v.name.clone(),
+                        chain.clone(),
+                    ));
                 }
             }
         }

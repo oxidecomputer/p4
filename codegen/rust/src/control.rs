@@ -2,7 +2,7 @@
 
 use crate::{
     expression::ExpressionGenerator,
-    rust_type,
+    qualified_table_function_name, rust_type,
     statement::{StatementContext, StatementGenerator},
     try_extract_prefix_len, Context,
 };
@@ -34,6 +34,40 @@ impl<'a> ControlGenerator<'a> {
         for control in &self.ast.controls {
             self.generate_control(control);
         }
+
+        let ingress = match self.ast.get_control("ingress") {
+            Some(i) => i,
+            None => return,
+        };
+        let tables = ingress.tables(self.ast);
+        for (cs, t) in tables {
+            let qtn = qualified_table_function_name(&cs, t);
+            let qtfn = qualified_table_function_name(&cs, t);
+            let control = cs.last().unwrap().1;
+            let (_, mut param_types) = self.control_parameters(control);
+            for var in &control.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let extern_type = format_ident!("{}", typename);
+                        param_types.push(quote! {
+                            &p4rs::externs::#extern_type
+                        })
+                    }
+                }
+            }
+            let (type_tokens, table_tokens) =
+                self.generate_control_table(control, t, &param_types);
+            let qtn = format_ident!("{}", qtn);
+            let qtfn = format_ident!("{}", qtfn);
+            self.ctx.functions.insert(
+                qtn.to_string(),
+                quote! {
+                    pub fn #qtfn() -> #type_tokens {
+                        #table_tokens
+                    }
+                },
+            );
+        }
     }
 
     pub(crate) fn generate_control(
@@ -51,7 +85,8 @@ impl<'a> ControlGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let c = *cs.last().unwrap();
+            let c = cs.last().unwrap().1;
+            let qtn = qualified_table_function_name(&cs, table);
             let (_, mut param_types) = self.control_parameters(c);
             for var in &c.variables {
                 if let Type::UserDefined(typename) = &var.ty {
@@ -70,24 +105,10 @@ impl<'a> ControlGenerator<'a> {
                     std::sync::Arc<dyn Fn(#(#param_types),*)>
                     >
             };
-            let name = format_ident!("{}_table_{}", c.name, table.name);
+            let qtn = format_ident!("{}", qtn);
             params.push(quote! {
-                #name: &#table_type
+                #qtn: &#table_type
             });
-
-            // for local tables, generate a constructor function
-            if c == control {
-                let (type_tokens, table_tokens) =
-                    self.generate_control_table(control, table, &param_types);
-                self.ctx.functions.insert(
-                    name.to_string(),
-                    quote! {
-                        pub fn #name() -> #type_tokens {
-                            #table_tokens
-                        }
-                    },
-                );
-            }
         }
 
         let name = format_ident!("{}_apply", control.name);

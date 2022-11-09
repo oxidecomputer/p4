@@ -156,10 +156,12 @@ fn disag_router() -> Result<(), anyhow::Error> {
     let p = b"i know the muffin man";
     let mut sc = [0u8; 23];
     sc[0] = 1;
-    sc[1] = 3;
-    sc[2] = 2;
-    sc[3] = 0x86;
-    sc[4] = 0xdd;
+    sc[1] = 0;
+    sc[2] = 3;
+    sc[3] = 0;
+    sc[4] = 2;
+    sc[5] = 0x86;
+    sc[6] = 0xdd;
     write(
         &phy0,
         101,
