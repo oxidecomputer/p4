@@ -5,8 +5,8 @@ use crate::{
     is_rust_reference, rust_type,
 };
 use p4::ast::{
-    Call, Control, DeclarationInfo, Direction, Expression, ExpressionKind,
-    NameInfo, Parser, Statement, StatementBlock, Transition, Type, AST,
+    Call, Control, DeclarationInfo, Direction, ExpressionKind, NameInfo,
+    Parser, Statement, StatementBlock, Transition, Type, AST,
 };
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
@@ -378,9 +378,16 @@ impl<'a> StatementGenerator<'a> {
         // This is a call to another control instance
         if control_instance.name != control.name {
             let eg = ExpressionGenerator::new(self.hlir);
+            let mut locals = Vec::new();
             let mut args = Vec::new();
             for (i, a) in c.args.iter().enumerate() {
                 let arg_xpr = eg.generate_expression(a.as_ref());
+                let local_name = format_ident!("arg{}", i);
+                if let ExpressionKind::BitLit(_, _) = a.as_ref().kind {
+                    locals.push(quote! {
+                        let mut #local_name = #arg_xpr;
+                    })
+                }
                 match control_instance.parameters[i].direction {
                     Direction::Out | Direction::InOut => {
                         match &a.as_ref().kind {
@@ -404,22 +411,27 @@ impl<'a> StatementGenerator<'a> {
                                     }
                                 }
                             }
+                            ExpressionKind::BitLit(_, _) => {
+                                args.push(quote! { &mut #local_name })
+                            }
                             _ => {
                                 args.push(quote! {&mut #arg_xpr});
                             }
                         }
                     }
-                    _ => {
-                        args.push(arg_xpr);
-                    }
+                    _ => match &a.as_ref().kind {
+                        ExpressionKind::BitLit(_, _) => {
+                            args.push(quote! { &#local_name })
+                        }
+                        _ => args.push(arg_xpr),
+                    },
                 }
             }
 
             let tables = control_instance.tables(self.ast);
             for (cs, table) in tables {
-                let control = cs.last().unwrap();
-                let name =
-                    format_ident!("{}_table_{}", control.name, table.name,);
+                let qtn = crate::qualified_table_function_name(&cs, table);
+                let name = format_ident!("{}_{}", c.lval.root(), qtn);
                 args.push(quote! { #name });
             }
 
@@ -428,11 +440,14 @@ impl<'a> StatementGenerator<'a> {
 
             tokens.extend(quote! {
                 softnpu_provider::control_apply!(||(#cname));
+                #(#locals);*
                 #call(#(#args),*);
             });
 
             return;
         }
+
+        // this is a local table
 
         let table = match control_instance.get_table(root) {
             Some(table) => table,
@@ -448,8 +463,7 @@ impl<'a> StatementGenerator<'a> {
         // match an action based on the key material
         //
 
-        let table_name =
-            format_ident!("{}_table_{}", control_instance.name, table.name,);
+        let table_name = format_ident!("{}", c.lval.root());
 
         let table_name_str =
             format!("{}_table_{}", control_instance.name, table.name,);
@@ -572,40 +586,5 @@ impl<'a> StatementGenerator<'a> {
             }
             _ => todo!("type converter for {} to {}", from, to),
         }
-    }
-
-    //XXX
-    #[allow(dead_code)]
-    fn assign(to: NameInfo, xpr: &Expression) -> TokenStream {
-        match to.ty {
-            Type::Bool => todo!(),
-            Type::Error => todo!(),
-            Type::Bit(width) => Self::assign_to_bit(width, xpr),
-            Type::Varbit(_) => todo!(),
-            Type::Int(_) => todo!(),
-            Type::String => todo!(),
-            Type::UserDefined(_) => todo!(),
-            Type::ExternFunction => todo!(),
-            Type::Table => todo!(),
-            Type::Void => todo!(),
-            Type::List(_) => todo!(),
-            Type::State => todo!(),
-        }
-    }
-
-    //XXX
-    #[allow(dead_code)]
-    fn assign_to_bit(_width: usize, _xpr: &Expression) -> TokenStream {
-        /*
-        match xpr {
-            Expression::BoolLit(_v) => todo!(),
-            Expression::IntegerLit(_v) => todo!(),
-            Expression::BitLit(_width, _v) => todo!(),
-            Expression::SignedLit(_width, _v) => todo!(),
-            Expression::Lvalue(_v) => todo!(),
-            Expression::Binary(Box<Expression
-        }
-        */
-        todo!();
     }
 }

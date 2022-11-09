@@ -1,7 +1,12 @@
 // Copyright 2022 Oxide Computer Company
 
-use crate::{rust_type, type_size, Context, Settings};
-use p4::ast::{Control, MatchKind, PackageInstance, Parser, Table, Type, AST};
+use crate::{
+    qualified_table_function_name, qualified_table_name, rust_type, type_size,
+    Context, Settings,
+};
+use p4::ast::{
+    Control, Direction, MatchKind, PackageInstance, Parser, Table, Type, AST,
+};
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -143,8 +148,8 @@ impl<'a> PipelineGenerator<'a> {
         let tables = control.tables(self.ast);
         let mut tbl_args = Vec::new();
         for (cs, t) in tables {
-            let c = cs.last().unwrap();
-            let name = format_ident!("{}_table_{}", c.name, t.name);
+            let qtfn = qualified_table_function_name(&cs, t);
+            let name = format_ident!("{}", qtfn);
             tbl_args.push(quote! {
                 &self.#name
             });
@@ -261,7 +266,8 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let control = cs.last().unwrap();
+            let control = cs.last().unwrap().1;
+            let qtn = qualified_table_function_name(&cs, table);
             let (_, mut param_types) = cg.control_parameters(control);
 
             for var in &control.variables {
@@ -282,26 +288,16 @@ impl<'a> PipelineGenerator<'a> {
                     std::sync::Arc<dyn Fn(#(#param_types),*)>
                     >
             };
-            let name = format_ident!("{}_table_{}", control.name, table.name);
+            let qtn = format_ident!("{}", qtn);
             members.push(quote! {
-                pub #name: #table_type
+                pub #qtn: #table_type
             });
-            let ctor = format_ident!("{}_table_{}", control.name, table.name);
             initializers.push(quote! {
-                #name: #ctor()
+                #qtn: #qtn()
             })
         }
 
         (members, initializers)
-    }
-
-    fn qualified_table_name(chain: &Vec<&Control>, table: &Table) -> String {
-        let mut qname = String::new();
-        for c in chain {
-            qname += &format!("{}.", c.name);
-        }
-        qname += &table.name;
-        qname
     }
 
     fn add_table_entry_method(&mut self, control: &Control) -> TokenStream {
@@ -309,8 +305,9 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables.iter() {
-            let qtn = Self::qualified_table_name(cs, table);
-            let call = format_ident!("add_{}_table_entry", table.name);
+            let qtn = qualified_table_name(cs, table);
+            let qtfn = qualified_table_function_name(cs, table);
+            let call = format_ident!("add_{}_entry", qtfn);
             body.extend(quote! {
                 #qtn => self.#call(
                     action_id,
@@ -344,10 +341,9 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables.iter() {
-            let qtn = Self::qualified_table_name(cs, table);
-            //TODO probably a conflict with the same table name in multiple control
-            //blocks
-            let call = format_ident!("remove_{}_table_entry", table.name);
+            let qtn = qualified_table_name(cs, table);
+            let qftn = qualified_table_function_name(cs, table);
+            let call = format_ident!("remove_{}_entry", qftn);
             body.extend(quote! {
                 #qtn => self.#call(keyset_data),
             });
@@ -374,7 +370,7 @@ impl<'a> PipelineGenerator<'a> {
         let mut names = Vec::new();
         let tables = control.tables(self.ast);
         for (cs, table) in &tables {
-            names.push(Self::qualified_table_name(cs, table));
+            names.push(qualified_table_name(cs, table));
         }
         quote! {
             fn get_table_ids(&self) -> Vec<&str> {
@@ -388,8 +384,9 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables.iter() {
-            let qtn = Self::qualified_table_name(cs, table);
-            let call = format_ident!("get_{}_table_entries", table.name);
+            let qtn = qualified_table_name(cs, table);
+            let qtfn = qualified_table_function_name(cs, table);
+            let call = format_ident!("get_{}_entries", qtfn);
             body.extend(quote! {
                 #qtn => Some(self.#call()),
             });
@@ -415,10 +412,14 @@ impl<'a> PipelineGenerator<'a> {
         let mut tokens = TokenStream::new();
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let control = cs.last().unwrap();
-            tokens.extend(self.add_table_entry_function(table, control));
-            tokens.extend(self.remove_table_entry_function(table, control));
-            tokens.extend(self.get_table_entries_function(table, control));
+            let control = cs.last().unwrap().1;
+            let qtfn = qualified_table_function_name(&cs, table);
+            tokens.extend(self.add_table_entry_function(table, control, &qtfn));
+            tokens.extend(
+                self.remove_table_entry_function(table, control, &qtfn),
+            );
+            tokens
+                .extend(self.get_table_entries_function(table, control, &qtfn));
         }
 
         tokens
@@ -473,6 +474,7 @@ impl<'a> PipelineGenerator<'a> {
         &mut self,
         table: &Table,
         control: &Control,
+        qtfn: &str,
     ) -> TokenStream {
         let keys = self.table_entry_keys(table);
 
@@ -557,7 +559,14 @@ impl<'a> PipelineGenerator<'a> {
                 let name = format_ident!("{}", p.name);
                 control_params.push(quote! { #name });
                 let ty = rust_type(&p.ty);
-                control_param_types.push(quote! { &mut #ty });
+                match p.direction {
+                    Direction::Out | Direction::InOut => {
+                        control_param_types.push(quote! { &mut #ty });
+                    }
+                    _ => {
+                        control_param_types.push(quote! { &#ty });
+                    }
+                }
             }
 
             for p in &a.parameters {
@@ -581,7 +590,7 @@ impl<'a> PipelineGenerator<'a> {
             }
 
             let aname = &action.name;
-            let tname = format_ident!("{}_table_{}", control.name, table.name);
+            let tname = format_ident!("{}", qtfn);
             action_match_body.extend(quote! {
                 #aname => {
                     #(#parameter_tokens)*
@@ -619,7 +628,7 @@ impl<'a> PipelineGenerator<'a> {
             x => panic!("unknown {} action id {}", #name, x),
         });
 
-        let name = format_ident!("add_{}_table_entry", table.name);
+        let name = format_ident!("add_{}_entry", qtfn);
         quote! {
             // lifetime is due to
             // https://github.com/rust-lang/rust/issues/96771#issuecomment-1119886703
@@ -644,13 +653,13 @@ impl<'a> PipelineGenerator<'a> {
         &mut self,
         table: &Table,
         control: &Control,
+        qtfn: &str,
     ) -> TokenStream {
         let keys = self.table_entry_keys(table);
         let n = table.key.len();
 
-        //let tname = format_ident!("{}", table.name);
-        let tname = format_ident!("{}_table_{}", control.name, table.name);
-        let name = format_ident!("remove_{}_table_entry", table.name);
+        let tname = format_ident!("{}", qtfn);
+        let name = format_ident!("remove_{}_entry", qtfn);
 
         let mut control_params = Vec::new();
         let mut control_param_types = Vec::new();
@@ -658,7 +667,14 @@ impl<'a> PipelineGenerator<'a> {
             let name = format_ident!("{}", p.name);
             control_params.push(quote! { #name });
             let ty = rust_type(&p.ty);
-            control_param_types.push(quote! { &mut #ty });
+            match p.direction {
+                Direction::Out | Direction::InOut => {
+                    control_param_types.push(quote! { &mut #ty });
+                }
+                _ => {
+                    control_param_types.push(quote! { &#ty });
+                }
+            }
         }
 
         for var in &control.variables {
@@ -715,11 +731,12 @@ impl<'a> PipelineGenerator<'a> {
 
     fn get_table_entries_function(
         &mut self,
-        table: &Table,
-        control: &Control,
+        _table: &Table,
+        _control: &Control,
+        qtfn: &str,
     ) -> TokenStream {
-        let name = format_ident!("get_{}_table_entries", table.name);
-        let tname = format_ident!("{}_table_{}", control.name, table.name);
+        let name = format_ident!("get_{}_entries", qtfn);
+        let tname = format_ident!("{}", qtfn);
 
         quote! {
             pub fn #name(&self) -> Vec<p4rs::TableEntry> {

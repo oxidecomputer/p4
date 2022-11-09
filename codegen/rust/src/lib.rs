@@ -8,8 +8,9 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    ControlParameter, DeclarationInfo, Direction, Expression, ExpressionKind,
-    Lvalue, NameInfo, Parser, Type, UserDefinedType, AST,
+    Control, ControlParameter, DeclarationInfo, Direction, Expression,
+    ExpressionKind, Lvalue, NameInfo, Parser, Table, Type, UserDefinedType,
+    AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -330,4 +331,34 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
     } else {
         false
     }
+}
+
+fn qualified_table_name(
+    chain: &Vec<(String, &Control)>,
+    table: &Table,
+) -> String {
+    table_qname(chain, table, '.')
+}
+
+fn qualified_table_function_name(
+    chain: &Vec<(String, &Control)>,
+    table: &Table,
+) -> String {
+    table_qname(chain, table, '_')
+}
+
+fn table_qname(
+    chain: &Vec<(String, &Control)>,
+    table: &Table,
+    sep: char,
+) -> String {
+    let mut qname = String::new();
+    for c in chain {
+        if c.0.is_empty() {
+            continue;
+        }
+        qname += &format!("{}{}", c.0, sep);
+    }
+    qname += &table.name;
+    qname
 }

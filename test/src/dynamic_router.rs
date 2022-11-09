@@ -84,7 +84,7 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
             },
             0,
             "control plane rule 1".into(),
-            &mut pipeline.router_table_router,
+            &mut pipeline.router_router,
         );
 
         add_router_table_entry_forward(
@@ -99,7 +99,7 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
             },
             0,
             "control plane rule 2".into(),
-            &mut pipeline.router_table_router,
+            &mut pipeline.router_router,
         );
 
         add_router_table_entry_forward(
@@ -114,7 +114,7 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
             },
             0,
             "control plane rule 3".into(),
-            &mut pipeline.router_table_router,
+            &mut pipeline.router_router,
         );
 
         softnpu::run_pipeline(rx, tx, &mut pipeline);

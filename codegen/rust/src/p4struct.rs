@@ -126,6 +126,20 @@ impl<'a> StructGenerator<'a> {
                     }
                 }
             })
+        } else {
+            structure.extend(quote! {
+                impl #name {
+                    pub fn valid_header_size(&self) -> usize { 0 }
+
+                    pub fn to_bitvec(&self) -> BitVec<u8, Msb0> {
+                        bitvec![u8, Msb0; 0; 0]
+                    }
+
+                    pub fn dump(&self) -> String {
+                        std::string::String::new()
+                    }
+                }
+            })
         }
 
         self.ctx.structs.insert(s.name.clone(), structure);
