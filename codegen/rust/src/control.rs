@@ -399,7 +399,7 @@ impl<'a> ControlGenerator<'a> {
                                 let size = n as usize;
                                 action_fn_args.push(quote! {{
                                     let mut x = bitvec![mut u8, Msb0; 0; #size];
-                                    x.store_be(#v);
+                                    x.store_le(#v);
                                     x
                                 }});
                             }

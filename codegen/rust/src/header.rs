@@ -65,10 +65,24 @@ impl<'a> HeaderGenerator<'a> {
             });
             let end = offset + size;
             set_statements.push(quote! {
-                self.#name = buf.view_bits::<Msb0>()[#offset..#end].to_owned()
+                self.#name = {
+                    let mut b = buf.view_bits::<Msb0>()[#offset..#end].to_owned();
+                    // NOTE this barfing and then unbarfing a vec is to handle
+                    // the p4 confused-endian data model.
+                    let mut v = b.into_vec();
+                    v.reverse();
+                    let b = BitVec::<u8, Msb0>::from_vec(v);
+                    b
+                }
             });
             to_bitvec_statements.push(quote! {
-                x[#offset..#end] |= &self.#name
+                // NOTE this barfing and then unbarfing a vec is to handle
+                // the p4 confused-endian data model.
+                let mut v = self.#name.clone().into_vec();
+                v.reverse();
+                let b = BitVec::<u8, Msb0>::from_vec(v);
+                x[#offset..#end] |= &b;
+
             });
             checksum_statements.push(quote! {
                 csum = p4rs::bitmath::add(csum.clone(), self.#name.csum())
@@ -116,6 +130,11 @@ impl<'a> HeaderGenerator<'a> {
                 fn to_bitvec(&self) -> BitVec<u8, Msb0> {
                     let mut x = bitvec![u8, Msb0; 0u8; Self::size()];
                     #(#to_bitvec_statements);*;
+                    // NOTE handling P4s confused endian byte ordering
+                    //let mut v = x.into_vec();
+                    //v.reverse();
+                    //let x = BitVec::<u8, Msb0>::from_vec(v);
+                    //x.reverse();
                     x
                 }
             }
