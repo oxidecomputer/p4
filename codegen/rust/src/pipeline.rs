@@ -181,8 +181,6 @@ impl<'a> PipelineGenerator<'a> {
                 };
                 let mut egress_metadata = EgressMetadata::default();
 
-                //println!("{}", "begin".green());
-
                 //
                 // 3. run the parser block
                 //
@@ -190,13 +188,9 @@ impl<'a> PipelineGenerator<'a> {
                 if !accept {
                     // drop the packet
                     softnpu_provider::parser_dropped!(||());
-                    //println!("parser drop");
                     return None
                 }
-                //println!("{}", "parser accepted".green()); //XXX
                 let dump = parsed.dump();
-                //println!("{}", "<<<".dimmed());
-                //println!("{}", &dump); //XXX
                 softnpu_provider::parser_accepted!(||(&dump));
 
                 //
@@ -223,21 +217,13 @@ impl<'a> PipelineGenerator<'a> {
                 let port: u16 = if egress_metadata.port.is_empty()
                     || egress_metadata.drop {
                     softnpu_provider::control_dropped!(||(&dump));
-                    //println!("{}", "no match".red());
-                    //println!("{}", "---".dimmed());
                     return None;
                 } else {
                     egress_metadata.port.load_le()
-                    //egress_metadata.port.as_raw_slice()[0]
                 };
 
                 let dump = parsed.dump();
-                //println!("{}", ">>>".dimmed());
-                //println!("{}", &dump); //XXX
-
                 softnpu_provider::control_accepted!(||(&dump));
-                //println!("{}", "control pass".green());
-                //println!("{}", "---".dimmed());
 
                 //
                 // 7. Create the packet output.

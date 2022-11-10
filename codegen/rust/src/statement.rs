@@ -505,11 +505,11 @@ impl<'a> StatementGenerator<'a> {
                 selector_components.push(quote! {
                     p4rs::bitvec_to_biguint(
                         &#(#lvref).*
-                    )
+                    ).value
                 });
             } else {
                 selector_components.push(quote! {
-                    p4rs::bitvec_to_biguint(&#(#lvref).*)
+                    p4rs::bitvec_to_biguint(&#(#lvref).*).value
                 });
             }
         }

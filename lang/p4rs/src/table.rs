@@ -8,11 +8,18 @@ use num::bigint::BigUint;
 use num::ToPrimitive;
 use serde::{Deserialize, Serialize};
 
-// TODO transition from BigUint to BitVec<u8, Msb0>
+#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
+pub struct BigUintKey {
+    pub value: BigUint,
+    pub width: usize,
+}
+
+// TODO transition from BigUint to BitVec<u8, Msb0>, this requires being able to
+// do a number of mathematical operations on BitVec<u8, Msb0>.
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Key {
-    Exact(BigUint),
-    Range(BigUint, BigUint),
+    Exact(BigUintKey),
+    Range(BigUintKey, BigUintKey),
     Ternary(Ternary),
     Lpm(Prefix),
 }
@@ -25,20 +32,20 @@ impl Default for Key {
 
 impl Key {
     pub fn to_bytes(&self) -> Vec<u8> {
-        match self {
-            Key::Exact(x) => x.to_bytes_be(),
+        let (mut buf, width) = match self {
+            Key::Exact(x) => (x.value.to_bytes_be(), x.width),
             Key::Range(a, z) => {
-                let mut v = a.to_bytes_be();
-                v.extend_from_slice(&z.to_bytes_be());
-                v
+                let mut v = a.value.to_bytes_be();
+                v.extend_from_slice(&z.value.to_bytes_be());
+                (v, a.width)
             }
             Key::Ternary(t) => match t {
-                Ternary::DontCare => Vec::new(),
-                Ternary::Value(v) => v.to_bytes_be(),
-                Ternary::Masked(v, m) => {
+                Ternary::DontCare => (Vec::new(), 0),
+                Ternary::Value(v) => (v.value.to_bytes_be(), v.width),
+                Ternary::Masked(v, m, w) => {
                     let mut x = v.to_bytes_be();
                     x.extend_from_slice(&m.to_bytes_be());
-                    x
+                    (x, *w)
                 }
             },
             Key::Lpm(p) => {
@@ -47,17 +54,23 @@ impl Key {
                     IpAddr::V6(a) => a.octets().into(),
                 };
                 v.push(p.len);
-                v
+                let w = v.len();
+                (v, w)
             }
-        }
+        };
+        // A value serialized from a BigUint may be less than the width of a
+        // field. For example a 16-bit field with with a value of 47 will come
+        // back in 8 bits from BigUint serialization.
+        buf.resize(width, 0);
+        buf
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Ternary {
     DontCare,
-    Value(BigUint),
-    Masked(BigUint, BigUint),
+    Value(BigUintKey),
+    Masked(BigUint, BigUint, usize),
 }
 
 impl Default for Ternary {
@@ -187,12 +200,14 @@ pub fn sort_entries_by_priority<const D: usize, A: Clone>(
 
 pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     match key {
-        Key::Exact(x) => selector == x,
-        Key::Range(begin, end) => selector >= begin && selector <= end,
+        Key::Exact(x) => selector == &x.value,
+        Key::Range(begin, end) => {
+            selector >= &begin.value && selector <= &end.value
+        }
         Key::Ternary(t) => match t {
             Ternary::DontCare => true,
-            Ternary::Value(x) => selector == x,
-            Ternary::Masked(x, m) => selector & m == x & m,
+            Ternary::Value(x) => selector == &x.value,
+            Ternary::Masked(x, m, _) => selector & m == x & m,
         },
         Key::Lpm(p) => match p.addr {
             IpAddr::V6(addr) => {
@@ -207,18 +222,20 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 };
                 let mask = mask.to_be();
                 let selector_v6 = selector.to_u128().unwrap();
-                /*
-                println!(
-                    "{} & {} == {} & {} | {} = {}",
-                    selector_v6,
-                    mask,
-                    key,
-                    mask,
-                    selector_v6 & mask,
-                    key & mask
-                );
-                */
-                selector_v6 & mask == key & mask
+                let hit = selector_v6 & mask == key & mask;
+                if !hit {
+                    let dump = format!(
+                        "{:x} & {:x} == {:x} & {:x} | {:x} = {:x}",
+                        selector_v6,
+                        mask,
+                        key,
+                        mask,
+                        selector_v6 & mask,
+                        key & mask
+                    );
+                    crate::p4rs_provider::match_miss!(|| &dump);
+                }
+                hit
             }
             IpAddr::V4(addr) => {
                 assert!(p.len <= 32);
@@ -229,7 +246,20 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                     ((1u32 << p.len) - 1) << (32 - p.len)
                 };
                 let selector_v4: u32 = selector.to_u32().unwrap();
-                selector_v4 & mask == key & mask
+                let hit = selector_v4 & mask == key & mask;
+                if !hit {
+                    let dump = format!(
+                        "{:x} & {:x} == {:x} & {:x} | {:x} = {:x}",
+                        selector_v4,
+                        mask,
+                        key,
+                        mask,
+                        selector_v4 & mask,
+                        key & mask
+                    );
+                    crate::p4rs_provider::match_miss!(|| &dump);
+                }
+                hit
             }
         },
     }
@@ -345,57 +375,87 @@ mod tests {
             entries: HashSet::from([
                 tk(
                     "a0",
-                    Ternary::Value(1u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 1u8.into(),
+                        width: 1,
+                    }),
                     Ternary::DontCare,
-                    Ternary::Value(1u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 1u8.into(),
+                        width: 1,
+                    }),
                     10,
                 ),
                 tk(
                     "a1",
-                    Ternary::Value(1u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 1u8.into(),
+                        width: 1,
+                    }),
                     Ternary::DontCare,
-                    Ternary::Value(0u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 0u8.into(),
+                        width: 1,
+                    }),
                     1,
                 ),
                 tk(
                     "a2",
                     Ternary::DontCare,
-                    Ternary::Value(2u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 2u16.into(),
+                        width: 2,
+                    }),
                     Ternary::DontCare,
                     1,
                 ),
                 tk(
                     "a3",
                     Ternary::DontCare,
-                    Ternary::Value(4u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 4u16.into(),
+                        width: 2,
+                    }),
                     Ternary::DontCare,
                     1,
                 ),
                 tk(
                     "a4",
                     Ternary::DontCare,
-                    Ternary::Value(7u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 7u16.into(),
+                        width: 2,
+                    }),
                     Ternary::DontCare,
                     1,
                 ),
                 tk(
                     "a5",
                     Ternary::DontCare,
-                    Ternary::Value(19u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 19u16.into(),
+                        width: 2,
+                    }),
                     Ternary::DontCare,
                     1,
                 ),
                 tk(
                     "a6",
                     Ternary::DontCare,
-                    Ternary::Value(33u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 33u16.into(),
+                        width: 2,
+                    }),
                     Ternary::DontCare,
                     1,
                 ),
                 tk(
                     "a7",
                     Ternary::DontCare,
-                    Ternary::Value(47u8.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 47u16.into(),
+                        width: 2,
+                    }),
                     Ternary::DontCare,
                     1,
                 ),
@@ -549,9 +609,36 @@ mod tests {
         let table = Table::<2, ()> {
             entries: HashSet::from([
                 tlpm("a0", "fd00:1::", 64, Ternary::DontCare, 1),
-                tlpm("a1", "fd00:1::", 64, Ternary::Value(1u16.into()), 10),
-                tlpm("a2", "fd00:1::", 64, Ternary::Value(2u16.into()), 10),
-                tlpm("a3", "fd00:1::", 64, Ternary::Value(3u16.into()), 10),
+                tlpm(
+                    "a1",
+                    "fd00:1::",
+                    64,
+                    Ternary::Value(BigUintKey {
+                        value: 1u16.into(),
+                        width: 2,
+                    }),
+                    10,
+                ),
+                tlpm(
+                    "a2",
+                    "fd00:1::",
+                    64,
+                    Ternary::Value(BigUintKey {
+                        value: 2u16.into(),
+                        width: 2,
+                    }),
+                    10,
+                ),
+                tlpm(
+                    "a3",
+                    "fd00:1::",
+                    64,
+                    Ternary::Value(BigUintKey {
+                        value: 3u16.into(),
+                        width: 2,
+                    }),
+                    10,
+                ),
             ]),
         };
 
@@ -586,8 +673,20 @@ mod tests {
                     len,
                 }),
                 Key::Ternary(zone),
-                Key::Range(range.0.into(), range.1.into()),
-                Key::Exact(tag.into()),
+                Key::Range(
+                    BigUintKey {
+                        value: range.0.into(),
+                        width: 4,
+                    },
+                    BigUintKey {
+                        value: range.1.into(),
+                        width: 4,
+                    },
+                ),
+                Key::Exact(BigUintKey {
+                    value: tag.into(),
+                    width: 8,
+                }),
             ],
             priority,
             name: name.into(),
@@ -629,7 +728,10 @@ mod tests {
                     "a4",
                     "fd00:1::",
                     64,
-                    Ternary::Value(99u16.into()),
+                    Ternary::Value(BigUintKey {
+                        value: 99u16.into(),
+                        width: 2,
+                    }),
                     (443, 443),
                     200,
                     10,
@@ -681,7 +783,10 @@ mod tests {
         let table = Table::<1, Arc<dyn Fn(&mut ActionData)>> {
             entries: HashSet::from([
                 TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
-                    key: [Key::Exact(1u8.into())],
+                    key: [Key::Exact(BigUintKey {
+                        value: 1u8.into(),
+                        width: 1,
+                    })],
                     priority: 0,
                     name: "a0".into(),
                     action: Arc::new(|a: &mut ActionData| {
@@ -691,7 +796,10 @@ mod tests {
                     parameter_data: Vec::new(),
                 },
                 TableEntry::<1, Arc<dyn Fn(&mut ActionData)>> {
-                    key: [Key::Exact(2u8.into())],
+                    key: [Key::Exact(BigUintKey {
+                        value: 2u8.into(),
+                        width: 1,
+                    })],
                     priority: 0,
                     name: "a1".into(),
                     action: Arc::new(|a: &mut ActionData| {

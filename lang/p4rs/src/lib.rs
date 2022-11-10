@@ -75,6 +75,11 @@ pub mod checksum;
 pub mod externs;
 pub mod table;
 
+#[usdt::provider]
+mod p4rs_provider {
+    fn match_miss(_: &str) {}
+}
+
 #[derive(Debug)]
 pub struct Bit<'a, const N: usize>(pub &'a [u8]);
 
@@ -230,10 +235,12 @@ impl<'a> packet_in<'a> {
 }
 
 //XXX: remove once classifier defined in terms of bitvecs
-pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> num::BigUint {
-    let u = num::BigUint::from_bytes_be(bv.as_raw_slice());
-    //println!("{:x?} -> {:x}", bv.as_raw_slice(), u);
-    u
+pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> table::BigUintKey {
+    let s = bv.as_raw_slice();
+    table::BigUintKey {
+        value: num::BigUint::from_bytes_be(s),
+        width: s.len(),
+    }
 }
 
 pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
@@ -266,9 +273,10 @@ pub fn extract_exact_key(
     offset: usize,
     len: usize,
 ) -> table::Key {
-    table::Key::Exact(num::BigUint::from_bytes_le(
-        &keyset_data[offset..offset + len],
-    ))
+    table::Key::Exact(table::BigUintKey {
+        value: num::BigUint::from_bytes_le(&keyset_data[offset..offset + len]),
+        width: len,
+    })
 }
 
 pub fn extract_range_key(
@@ -277,10 +285,18 @@ pub fn extract_range_key(
     len: usize,
 ) -> table::Key {
     table::Key::Range(
-        num::BigUint::from_bytes_le(&keyset_data[offset..offset + len]),
-        num::BigUint::from_bytes_le(
-            &keyset_data[offset + len..offset + len + len],
-        ),
+        table::BigUintKey {
+            value: num::BigUint::from_bytes_le(
+                &keyset_data[offset..offset + len],
+            ),
+            width: len,
+        },
+        table::BigUintKey {
+            value: num::BigUint::from_bytes_le(
+                &keyset_data[offset + len..offset + len + len],
+            ),
+            width: len,
+        },
     )
 }
 

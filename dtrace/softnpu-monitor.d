@@ -29,3 +29,7 @@
 ::control_table_miss {
     printf("%s", copyinstr(arg0));
 }
+
+::match_miss {
+    printf("%s", copyinstr(arg0));
+}

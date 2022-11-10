@@ -72,50 +72,74 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
 
         let mut pipeline = main_pipeline::new();
 
+        let prefix: Ipv6Addr = "fd00:1000::".parse().unwrap();
+        let mut buf = prefix.octets().to_vec();
+        buf.push(24); // prefix length
+
+        pipeline.add_router_router_entry("forward", &buf, &1u16.to_be_bytes());
+
+        let prefix: Ipv6Addr = "fd00:2000::".parse().unwrap();
+        let mut buf = prefix.octets().to_vec();
+        buf.push(24); // prefix length
+
+        pipeline.add_router_router_entry("forward", &buf, &2u16.to_be_bytes());
+
+        let prefix: Ipv6Addr = "fd00:3000::".parse().unwrap();
+        let mut buf = prefix.octets().to_vec();
+        buf.push(24); // prefix length
+
+        pipeline.add_router_router_entry("forward", &buf, &3u16.to_be_bytes());
+
+        /*
         add_router_table_entry_forward(
             p4rs::table::Key::Lpm(p4rs::table::Prefix {
                 addr: "fd00:1000::".parse().unwrap(),
                 len: 24,
             }),
             {
-                let mut x = bitvec![mut u8, Msb0; 0; 8];
-                x.store(1u8);
+                let mut x = bitvec![mut u8, Msb0; 0; 16];
+                x.store_le(1u16);
                 x
             },
             0,
             "control plane rule 1".into(),
             &mut pipeline.router_router,
         );
+        */
 
+        /*
         add_router_table_entry_forward(
             p4rs::table::Key::Lpm(p4rs::table::Prefix {
                 addr: "fd00:2000::".parse().unwrap(),
                 len: 24,
             }),
             {
-                let mut x = bitvec![mut u8, Msb0; 0; 8];
-                x.store(2u8);
+                let mut x = bitvec![mut u8, Msb0; 0; 16];
+                x.store(2u16);
                 x
             },
             0,
             "control plane rule 2".into(),
             &mut pipeline.router_router,
         );
+        */
 
+        /*
         add_router_table_entry_forward(
             p4rs::table::Key::Lpm(p4rs::table::Prefix {
                 addr: "fd00:3000::".parse().unwrap(),
                 len: 24,
             }),
             {
-                let mut x = bitvec![mut u8, Msb0; 0; 8];
-                x.store(3u8);
+                let mut x = bitvec![mut u8, Msb0; 0; 16];
+                x.store(3u16);
                 x
             },
             0,
             "control plane rule 3".into(),
             &mut pipeline.router_router,
         );
+        */
 
         softnpu::run_pipeline(rx, tx, &mut pipeline);
     });
@@ -168,8 +192,8 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
         mmc1,
         None,
     );
-    //~~~~~~~
 
+    //~~~~~~~
     let p = b"the muffin man!";
     write(
         &phy1,
@@ -347,37 +371,4 @@ fn phy3_egress(frame: &[u8]) {
     let dump =
         format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
     println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
-}
-
-// XXX generate
-#[cfg(test)]
-fn add_router_table_entry_forward(
-    key: p4rs::table::Key,
-    port: BitVec<u8, Msb0>,
-    priority: u32,
-    name: String,
-    table: &mut p4rs::table::Table<
-        1usize,
-        Arc<dyn Fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata)>,
-    >,
-) {
-    let action: Arc<
-        dyn Fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
-    > = Arc::new(move |hdr, ingress, egress| {
-        router_action_forward(hdr, ingress, egress, port.clone());
-    });
-
-    table.entries.insert(p4rs::table::TableEntry::<
-        1usize,
-        Arc<dyn Fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata)>,
-    > {
-        key: [key],
-        priority,
-        name,
-        action,
-
-        //TODO actual data
-        action_id: String::new(),
-        parameter_data: Vec::new(),
-    });
 }

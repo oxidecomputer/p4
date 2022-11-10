@@ -83,9 +83,7 @@ control local(
 
         bit<16> ll = 16w0xff02;
 
-        //TODO this is backwards should be
-        //if(hdr.ipv6.dst[127:112] == ll) {
-        if(hdr.ipv6.dst[15:0] == ll) {
+        if(hdr.ipv6.dst[127:112] == ll) {
             is_local = true;
         }
     }
@@ -183,7 +181,7 @@ control ingress(
         else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.
-            if (ingress.port == 8w1) {
+            if (ingress.port == 16w1) {
                 hdr.sidecar.setInvalid();
             }
             router.apply(hdr, ingress, egress);
