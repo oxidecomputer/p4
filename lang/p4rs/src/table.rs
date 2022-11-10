@@ -205,7 +205,19 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 } else {
                     ((1u128 << p.len) - 1) << (128 - p.len)
                 };
+                let mask = mask.to_be();
                 let selector_v6 = selector.to_u128().unwrap();
+                /*
+                println!(
+                    "{} & {} == {} & {} | {} = {}",
+                    selector_v6,
+                    mask,
+                    key,
+                    mask,
+                    selector_v6 & mask,
+                    key & mask
+                );
+                */
                 selector_v6 & mask == key & mask
             }
             IpAddr::V4(addr) => {
@@ -411,11 +423,21 @@ mod tests {
     }
 
     fn lpm(name: &str, addr: &str, len: u8) -> TableEntry<1, ()> {
+        let addr: IpAddr = addr.parse().unwrap();
+        let addr = match addr {
+            IpAddr::V4(x) => {
+                let mut b = x.octets();
+                b.reverse();
+                IpAddr::from(b)
+            }
+            IpAddr::V6(x) => {
+                let mut b = x.octets();
+                b.reverse();
+                IpAddr::from(b)
+            }
+        };
         TableEntry::<1, ()> {
-            key: [Key::Lpm(Prefix {
-                addr: addr.parse().unwrap(),
-                len,
-            })],
+            key: [Key::Lpm(Prefix { addr, len })],
             priority: 1,
             name: name.into(),
             action: (),
@@ -477,20 +499,20 @@ mod tests {
         table.entries.insert(lpm("a15", "fd00:1701::", 32));
 
         let addr: Ipv6Addr = "fd00:4700::1".parse().unwrap();
-        let selector = [BigUint::from(u128::from_be_bytes(addr.octets()))];
+        let selector = [BigUint::from(u128::from_le_bytes(addr.octets()))];
         let matches = table.match_selector(&selector);
         //println!("{:#?}", matches);
         assert_eq!(matches.len(), 1);
         assert!(contains_entry(&matches, "a0"));
 
         let addr: Ipv6Addr = "fd00:4800::1".parse().unwrap();
-        let selector = [BigUint::from(u128::from_be_bytes(addr.octets()))];
+        let selector = [BigUint::from(u128::from_le_bytes(addr.octets()))];
         let matches = table.match_selector(&selector);
         assert_eq!(matches.len(), 0);
         //println!("{:#?}", matches);
 
         let addr: Ipv6Addr = "fd00:4702:0002:0002::1".parse().unwrap();
-        let selector = [BigUint::from(u128::from_be_bytes(addr.octets()))];
+        let selector = [BigUint::from(u128::from_le_bytes(addr.octets()))];
         let matches = table.match_selector(&selector);
         //println!("{:#?}", matches);
         assert_eq!(matches.len(), 1); // only one longest prefix match
@@ -535,13 +557,13 @@ mod tests {
 
         let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
         let selector = [
-            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(u128::from_le_bytes(dst.octets())),
             BigUint::from(0u16),
         ];
         let matches = table.match_selector(&selector);
         println!("zone-0: {:#?}", matches);
         let selector = [
-            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(u128::from_le_bytes(dst.octets())),
             BigUint::from(2u16),
         ];
         let matches = table.match_selector(&selector);
@@ -616,7 +638,7 @@ mod tests {
         };
         let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
         let selector = [
-            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(u128::from_le_bytes(dst.octets())),
             BigUint::from(0u16),
             BigUint::from(80u32),
             BigUint::from(100u64),
@@ -625,7 +647,7 @@ mod tests {
         println!("m1: {:#?}", matches);
 
         let selector = [
-            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(u128::from_le_bytes(dst.octets())),
             BigUint::from(0u16),
             BigUint::from(443u32),
             BigUint::from(200u64),
@@ -634,7 +656,7 @@ mod tests {
         println!("m2: {:#?}", matches);
 
         let selector = [
-            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(u128::from_le_bytes(dst.octets())),
             BigUint::from(99u16),
             BigUint::from(443u32),
             BigUint::from(200u64),
@@ -643,7 +665,7 @@ mod tests {
         println!("m3: {:#?}", matches);
 
         let selector = [
-            BigUint::from(u128::from_be_bytes(dst.octets())),
+            BigUint::from(u128::from_le_bytes(dst.octets())),
             BigUint::from(99u16),
             BigUint::from(80u32),
             BigUint::from(200u64),

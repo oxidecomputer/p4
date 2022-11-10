@@ -39,7 +39,7 @@ control ingress(
 
     action drop() { }
 
-    action forward(bit<8> port) {
+    action forward(bit<16> port) {
         egress.port = port;
     }
 
@@ -53,8 +53,8 @@ control ingress(
         }
         default_action = drop;
         const entries = {
-            8w0 : forward(1);
-            8w1 : forward(0);
+            16w0 : forward(16w1);
+            16w1 : forward(16w0);
         }
     }
 

@@ -237,7 +237,8 @@ pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> num::BigUint {
 }
 
 pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
-    let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
+    let mut arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
+    arr.reverse();
     std::net::IpAddr::V6(std::net::Ipv6Addr::from(arr))
 }
 
@@ -255,7 +256,7 @@ pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
     if x.is_empty() {
         "∅".into()
     } else {
-        let v: u128 = x.load_be();
+        let v: u128 = x.load_le();
         format!("{:x}", v)
     }
 }
@@ -265,7 +266,7 @@ pub fn extract_exact_key(
     offset: usize,
     len: usize,
 ) -> table::Key {
-    table::Key::Exact(num::BigUint::from_bytes_be(
+    table::Key::Exact(num::BigUint::from_bytes_le(
         &keyset_data[offset..offset + len],
     ))
 }
@@ -276,8 +277,8 @@ pub fn extract_range_key(
     len: usize,
 ) -> table::Key {
     table::Key::Range(
-        num::BigUint::from_bytes_be(&keyset_data[offset..offset + len]),
-        num::BigUint::from_bytes_be(
+        num::BigUint::from_bytes_le(&keyset_data[offset..offset + len]),
+        num::BigUint::from_bytes_le(
             &keyset_data[offset + len..offset + len + len],
         ),
     )
@@ -299,14 +300,16 @@ pub fn extract_lpm_key(
     let (addr, len) = match keyset_data.len() {
         // IPv4
         5 => {
-            let data: [u8; 4] =
+            let mut data: [u8; 4] =
                 keyset_data[offset..offset + 4].try_into().unwrap();
+            data.reverse();
             (IpAddr::from(data), keyset_data[offset + 4])
         }
         // IPv6
         17 => {
-            let data: [u8; 16] =
+            let mut data: [u8; 16] =
                 keyset_data[offset..offset + 16].try_into().unwrap();
+            data.reverse();
             (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
@@ -330,5 +333,12 @@ pub fn extract_bit_action_parameter(
     size: usize,
 ) -> BitVec<u8, Msb0> {
     let size = size >> 3;
-    BitVec::from_slice(&parameter_data[offset..offset + size])
+    let b: BitVec<u8, Msb0> =
+        BitVec::from_slice(&parameter_data[offset..offset + size]);
+
+    // NOTE this barfing and then unbarfing a vec is to handle the p4
+    // confused-endian data model.
+    let mut v = b.into_vec();
+    v.reverse();
+    BitVec::<u8, Msb0>::from_vec(v)
 }

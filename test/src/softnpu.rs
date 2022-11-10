@@ -122,7 +122,9 @@ pub fn run_pipeline<
 
                         egress_count[port] += 1;
                     }
-                    None => {}
+                    None => {
+                        println!("drop");
+                    }
                 }
             }
             ig.consume(frames_in).unwrap();

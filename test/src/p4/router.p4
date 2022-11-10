@@ -83,9 +83,7 @@ control local(
 
         bit<16> ll = 16w0xff02;
 
-        //TODO this is backwards should be
-        //if(hdr.ipv6.dst[127:112] == ll) {
-        if(hdr.ipv6.dst[15:0] == ll) {
+        if(hdr.ipv6.dst[127:112] == ll) {
             is_local = true;
         }
     }
@@ -161,7 +159,8 @@ control ingress(
 
             // Decap the sidecar header.
             hdr.sidecar.setInvalid();
-            hdr.ethernet.ether_type = 16w0x86dd;
+            //hdr.ethernet.ether_type = 16w0x86dd;
+            hdr.ethernet.ether_type = 16w0xdd86;
 
             // No more processing is required for sidecar packets, they simple
             // go out the sidecar port corresponding to the source scrimlet
@@ -181,7 +180,8 @@ control ingress(
 
         if (local_dst) {
             hdr.sidecar.setValid();
-            hdr.ethernet.ether_type = 16w0x0901;
+            //hdr.ethernet.ether_type = 16w0x0901;
+            hdr.ethernet.ether_type = 16w0x0109;
 
             //SC_FORWARD_TO_USERSPACE
             hdr.sidecar.sc_code = 8w0x01;

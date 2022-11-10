@@ -174,7 +174,7 @@ impl<'a> PipelineGenerator<'a> {
                 let mut ingress_metadata = IngressMetadata{
                     port: {
                         let mut x = bitvec![mut u8, Msb0; 0; 16];
-                        x.store_be(port);
+                        x.store_le(port);
                         x
                     },
                     ..Default::default()
@@ -227,7 +227,7 @@ impl<'a> PipelineGenerator<'a> {
                     //println!("{}", "---".dimmed());
                     return None;
                 } else {
-                    egress_metadata.port.load_be()
+                    egress_metadata.port.load_le()
                     //egress_metadata.port.as_raw_slice()[0]
                 };
 
