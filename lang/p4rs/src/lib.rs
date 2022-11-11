@@ -244,8 +244,8 @@ pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> table::BigUintKey {
 }
 
 pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
-    let mut arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
-    arr.reverse();
+    let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
+    //arr.reverse();
     std::net::IpAddr::V6(std::net::Ipv6Addr::from(arr))
 }
 

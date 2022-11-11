@@ -90,57 +90,6 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
 
         pipeline.add_router_router_entry("forward", &buf, &3u16.to_be_bytes());
 
-        /*
-        add_router_table_entry_forward(
-            p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                addr: "fd00:1000::".parse().unwrap(),
-                len: 24,
-            }),
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 16];
-                x.store_le(1u16);
-                x
-            },
-            0,
-            "control plane rule 1".into(),
-            &mut pipeline.router_router,
-        );
-        */
-
-        /*
-        add_router_table_entry_forward(
-            p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                addr: "fd00:2000::".parse().unwrap(),
-                len: 24,
-            }),
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 16];
-                x.store(2u16);
-                x
-            },
-            0,
-            "control plane rule 2".into(),
-            &mut pipeline.router_router,
-        );
-        */
-
-        /*
-        add_router_table_entry_forward(
-            p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                addr: "fd00:3000::".parse().unwrap(),
-                len: 24,
-            }),
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 16];
-                x.store(3u16);
-                x
-            },
-            0,
-            "control plane rule 3".into(),
-            &mut pipeline.router_router,
-        );
-        */
-
         softnpu::run_pipeline(rx, tx, &mut pipeline);
     });
 
@@ -269,6 +218,11 @@ fn dynamic_router() -> Result<(), anyhow::Error> {
 
     sleep(Duration::from_secs(2));
 
+    assert_eq!(
+        phy0.count() + phy1.count() + phy2.count() + phy3.count(),
+        6usize,
+    );
+
     Ok(())
 }
 
@@ -338,37 +292,54 @@ fn v6_pkt<'a>(
 
 #[cfg(test)]
 fn phy0_egress(frame: &[u8]) {
+    let expected_messages = vec![
+        b"the muffin man?".as_slice(),
+        b"the muffin man!".as_slice(),
+        b"why yes".as_slice(),
+    ];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[37..77]).unwrap();
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[77..77 + n];
     let sc = &frame[14..37];
-    let dump = format!(
-        "{:#?} | {:x?} | {}",
-        pkt,
-        sc,
-        String::from_utf8_lossy(&frame[77..]),
-    );
+    let dump =
+        format!("{:#?} | {:x?} | {}", pkt, sc, String::from_utf8_lossy(msg),);
     println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
+    let expected_messages = vec![b"the muffin man is me!!!".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
     println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
+    let expected_messages = vec![b"do you know the muffin man?".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
     println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
+    let expected_messages = vec![b"i know the muffin man".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
     println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }

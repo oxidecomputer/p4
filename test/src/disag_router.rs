@@ -196,6 +196,11 @@ fn disag_router() -> Result<(), anyhow::Error> {
 
     sleep(Duration::from_secs(2));
 
+    assert_eq!(
+        phy0.count() + phy1.count() + phy2.count() + phy3.count(),
+        6usize,
+    );
+
     Ok(())
 }
 
@@ -265,37 +270,53 @@ fn v6_pkt<'a>(
 
 #[cfg(test)]
 fn phy0_egress(frame: &[u8]) {
+    let expected_messages = vec![
+        b"the muffin man?".as_slice(),
+        b"the muffin man!".as_slice(),
+        b"why yes".as_slice(),
+    ];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[37..77]).unwrap();
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[77..77 + n];
     let sc = &frame[14..37];
-    let dump = format!(
-        "{:#?} | {:x?} | {}",
-        pkt,
-        sc,
-        String::from_utf8_lossy(&frame[77..]),
-    );
+    let dump =
+        format!("{:#?} | {:x?} | {}", pkt, sc, String::from_utf8_lossy(msg),);
     println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
+    let expected_messages = vec![b"the muffin man is me!!!".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
     println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
+    let expected_messages = vec![b"do you know the muffin man?".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
     println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
+    let expected_messages = vec![b"i know the muffin man".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
     println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }

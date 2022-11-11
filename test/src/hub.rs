@@ -71,15 +71,33 @@ fn hub() -> Result<(), anyhow::Error> {
 
     sleep(Duration::from_secs(2));
 
+    assert_eq!(phy1.count() + phy2.count(), 6usize,);
+
     Ok(())
 }
 
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
-    println!("phy 1 !!! {}", String::from_utf8_lossy(&frame[14..]));
+    let expected_messages = [
+        "the muffin man?".to_string(),
+        "why yes".to_string(),
+        "i know the muffin man".to_string(),
+        "the muffin man is me!!!".to_string(),
+    ];
+    let msg = String::from_utf8_lossy(&frame[14..]).to_string();
+    println!("[{}] {}", "phy 1".magenta(), msg.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
-    println!("phy 2 !!! {}", String::from_utf8_lossy(&frame[14..]));
+    let expected_messages = vec![
+        "do you know the muffin man?".to_string(),
+        "the muffin man!".to_string(),
+    ];
+    let msg = String::from_utf8_lossy(&frame[14..]).to_string();
+    println!("[{}] {}", "phy 1".magenta(), msg.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }

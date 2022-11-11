@@ -271,8 +271,8 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
 fn try_extract_prefix_len(expr: &Expression) -> Option<u8> {
     match &expr.kind {
         ExpressionKind::Binary(_lhs, _op, rhs) => match &rhs.kind {
-            ExpressionKind::IntegerLit(v) => Some(v.trailing_ones() as u8),
-            ExpressionKind::BitLit(_width, v) => Some(v.trailing_ones() as u8),
+            ExpressionKind::IntegerLit(v) => Some(v.leading_ones() as u8),
+            ExpressionKind::BitLit(_width, v) => Some(v.leading_ones() as u8),
             ExpressionKind::SignedLit(_width, v) => {
                 Some(v.trailing_ones() as u8)
             }

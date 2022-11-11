@@ -116,65 +116,26 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
 
         // routing table entries
 
-        add_router_table_entry_forward(
-            p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                addr: "fd00:1000::".parse().unwrap(),
-                len: 24,
-            }),
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 8];
-                x.store(1u8);
-                x
-            },
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 128];
-                x.extend_from_raw_slice(&addr_c.octets());
-                x
-            },
-            0,
-            "control plane rule 1".into(),
-            &mut pipeline.router_router,
-        );
+        let prefix: Ipv6Addr = "fd00:1000::".parse().unwrap();
+        let mut key = prefix.octets().to_vec();
+        key.push(24); // prefix length
+        let mut args = 1u16.to_be_bytes().to_vec();
+        args.extend_from_slice(&addr_c.octets());
+        pipeline.add_router_router_entry("forward", &key, &args);
 
-        add_router_table_entry_forward(
-            p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                addr: "fd00:2000::".parse().unwrap(),
-                len: 24,
-            }),
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 8];
-                x.store(2u8);
-                x
-            },
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 128];
-                x.extend_from_raw_slice(&addr_d.octets());
-                x
-            },
-            0,
-            "control plane rule 2".into(),
-            &mut pipeline.router_router,
-        );
+        let prefix: Ipv6Addr = "fd00:2000::".parse().unwrap();
+        let mut key = prefix.octets().to_vec();
+        key.push(24); // prefix length
+        let mut args = 2u16.to_be_bytes().to_vec();
+        args.extend_from_slice(&addr_d.octets());
+        pipeline.add_router_router_entry("forward", &key, &args);
 
-        add_router_table_entry_forward(
-            p4rs::table::Key::Lpm(p4rs::table::Prefix {
-                addr: "fd00:3000::".parse().unwrap(),
-                len: 24,
-            }),
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 8];
-                x.store(3u8);
-                x
-            },
-            {
-                let mut x = bitvec![mut u8, Msb0; 0; 128];
-                x.extend_from_raw_slice(&addr_e.octets());
-                x
-            },
-            0,
-            "control plane rule 3".into(),
-            &mut pipeline.router_router,
-        );
+        let prefix: Ipv6Addr = "fd00:3000::".parse().unwrap();
+        let mut key = prefix.octets().to_vec();
+        key.push(24); // prefix length
+        let mut args = 3u16.to_be_bytes().to_vec();
+        args.extend_from_slice(&addr_e.octets());
+        pipeline.add_router_router_entry("forward", &key, &args);
 
         softnpu::run_pipeline(rx, tx, &mut pipeline);
     });
@@ -191,6 +152,9 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
 
     let ip4: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
     let mac4 = [0x01, 0xde, 0xde, 0x01, 0x70, 0x1d];
+
+    let ip5: Ipv6Addr = "fd00:3000::1".parse().unwrap();
+    let mac5 = [0x77, 0x88, 0x99, 0xAA, 0xBB, 0x12];
 
     let mc1: Ipv6Addr = "ff02::1:ff01:701c".parse().unwrap();
     let mmc1 = [0x33, 0x33, 0xff, 0x01, 0x70, 0x1c];
@@ -279,9 +243,9 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
         74,
         32,
         ip3,
-        ip2,
+        ip5,
         mac3,
-        mac2,
+        mac5,
         Some(sc),
     );
 
@@ -303,6 +267,11 @@ fn mac_rewrite() -> Result<(), anyhow::Error> {
     );
 
     sleep(Duration::from_secs(2));
+
+    assert_eq!(
+        phy0.count() + phy1.count() + phy2.count() + phy3.count(),
+        6usize,
+    );
 
     Ok(())
 }
@@ -373,14 +342,18 @@ fn v6_pkt<'a>(
 
 #[cfg(test)]
 fn phy0_egress(frame: &[u8]) {
+    let expected_messages = vec![
+        b"the muffin man?".as_slice(),
+        b"the muffin man!".as_slice(),
+        b"why yes".as_slice(),
+    ];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[37..77]).unwrap();
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[77..77 + n];
     let sc = &frame[14..37];
-    let _dump = format!(
-        "{:#?} | {:x?} | {}",
-        pkt,
-        sc,
-        String::from_utf8_lossy(&frame[77..]),
-    );
+    let dump =
+        format!("{:#?} | {:x?} | {}", pkt, sc, String::from_utf8_lossy(msg),);
+    println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
 
     let ip3: Ipv6Addr = "fe80::aae1:deff:fe01:701c".parse().unwrap();
     let ip4: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
@@ -389,25 +362,32 @@ fn phy0_egress(frame: &[u8]) {
     if dst != ip3 && dst != ip4 && dst != mc1 {
         panic!("non local packet showing up on port 0: {}", dst);
     }
-
-    //println!("[{}] {}", "phy 0".magenta(), dump.dimmed());
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy1_egress(frame: &[u8]) {
+    let expected_messages = vec![b"the muffin man is me!!!".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let _dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
-    //println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
-    //
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
+    println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }
 
 #[cfg(test)]
 fn phy2_egress(frame: &[u8]) {
+    let expected_messages = vec![b"do you know the muffin man?".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let _dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
-    //println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
+    println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
+
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
+
     let ip1: Ipv6Addr = "fd00:1000::1".parse().unwrap();
     let ip2: Ipv6Addr = "fd00:2000::1".parse().unwrap();
     let src = pkt.get_source();
@@ -420,48 +400,12 @@ fn phy2_egress(frame: &[u8]) {
 
 #[cfg(test)]
 fn phy3_egress(frame: &[u8]) {
+    let expected_messages = vec![b"i know the muffin man".as_slice()];
     let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let _dump =
-        format!("{:#?} | {}", pkt, String::from_utf8_lossy(&frame[54..]),);
-    //println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
-}
+    let n = pkt.get_payload_length() as usize;
+    let msg = &frame[54..54 + n];
+    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
+    println!("[{}] {}", "phy 3".magenta(), dump.dimmed());
 
-// XXX generate
-#[cfg(test)]
-fn add_router_table_entry_forward(
-    key: p4rs::table::Key,
-    port: BitVec<u8, Msb0>,
-    nexthop: BitVec<u8, Msb0>,
-    priority: u32,
-    name: String,
-    table: &mut p4rs::table::Table<
-        1usize,
-        Arc<dyn Fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata)>,
-    >,
-) {
-    let action: Arc<
-        dyn Fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata),
-    > = Arc::new(move |hdr, ingress, egress| {
-        router_action_forward(
-            hdr,
-            ingress,
-            egress,
-            port.clone(),
-            nexthop.clone(),
-        );
-    });
-
-    table.entries.insert(p4rs::table::TableEntry::<
-        1usize,
-        Arc<dyn Fn(&mut headers_t, &mut IngressMetadata, &mut EgressMetadata)>,
-    > {
-        key: [key],
-        priority,
-        name,
-        action,
-
-        //TODO actual data
-        action_id: "forward".into(),
-        parameter_data: Vec::new(),
-    });
+    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }

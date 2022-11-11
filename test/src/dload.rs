@@ -14,8 +14,9 @@ fn pipeline_create() -> Result<(), anyhow::Error> {
         index: 0,
     };
 
+    // the goal is simply not to explode
     let result = p.process_packet(port, &mut pkt);
-    println!("{:#?}", result);
+    assert!(result.is_none());
 
     Ok(())
 }
@@ -51,8 +52,9 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
         index: 0,
     };
 
+    // the goal is simply not to explode
     let result = p.process_packet(port, &mut pkt);
-    println!("{:#?}", result);
+    assert!(result.is_none());
 
     Ok(())
 }

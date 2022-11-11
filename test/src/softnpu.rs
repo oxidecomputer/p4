@@ -1,10 +1,12 @@
 use p4rs::packet_in;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::spawn;
 use xfr::{RingConsumer, RingProducer};
 
 pub struct Phy<const R: usize, const N: usize, const F: usize> {
     pub index: usize,
     ingress: RingProducer<R, N, F>,
+    counter: AtomicUsize,
 }
 
 pub struct Frame<'a> {
@@ -32,7 +34,11 @@ impl<'a> Frame<'a> {
 
 impl<const R: usize, const N: usize, const F: usize> Phy<R, N, F> {
     pub fn new(index: usize, ingress: RingProducer<R, N, F>) -> Self {
-        Self { index, ingress }
+        Self {
+            index,
+            ingress,
+            counter: AtomicUsize::new(0),
+        }
     }
 
     pub fn write<'a>(&self, frames: &[Frame<'a>]) -> Result<(), xfr::Error> {
@@ -46,7 +52,9 @@ impl<const R: usize, const N: usize, const F: usize> Phy<R, N, F> {
                 .write_at(fp, f.ethertype.to_be_bytes().as_slice(), 12);
             self.ingress.write_at(fp, f.payload, 14);
         }
-        self.ingress.produce(n)
+        self.ingress.produce(n)?;
+        self.counter.fetch_add(n, Ordering::Relaxed);
+        Ok(())
     }
 
     pub fn run(
@@ -63,6 +71,10 @@ impl<const R: usize, const N: usize, const F: usize> Phy<R, N, F> {
             }
             egress.consume(count).unwrap();
         });
+    }
+
+    pub fn count(&self) -> usize {
+        self.counter.load(Ordering::Relaxed)
     }
 }
 
