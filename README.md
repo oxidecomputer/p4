@@ -77,3 +77,57 @@ is up to harness code consuming compiled pipelines.
 
 - x86 code generation.
 - RISC-V code generation.
+
+## Design
+
+There are several major components to this repository each described below.
+
+### Compiler Front End
+
+This includes the following.
+
+- preprocessor
+- lexer
+- parser
+- high-level intermediate representation (hlir)
+- abstract syntax tree (ast)
+
+This code lives in the [p4](p4) directory. The lexers and parsers are hand
+written with the intent of providing maximum flexibility to provide the best
+possible front end user experience.
+
+### Code Generation
+
+Code generators take in an ast and hlir and generate runnable code. Currently
+there is only one code generator that produces Rust code in
+[codegen/rust/src](codegen/rust/src).
+
+The rust code generator is broken down into sub-generators that focus on
+particular P4 language elements such as control blocks, parsers, headers etc.
+The Rust code generation mechanisms heavily leverage the 
+[quote](https://github.com/dtolnay/quote) crate.
+
+Generated code is not intended to be completely standalone. There is a support
+library [p4rs](lang/p4rs) that is used by all generated programs. This library
+contains common types and functions used by generated code.
+
+### Command Line Compiler
+
+The [`x4c`](x4c) program provides a command line interface for compiling P4
+programs. Currently an `out.rs` file is generated on a successful compilation
+run. In the future when more targets are supported, output will be target
+specific.
+
+## Contributing
+
+Contributions are welcome. This is still early days and there is lots of ground
+to cover in P4 spec coverage, type checking, static analysis and more.
+
+Incremental advances and bug fixes are welcome via issues or pull requests.
+Please make sure new code passes existing [tests](test) before submitting a PR
+for review. If you are adding new functionality, please add to an existing test
+or create a new test that exercises that functionality. All PRs must pass CI
+before being accepted.
+
+For large contributions such as design changes or new compiler targets, please
+reach out to discuss.
