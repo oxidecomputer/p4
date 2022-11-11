@@ -25,7 +25,9 @@ cargo build --bin x4c
 
 There are no non-rust dependencies. Typically, compiling P4 code is as simple as
 `x4c <path to p4 code>`. This will generate an `out.rs` file. For more advanced
-`x4c` usage see `x4c --help`.
+`x4c` usage see `x4c --help`. Generated rust programs do have a few cargo
+dependencies, see [this Cargo.toml](lang/prog/sidecar-lite/Cargo.toml) to see
+what the current requirements are.
 
 To get started with Rust code `x4c` generates, see the 
 [p4rs module documentation](https://oxidecomputer.github.io/p4/p4rs/index.html).
