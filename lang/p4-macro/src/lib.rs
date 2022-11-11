@@ -114,7 +114,10 @@ fn process_file(
     ast: &mut AST,
     _settings: &GenerationSettings,
 ) -> Result<(), syn::Error> {
-    let contents = fs::read_to_string(&*filename).unwrap();
+    let contents = match fs::read_to_string(&*filename) {
+        Ok(c) => c,
+        Err(e) => panic!("failed to read file {}: {}", filename, e),
+    };
     let ppr = preprocessor::run(&contents, filename.clone()).unwrap();
     for included in &ppr.elements.includes {
         process_file(Arc::new(included.clone()), ast, _settings)?;
