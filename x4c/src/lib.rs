@@ -57,7 +57,6 @@ pub fn process_file(
     ast: &mut AST,
     opts: &Opts,
 ) -> Result<()> {
-
     let contents = fs::read_to_string(&*filename)
         .map_err(|e| anyhow!("read input: {}: {}", &*filename, e))?;
 
@@ -67,15 +66,15 @@ pub fn process_file(
     }
 
     for included in &ppr.elements.includes {
-
-        let path = Path::new(&*included);
+        let path = Path::new(included);
         if !path.is_absolute() {
             let parent = Path::new(&*filename).parent().unwrap();
-            let joined = parent.join(&included);
+            let joined = parent.join(included);
             process_file(
                 Arc::new(joined.to_str().unwrap().to_string()),
                 ast,
-                opts)?
+                opts,
+            )?
         } else {
             process_file(Arc::new(included.clone()), ast, opts)?
         }

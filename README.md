@@ -10,6 +10,10 @@ generic harnesses to be written.
 
 ## Getting started
 
+This readme contains a brief overview of getting started. More comprehensive
+documentation is being developed in the
+[x4c book](https://oxidecomputer.github.io/p4/book).
+
 There are two main forms of using the compiler.
 
 1. Generating Rust code from your P4 code using the `x4c` CLI interface.

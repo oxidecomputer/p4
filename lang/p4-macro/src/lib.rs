@@ -24,8 +24,8 @@
 //! [p4rs](../p4rs/index.html) docs.
 
 use std::fs;
-use std::sync::Arc;
 use std::path::Path;
+use std::sync::Arc;
 
 use p4::check::Diagnostics;
 use p4::{
@@ -121,14 +121,15 @@ fn process_file(
     };
     let ppr = preprocessor::run(&contents, filename.clone()).unwrap();
     for included in &ppr.elements.includes {
-        let path = Path::new(&*included);
+        let path = Path::new(included);
         if !path.is_absolute() {
             let parent = Path::new(&*filename).parent().unwrap();
-            let joined = parent.join(&included);
+            let joined = parent.join(included);
             process_file(
                 Arc::new(joined.to_str().unwrap().to_string()),
                 ast,
-                _settings)?
+                _settings,
+            )?
         } else {
             process_file(Arc::new(included.clone()), ast, _settings)?;
         }

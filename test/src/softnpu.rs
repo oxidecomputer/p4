@@ -53,10 +53,10 @@ macro_rules! expect_frames {
     ($phy:expr, $expected:expr) => {
         $crate::softnpu::do_expect_frames(
             stringify!($phy),
-            &$phy, 
+            &$phy,
             $expected,
             None,
-         )
+        )
     };
     ($phy:expr, $expected:expr, $dmac:expr) => {
         $crate::softnpu::do_expect_frames(

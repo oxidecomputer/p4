@@ -15,6 +15,6 @@ mod hub;
 #[cfg(test)]
 mod mac_rewrite;
 
+pub mod data;
 pub mod packet;
 pub mod softnpu;
-pub mod data;
