@@ -41,8 +41,8 @@ parser bump_parser(
 
 control bump_ingress(
     inout headers_t hdr,
-    inout EgressMetadata ingress_meta,
-    inout EgressMetadata egress_meta,
+    inout egress_metadata_t ingress_meta,
+    inout egress_metadata_t egress_meta,
 ) {
 
     action bump_action(bit<8> port) {
@@ -68,8 +68,8 @@ control bump_ingress(
 
 control bump_egress(
     inout headers_t hdr,
-    in EgressMetadata ingress_meta,
-    inout EgressMetadata egress_meta,
+    in egress_metadata_t ingress_meta,
+    inout egress_metadata_t egress_meta,
 ) {
 
     apply { }

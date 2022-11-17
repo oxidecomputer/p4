@@ -1,5 +1,5 @@
 [package]
-name = "p4-tests"
+name = "tests"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,7 +12,8 @@ bitvec = "1.0"
 pnet = "0.31"
 colored = "2.0"
 usdt = { git = "https://github.com/oxidecomputer/usdt" }
+rand = "0.8.5"
+anyhow = "1"
 
 [dev-dependencies]
-anyhow = "1"
 libloading = { version = "0.7" }

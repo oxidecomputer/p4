@@ -171,7 +171,7 @@ impl<'a> PipelineGenerator<'a> {
                 //
                 // 2. Instantiate ingress/egress metadata
                 //
-                let mut ingress_metadata = IngressMetadata{
+                let mut ingress_metadata = ingress_metadata_t{
                     port: {
                         let mut x = bitvec![mut u8, Msb0; 0; 16];
                         x.store_le(port);
@@ -179,7 +179,7 @@ impl<'a> PipelineGenerator<'a> {
                     },
                     ..Default::default()
                 };
-                let mut egress_metadata = EgressMetadata::default();
+                let mut egress_metadata = egress_metadata_t::default();
 
                 //
                 // 3. run the parser block

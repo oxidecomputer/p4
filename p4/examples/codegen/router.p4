@@ -13,13 +13,13 @@ extern packet_out {
 }
 
 // XXX import from softnpu.p4
-struct IngressMetadata {
+struct ingress_metadata_t {
     bit<16> port;
     bool nat;
     bit<16> nat_id;
 }
 
-struct EgressMetadata {
+struct egress_metadata_t {
     bit<16> port;
     bit<128> nexthop_v6;
     bit<32> nexthop_v4;
@@ -56,7 +56,7 @@ header ipv6_t {
 parser parse(
     packet_in pkt,
     out headers_t headers,
-    inout IngressMetadata ingress,
+    inout ingress_metadata_t ingress,
 ){
     state start {
         pkt.extract(headers.ethernet);
@@ -67,8 +67,8 @@ parser parse(
 
 control ingress(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
 
     action drop() { }

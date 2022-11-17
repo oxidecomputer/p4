@@ -1,10 +1,7 @@
-use crate::softnpu::{self, Frame, Phy};
-use std::sync::Arc;
-use std::thread::{sleep, spawn};
-use std::time::Duration;
-use xfr::{ring, FrameBuffer};
+use crate::softnpu::{RxFrame, SoftNpu, TxFrame};
+use crate::{expect_frames, muffins};
 
-p4_macro::use_p4!(p4 = "p4/examples/codegen/hub.p4", pipeline_name = "hub");
+p4_macro::use_p4!(p4 = "test/src/p4/hub.p4", pipeline_name = "hub2");
 
 ///
 ///                           ~~~~~~~~~~
@@ -22,82 +19,42 @@ p4_macro::use_p4!(p4 = "p4/examples/codegen/hub.p4", pipeline_name = "hub");
 ///
 ///
 #[test]
-fn hub() -> Result<(), anyhow::Error> {
-    const R: usize = 1024;
-    const N: usize = 4096;
-    const F: usize = 1500;
+fn hub2() -> Result<(), anyhow::Error> {
+    let mut npu = SoftNpu::new(2, main_pipeline::new(), false);
+    let phy1 = npu.phy(0);
+    let phy2 = npu.phy(1);
 
-    let fb = Arc::new(FrameBuffer::<N, F>::new());
+    npu.run();
 
-    // ingress rings
-    let (rx1_p, rx1_c) = ring::<R, N, F>(fb.clone());
-    let (rx2_p, rx2_c) = ring::<R, N, F>(fb.clone());
+    let et = 0;
+    let msg = muffins!();
 
-    // egress rings
-    let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
-    let (tx2_p, tx2_c) = ring::<R, N, F>(fb);
+    phy1.send(&[TxFrame::new(phy2.mac, et, msg.0)])?;
+    expect_frames!(phy2, &[RxFrame::new(phy1.mac, et, msg.0)]);
 
-    // create phys
-    let phy1 = Phy::new(1, rx1_p);
-    let phy2 = Phy::new(2, rx2_p);
+    phy2.send(&[TxFrame::new(phy1.mac, et, msg.1)])?;
+    expect_frames!(phy1, &[RxFrame::new(phy2.mac, et, msg.1)]);
 
-    // run phys
-    phy1.run(tx1_c, phy1_egress);
-    phy2.run(tx2_c, phy2_egress);
+    phy1.send(&[TxFrame::new(phy2.mac, et, msg.2)])?;
+    expect_frames!(phy2, &[RxFrame::new(phy1.mac, et, msg.2)]);
 
-    let mut pipeline = main_pipeline::new();
+    phy2.send(&[TxFrame::new(phy1.mac, et, msg.3)])?;
+    phy2.send(&[TxFrame::new(phy1.mac, et, msg.4)])?;
+    phy2.send(&[TxFrame::new(phy1.mac, et, msg.5)])?;
+    expect_frames!(
+        phy1,
+        &[
+            RxFrame::new(phy2.mac, et, msg.3),
+            RxFrame::new(phy2.mac, et, msg.4),
+            RxFrame::new(phy2.mac, et, msg.5),
+        ]
+    );
 
-    // run the softnpu with the compiled p4 pipelines
-    spawn(move || {
-        let rx = &[rx1_c, rx2_c];
-        let tx = &[tx1_p, tx2_p];
-        softnpu::run_pipeline(rx, tx, &mut pipeline);
-    });
+    assert_eq!(phy1.tx_count(), 2usize);
+    assert_eq!(phy1.rx_count(), 4usize);
 
-    // shove some test data through the soft npu
-    let mac1 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
-    let mac2 = [0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
-    let ethertype = 0x86ed;
-    let et = 0x86ed;
-
-    phy1.write(&[Frame::new(mac2, mac1, et, b"do you know the muffin man?")])?;
-    phy2.write(&[Frame::new(mac1, mac2, ethertype, b"the muffin man?")])?;
-    phy1.write(&[Frame::new(mac2, mac1, ethertype, b"the muffin man!")])?;
-    phy2.write(&[
-        Frame::new(mac1, mac2, ethertype, b"why yes"),
-        Frame::new(mac1, mac2, ethertype, b"i know the muffin man"),
-        Frame::new(mac1, mac2, ethertype, b"the muffin man is me!!!"),
-    ])?;
-
-    sleep(Duration::from_secs(2));
-
-    assert_eq!(phy1.count() + phy2.count(), 6usize,);
+    assert_eq!(phy2.tx_count(), 4usize);
+    assert_eq!(phy2.rx_count(), 2usize);
 
     Ok(())
-}
-
-#[cfg(test)]
-fn phy1_egress(frame: &[u8]) {
-    let expected_messages = [
-        "the muffin man?".to_string(),
-        "why yes".to_string(),
-        "i know the muffin man".to_string(),
-        "the muffin man is me!!!".to_string(),
-    ];
-    let msg = String::from_utf8_lossy(&frame[14..]).to_string();
-    println!("[{}] {}", "phy 1".magenta(), msg.dimmed());
-
-    assert!(expected_messages.contains(&msg), "{:?}", msg);
-}
-
-#[cfg(test)]
-fn phy2_egress(frame: &[u8]) {
-    let expected_messages = vec![
-        "do you know the muffin man?".to_string(),
-        "the muffin man!".to_string(),
-    ];
-    let msg = String::from_utf8_lossy(&frame[14..]).to_string();
-    println!("[{}] {}", "phy 1".magenta(), msg.dimmed());
-
-    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }

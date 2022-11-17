@@ -1,5 +1,5 @@
-#include <test/src/p4/core.p4>
-#include <test/src/p4/softnpu.p4>
+#include <core.p4>
+#include <softnpu.p4>
 
 SoftNPU(
     parse(),
@@ -11,7 +11,7 @@ struct headers_t { }
 parser parse(
     packet_in pkt,
     out headers_t headers,
-    inout IngressMetadata ingress,
+    inout ingress_metadata_t ingress,
 ){
     state start { transition accept; }
 }
@@ -50,8 +50,8 @@ control bar() {
 
 control ingress(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
     foo() taco;
     bar() pizza;

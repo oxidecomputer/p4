@@ -1,5 +1,5 @@
-#include <p4/examples/codegen/core.p4>
-#include <p4/examples/codegen/softnpu.p4>
+#include <core.p4>
+#include <softnpu.p4>
 
 SoftNPU(
     parse(),
@@ -19,7 +19,7 @@ header ethernet_t {
 parser parse(
     packet_in pkt,
     out headers_t headers,
-    inout IngressMetadata ingress,
+    inout ingress_metadata_t ingress,
 ){
     state start {
         pkt.extract(headers.ethernet);
@@ -33,8 +33,8 @@ parser parse(
 
 control ingress(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
 
     action drop() { }

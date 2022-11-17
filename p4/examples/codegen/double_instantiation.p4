@@ -11,7 +11,7 @@ struct headers_t { }
 parser parse(
     packet_in pkt,
     out headers_t headers,
-    inout IngressMetadata ingress,
+    inout ingress_metadata_t ingress,
 ){
     state start { transition accept; }
 }
@@ -45,8 +45,8 @@ control bar() {
 
 control ingress(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
     foo() foo;
     bar() bar;

@@ -1,6 +1,6 @@
-#include <test/src/p4/core.p4>
-#include <test/src/p4/softnpu.p4>
-#include <test/src/p4/headers.p4>
+#include <core.p4>
+#include <softnpu.p4>
+#include <headers.p4>
 
 SoftNPU(
     parse(),
@@ -16,7 +16,7 @@ struct headers_t {
 parser parse(
     packet_in pkt,
     out headers_t headers,
-    inout IngressMetadata ingress,
+    inout ingress_metadata_t ingress,
 ){
     state start {
         pkt.extract(headers.ethernet);
@@ -92,8 +92,8 @@ control local(
 
 control router(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
 
     action drop() { }
@@ -139,8 +139,8 @@ control router(
 
 control ingress(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
     local() local;
     router() router;
@@ -159,8 +159,7 @@ control ingress(
 
             // Decap the sidecar header.
             hdr.sidecar.setInvalid();
-            //hdr.ethernet.ether_type = 16w0x86dd;
-            hdr.ethernet.ether_type = 16w0xdd86;
+            hdr.ethernet.ether_type = 16w0x86dd;
 
             // No more processing is required for sidecar packets, they simple
             // go out the sidecar port corresponding to the source scrimlet
@@ -180,8 +179,7 @@ control ingress(
 
         if (local_dst) {
             hdr.sidecar.setValid();
-            //hdr.ethernet.ether_type = 16w0x0901;
-            hdr.ethernet.ether_type = 16w0x0109;
+            hdr.ethernet.ether_type = 16w0x0901;
 
             //SC_FORWARD_TO_USERSPACE
             hdr.sidecar.sc_code = 8w0x01;
