@@ -5,11 +5,11 @@ members = [
     "x4c",
     "x4c_error_codes",
     "codegen/rust",
-    #"examples/adm/routeradm",
     "lang/p4rs",
     "lang/p4-macro",
     "lang/p4-macro-test",
     "lang/prog/sidecar-lite",
     "test",
+    "book/code",
 ]
 
