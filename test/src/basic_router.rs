@@ -1,13 +1,5 @@
-use crate::softnpu::{self, Frame, Phy};
-use std::net::Ipv6Addr;
-use std::sync::Arc;
-use std::thread::{sleep, spawn};
-use std::time::Duration;
-use xfr::{ring, FrameBuffer};
-
-const R: usize = 1024;
-const N: usize = 4096;
-const F: usize = 1500;
+use crate::softnpu::{Interface6, RxFrame, SoftNpu};
+use crate::{expect_frames, muffins};
 
 p4_macro::use_p4!(
     p4 = "p4/examples/codegen/router.p4",
@@ -29,196 +21,47 @@ p4_macro::use_p4!(
 /// *=======*                *==========*                *=======*
 ///
 ///
+
 #[test]
-fn basic_router() -> Result<(), anyhow::Error> {
-    let fb = Arc::new(FrameBuffer::<N, F>::new());
+fn basic_router2() -> Result<(), anyhow::Error> {
+    let mut npu = SoftNpu::new(2, main_pipeline::new(), false);
+    let phy1 = npu.phy(0);
+    let phy2 = npu.phy(1);
 
-    // ingress rings
-    let (rx1_p, rx1_c) = ring::<R, N, F>(fb.clone());
-    let (rx2_p, rx2_c) = ring::<R, N, F>(fb.clone());
+    let if1 = Interface6::new(phy1.clone(), "fd00:1000::1".parse().unwrap());
+    let if2 = Interface6::new(phy2.clone(), "fd00:2000::1".parse().unwrap());
 
-    // egress rings
-    let (tx1_p, tx1_c) = ring::<R, N, F>(fb.clone());
-    let (tx2_p, tx2_c) = ring::<R, N, F>(fb);
+    npu.run();
 
-    // create phys
-    let phy1 = Phy::new(0, rx1_p);
-    let phy2 = Phy::new(1, rx2_p);
+    let et = 0x86dd;
+    let msg = muffins!();
 
-    // run phys
-    phy1.run(tx1_c, phy1_egress);
-    phy2.run(tx2_c, phy2_egress);
+    if1.send(phy2.mac, if2.addr, msg.0)?;
+    expect_frames!(phy2, &[RxFrame::new(phy1.mac, et, msg.0)]);
 
-    let mut pipeline = main_pipeline::new();
+    if2.send(phy1.mac, if1.addr, msg.1)?;
+    expect_frames!(phy1, &[RxFrame::new(phy2.mac, et, msg.1)]);
 
-    // run the softnpu with the compiled p4 pipelines
-    spawn(move || {
-        let rx = &[rx1_c, rx2_c];
-        let tx = &[tx1_p, tx2_p];
-        softnpu::run_pipeline(rx, tx, &mut pipeline);
-    });
+    if1.send(phy2.mac, if2.addr, msg.2)?;
+    expect_frames!(phy2, &[RxFrame::new(phy1.mac, et, msg.2)]);
 
-    // shove some test data through the soft npu
-    let ip1: Ipv6Addr = "fd00:1000::1".parse().unwrap();
-    let mac1 = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
-
-    let ip2: Ipv6Addr = "fd00:2000::1".parse().unwrap();
-    let mac2 = [0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
-
-    let payload = b"do you know the muffin man?";
-    write(
-        &phy1,
-        99,
-        1701,
-        payload.len(),
-        payload,
-        47,
-        23,
-        ip1,
-        ip2,
-        mac1,
-        mac2,
+    if2.send(phy1.mac, if1.addr, msg.3)?;
+    if2.send(phy1.mac, if1.addr, msg.4)?;
+    if2.send(phy1.mac, if1.addr, msg.5)?;
+    expect_frames!(
+        phy1,
+        &[
+            RxFrame::new(phy2.mac, et, msg.3),
+            RxFrame::new(phy2.mac, et, msg.4),
+            RxFrame::new(phy2.mac, et, msg.5),
+        ]
     );
 
-    let payload = b"the muffin man?";
-    write(
-        &phy2,
-        101,
-        1701,
-        payload.len(),
-        payload,
-        74,
-        32,
-        ip2,
-        ip1,
-        mac2,
-        mac1,
-    );
+    assert_eq!(phy1.tx_count(), 2usize);
+    assert_eq!(phy1.rx_count(), 4usize);
 
-    let payload = b"the muffin man!";
-    write(
-        &phy1,
-        99,
-        1701,
-        payload.len(),
-        payload,
-        47,
-        23,
-        ip1,
-        ip2,
-        mac1,
-        mac2,
-    );
-
-    let payload = b"why yes";
-    write(
-        &phy2,
-        101,
-        1701,
-        payload.len(),
-        payload,
-        74,
-        32,
-        ip2,
-        ip1,
-        mac2,
-        mac1,
-    );
-    let payload = b"i know the muffin man";
-    write(
-        &phy2,
-        101,
-        1701,
-        payload.len(),
-        payload,
-        74,
-        32,
-        ip2,
-        ip1,
-        mac2,
-        mac1,
-    );
-    let payload = b"the muffin man is me!!!";
-    write(
-        &phy2,
-        101,
-        1701,
-        payload.len(),
-        payload,
-        74,
-        32,
-        ip2,
-        ip1,
-        mac2,
-        mac1,
-    );
-
-    sleep(Duration::from_secs(2));
-
-    assert_eq!(phy1.count() + phy2.count(), 6usize,);
+    assert_eq!(phy2.tx_count(), 4usize);
+    assert_eq!(phy2.rx_count(), 2usize);
 
     Ok(())
-}
-
-#[cfg(test)]
-fn write(
-    phy: &Phy<R, N, F>,
-    traffic_class: u8,
-    flow_label: u32,
-    payload_length: usize,
-    payload: &[u8],
-    next_header: u8,
-    hop_limit: u8,
-    src: Ipv6Addr,
-    dst: Ipv6Addr,
-    smac: [u8; 6],
-    dmac: [u8; 6],
-) {
-    let mut data = [0u8; 256];
-    let et = 0x86ed;
-    let mut pkt =
-        pnet::packet::ipv6::MutableIpv6Packet::new(&mut data).unwrap();
-    pkt.set_version(6);
-    pkt.set_traffic_class(traffic_class);
-    pkt.set_flow_label(flow_label);
-    pkt.set_payload_length(payload_length as u16);
-    pkt.set_payload(payload);
-    pkt.set_next_header(pnet::packet::ip::IpNextHeaderProtocol(next_header));
-    pkt.set_hop_limit(hop_limit);
-    pkt.set_source(src);
-    pkt.set_destination(dst);
-    phy.write(&[Frame::new(smac, dmac, et, &data)])
-        .expect("phy write");
-}
-
-#[cfg(test)]
-fn phy1_egress(frame: &[u8]) {
-    let expected_messages = vec![
-        b"the muffin man?".as_slice(),
-        b"why yes".as_slice(),
-        b"i know the muffin man".as_slice(),
-        b"the muffin man is me!!!".as_slice(),
-    ];
-    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let n = pkt.get_payload_length() as usize;
-    let msg = &frame[54..54 + n];
-    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
-    println!("[{}] {}", "phy 1".magenta(), dump.dimmed());
-
-    assert!(expected_messages.contains(&msg), "{:?}", msg);
-}
-
-#[cfg(test)]
-fn phy2_egress(frame: &[u8]) {
-    let expected_messages = vec![
-        b"do you know the muffin man?".as_slice(),
-        b"the muffin man!".as_slice(),
-    ];
-    let pkt = pnet::packet::ipv6::Ipv6Packet::new(&frame[14..54]).unwrap();
-    let n = pkt.get_payload_length() as usize;
-    let msg = &frame[54..54 + n];
-    let dump = format!("{:#?} | {}", pkt, String::from_utf8_lossy(msg));
-    println!("[{}] {}", "phy 2".magenta(), dump.dimmed());
-
-    assert!(expected_messages.contains(&msg), "{:?}", msg);
 }

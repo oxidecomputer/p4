@@ -5,11 +5,11 @@ const PortId CPU_INGRESS_PORT = 0xA;
 const PortId CPU_EGRESS_PORT = 0xB;
 const PortId DROP_PORT = 0xC;
 
-struct IngressMetadata {
+struct ingress_metadata_t {
     PortId port;
 }
 
-struct EgressMetadata {
+struct egress_metadata_t {
     PortId port;
 }
 
@@ -20,8 +20,8 @@ parser NpuParser<H>(
 
 control NpuIngress<H>(
     inout H hdr,
-    inout IngressMetadata ingress_meta,
-    inout EgressMetadata egress_meta,
+    inout ingress_metadata_t ingress_meta,
+    inout egress_metadata_t egress_meta,
 );
 
 package SoftNPU<H>(

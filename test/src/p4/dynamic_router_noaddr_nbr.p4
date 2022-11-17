@@ -1,6 +1,6 @@
-#include <test/src/p4/core.p4>
-#include <test/src/p4/softnpu.p4>
-#include <test/src/p4/headers.p4>
+#include <core.p4>
+#include <softnpu.p4>
+#include <headers.p4>
 
 SoftNPU(
     parse(),
@@ -16,7 +16,7 @@ struct headers_t {
 parser parse(
     packet_in pkt,
     out headers_t headers,
-    inout IngressMetadata ingress,
+    inout ingress_metadata_t ingress,
 ){
     state start {
         pkt.extract(headers.ethernet);
@@ -82,7 +82,7 @@ control local(
 
 control resolver(
     inout headers_t hdr,
-    inout EgressMetadata egress,
+    inout egress_metadata_t egress,
 ) {
     action rewrite_dst(bit<48> dst) {
         //TODO the following creates a code generation error that should get
@@ -114,8 +114,8 @@ control resolver(
 
 control router(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
 
     resolver() resolver;
@@ -149,8 +149,8 @@ control router(
 
 control ingress(
     inout headers_t hdr,
-    inout IngressMetadata ingress,
-    inout EgressMetadata egress,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
 ) {
     local() local;
     router() router;

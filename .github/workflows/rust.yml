@@ -11,11 +11,19 @@ jobs:
 
       - name: generate documentation
         run: cargo doc --no-deps
+
+      - name: generate book
+        run: |
+          cargo install mdbook
+          cd book/text
+          mdbook build
         
       - name: prep deployment branch
+        if: github.ref == 'refs/heads/main'
         run: |
           mkdir -p dist
           cp -r target/doc/* dist/
+          cp -r book/text/book dist/
           cd dist
           git init
           git add -A
@@ -25,6 +33,7 @@ jobs:
           
       - name: push deployment branch
         uses: ad-m/github-push-action@v0.6.0
+        if: github.ref == 'refs/heads/main'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages

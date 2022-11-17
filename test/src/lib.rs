@@ -1,19 +1,11 @@
-//#![allow(dead_code)]
-//#![allow(incomplete_features)]
-//#![allow(unused_imports)]
-
-//mod hub;
-//mod router;
-
-// TODO generateion of _main_pipeline_create symbol uniformly for all
-// pipelines means we can only use p4_macro::use_p4 once per crate :/
-
 #[cfg(test)]
 mod basic_router;
 #[cfg(test)]
 mod controller_multiple_instantiation;
 #[cfg(test)]
 mod disag_router;
+#[cfg(test)]
+mod dload;
 #[cfg(test)]
 mod dynamic_router;
 #[cfg(test)]
@@ -22,8 +14,7 @@ mod headers;
 mod hub;
 #[cfg(test)]
 mod mac_rewrite;
-#[cfg(test)]
-mod softnpu;
 
-#[cfg(test)]
-mod dload;
+pub mod data;
+pub mod packet;
+pub mod softnpu;

@@ -7,6 +7,7 @@ use p4::{
     ast::AST, check, error, error::SemanticError, lexer, parser, preprocessor,
 };
 use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 
 #[derive(Parser)]
@@ -65,7 +66,18 @@ pub fn process_file(
     }
 
     for included in &ppr.elements.includes {
-        process_file(Arc::new(included.clone()), ast, opts)?
+        let path = Path::new(included);
+        if !path.is_absolute() {
+            let parent = Path::new(&*filename).parent().unwrap();
+            let joined = parent.join(included);
+            process_file(
+                Arc::new(joined.to_str().unwrap().to_string()),
+                ast,
+                opts,
+            )?
+        } else {
+            process_file(Arc::new(included.clone()), ast, opts)?
+        }
     }
 
     let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
