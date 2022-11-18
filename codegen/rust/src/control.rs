@@ -8,7 +8,7 @@ use crate::{
 };
 use p4::ast::{
     Action, Control, ControlParameter, Direction, ExpressionKind,
-    KeySetElementValue, MatchKind, Statement, Table, Type, AST,
+    KeySetElementValue, MatchKind, Table, Type, AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -448,21 +448,6 @@ impl<'a> ControlGenerator<'a> {
         (table_type, tokens)
     }
 
-    fn generate_control_apply_stmt(
-        &mut self,
-        control: &Control,
-        stmt: &Statement,
-        tokens: &mut TokenStream,
-    ) {
-        let mut names = control.names();
-        let sg = StatementGenerator::new(
-            self.ast,
-            self.hlir,
-            StatementContext::Control(control),
-        );
-        tokens.extend(sg.generate_statement(stmt, &mut names));
-    }
-
     fn generate_control_apply_body(
         &mut self,
         control: &Control,
@@ -483,9 +468,14 @@ impl<'a> ControlGenerator<'a> {
             }
         }
 
-        for stmt in &control.apply.statements {
-            self.generate_control_apply_stmt(control, stmt, &mut tokens);
-        }
+        let mut names = control.names();
+        let sg = StatementGenerator::new(
+            self.ast,
+            self.hlir,
+            StatementContext::Control(control),
+        );
+        tokens.extend(sg.generate_block(&control.apply, &mut names));
+
         tokens
     }
 
