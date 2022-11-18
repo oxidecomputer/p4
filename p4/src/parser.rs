@@ -1554,6 +1554,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 self.parser.backlog.push(token.clone());
                 let lval = self.parser.parse_lvalue()?;
 
+                let this_token = token.clone();
                 let token = self.parser.next_token()?;
 
                 // check for index
@@ -1594,7 +1595,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 // if it's not an index and it's not a call, it's an lvalue
                 else {
                     self.parser.backlog.push(token.clone());
-                    Expression::new(token, ExpressionKind::Lvalue(lval))
+                    Expression::new(this_token, ExpressionKind::Lvalue(lval))
                 }
             }
             lexer::Kind::CurlyOpen => {

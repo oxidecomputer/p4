@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
+    Call, Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
     NameInfo, Parser, State, Statement, StatementBlock, Struct, Table,
     Transition, Type, AST,
 };
@@ -85,6 +85,7 @@ impl ControlChecker {
         Self::check_tables(c, &names, ast, &mut diags);
         Self::check_variables(c, ast, &mut diags);
         Self::check_actions(c, ast, hlir, &mut diags);
+        Self::check_apply(c, ast, hlir, &mut diags);
         diags
     }
 
@@ -179,6 +180,122 @@ impl ControlChecker {
                         t.name, &a.name,
                     ),
                     token: a.token.clone(), //TODO plumb token for lvalue
+                });
+            }
+        }
+    }
+
+    pub fn check_apply(
+        c: &Control,
+        ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
+        for s in &c.apply.statements {
+            match s {
+                Statement::Call(call) => {
+                    Self::check_apply_call(c, call, ast, hlir, diags);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn check_apply_call(
+        c: &Control,
+        call: &Call,
+        ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
+        let name = call.lval.root();
+        let names = c.names();
+        let name_info = match names.get(name) {
+            Some(info) => info,
+            None => {
+                diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!("{} is undefined", name),
+                    token: call.lval.token.clone(),
+                });
+                return;
+            }
+        };
+
+        match &name_info.ty {
+            Type::UserDefined(name) => {
+                if let Some(ctl) = ast.get_control(&name) {
+                    return Self::check_apply_ctl_apply(
+                        c, call, ctl, ast, hlir, diags);
+                }
+            }
+            Type::Table => {
+                if let Some(tbl) = c.get_table(name) {
+                    return Self::check_apply_table_apply(
+                        c, call, tbl, ast, hlir, diags);
+                }
+            }
+            _ => {
+                //TODO
+            }
+        }
+
+    }
+
+    pub fn check_apply_table_apply(
+        _c: &Control,
+        _call: &Call,
+        _tbl: &Table,
+        _ast: &AST,
+        _hlir: &Hlir,
+        _diags: &mut Diagnostics,
+    ) {
+        //TODO
+    }
+
+    pub fn check_apply_ctl_apply(
+        c: &Control,
+        call: &Call,
+        ctl: &Control,
+        ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
+
+        //todo!("check apply ctl");
+
+        if call.args.len() != ctl.parameters.len() {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "{} arguments provided to control {} that only takes {}",
+                    call.args.len(),
+                    ctl.name,
+                    ctl.parameters.len(),
+                ),
+                token: call.lval.token.clone(),
+            });
+            return;
+        }
+
+        for (i, arg) in call.args.iter().enumerate() {
+            let arg_t = match hlir.expression_types.get(&*arg) {
+                Some(typ) => typ,
+                None => panic!("bug: no type for expression {:?}", &*arg),
+            };
+            let param = &ctl.parameters[i];
+            if arg_t != &param.ty {
+                diags.push(Diagnostic{
+                    level: Level::Error,
+                    message: format!(
+                        "wrong argument type for control parameter `{}`\n  \
+                         argument provided:  {}\n  \
+                         parameter expected: {}",
+                        param.name,
+                        arg_t,
+                        param.ty,
+                    ),
+                    token: arg.token.clone(),
                 });
             }
         }
