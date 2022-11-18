@@ -59,6 +59,66 @@ impl AST {
         }
         None
     }
+
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        for c in &self.constants {
+            c.accept(v)
+        }
+        for h in &self.headers {
+            h.accept(v);
+        }
+        for s in &self.structs {
+            s.accept(v);
+        }
+        for t in &self.typedefs {
+            t.accept(v);
+        }
+        for c in &self.controls {
+            c.accept(v);
+        }
+        for p in &self.parsers {
+            p.accept(v);
+        }
+        for p in &self.packages {
+            p.accept(v);
+        }
+        for e in &self.externs {
+            e.accept(v);
+        }
+        if let Some(p) = &self.package_instance {
+            p.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        for c in &mut self.constants {
+            c.accept_mut(v)
+        }
+        for h in &mut self.headers {
+            h.accept_mut(v);
+        }
+        for s in &mut self.structs {
+            s.accept_mut(v);
+        }
+        for t in &mut self.typedefs {
+            t.accept_mut(v);
+        }
+        for c in &mut self.controls {
+            c.accept_mut(v);
+        }
+        for p in &mut self.parsers {
+            p.accept_mut(v);
+        }
+        for p in &mut self.packages {
+            p.accept_mut(v);
+        }
+        for e in &mut self.externs {
+            e.accept_mut(v);
+        }
+        if let Some(p) = &mut self.package_instance {
+            p.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -76,6 +136,13 @@ impl PackageInstance {
             parameters: Vec::new(),
         }
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.package_instance(self);
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.package_instance(self);
+    }
 }
 
 #[derive(Debug)]
@@ -91,6 +158,18 @@ impl Package {
             name,
             type_parameters: Vec::new(),
             parameters: Vec::new(),
+        }
+    }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.package(self);
+        for p in &self.parameters {
+            p.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.package(self);
+        for p in &mut self.parameters {
+            p.accept_mut(v);
         }
     }
 }
@@ -110,6 +189,12 @@ impl PackageParameter {
             name: String::new(),
         }
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.package_parameter(self);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.package_parameter(self);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,6 +211,25 @@ pub enum Type {
     Void,
     List(Vec<Box<Type>>),
     State,
+}
+
+impl Type {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.typ(self);
+        if let Type::List(types) = self {
+            for t in types {
+                t.accept(v);
+            }
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.typ(self);
+        if let Type::List(types) = self {
+            for t in types {
+                t.accept_mut(v);
+            }
+        }
+    }
 }
 
 impl fmt::Display for Type {
@@ -159,11 +263,35 @@ pub struct Typedef {
     pub name: String,
 }
 
+impl Typedef {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.typedef(self);
+        self.ty.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.typedef(self);
+        self.ty.accept_mut(v);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Constant {
     pub ty: Type,
     pub name: String,
     pub initializer: Box<Expression>,
+}
+
+impl Constant {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.constant(self);
+        self.ty.accept(v);
+        self.initializer.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.constant(self);
+        self.ty.accept_mut(v);
+        self.initializer.accept_mut(v);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -175,6 +303,29 @@ pub struct Variable {
     pub token: Token,
 }
 
+impl Variable {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.variable(self);
+        self.ty.accept(v);
+        if let Some(init) = &self.initializer {
+            init.accept(v);
+        }
+        for p in &self.parameters {
+            p.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.variable(self);
+        self.ty.accept_mut(v);
+        if let Some(init) = &mut self.initializer {
+            init.accept_mut(v);
+        }
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Expression {
     pub token: Token,
@@ -184,6 +335,58 @@ pub struct Expression {
 impl Expression {
     pub fn new(token: Token, kind: ExpressionKind) -> Box<Self> {
         Box::new(Self { token, kind })
+    }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.expression(self);
+        match &self.kind {
+            ExpressionKind::Lvalue(lv) => lv.accept(v),
+            ExpressionKind::Binary(lhs, op, rhs) => {
+                lhs.accept(v);
+                op.accept(v);
+                rhs.accept(v);
+            }
+            ExpressionKind::Index(lval, xpr) => {
+                lval.accept(v);
+                xpr.accept(v);
+            }
+            ExpressionKind::Slice(begin, end) => {
+                begin.accept(v);
+                end.accept(v);
+            }
+            ExpressionKind::Call(call) => call.accept(v),
+            ExpressionKind::List(xprs) => {
+                for xp in xprs {
+                    xp.accept(v);
+                }
+            }
+            _ => {} // covered by top level visit
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.expression(self);
+        match &mut self.kind {
+            ExpressionKind::Lvalue(lv) => lv.accept_mut(v),
+            ExpressionKind::Binary(lhs, op, rhs) => {
+                lhs.accept_mut(v);
+                op.accept_mut(v);
+                rhs.accept_mut(v);
+            }
+            ExpressionKind::Index(lval, xpr) => {
+                lval.accept_mut(v);
+                xpr.accept_mut(v);
+            }
+            ExpressionKind::Slice(begin, end) => {
+                begin.accept_mut(v);
+                end.accept_mut(v);
+            }
+            ExpressionKind::Call(call) => call.accept_mut(v),
+            ExpressionKind::List(xprs) => {
+                for xp in xprs {
+                    xp.accept_mut(v);
+                }
+            }
+            _ => {} // covered by top level visit
+        }
     }
 }
 
@@ -235,6 +438,12 @@ impl BinOp {
             BinOp::NotEq => "not equal",
         }
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.binop(self);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.binop(self);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -263,6 +472,18 @@ impl Header {
         }
         names
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.header(self);
+        for m in &self.members {
+            m.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.header(self);
+        for m in &mut self.members {
+            m.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -270,6 +491,17 @@ pub struct HeaderMember {
     pub ty: Type,
     pub name: String,
     pub token: Token,
+}
+
+impl HeaderMember {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.header_member(self);
+        self.ty.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.header_member(self);
+        self.ty.accept_mut(v);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -285,7 +517,6 @@ impl Struct {
             members: Vec::new(),
         }
     }
-
     pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
         for p in &self.members {
@@ -299,6 +530,18 @@ impl Struct {
         }
         names
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.p4struct(self);
+        for m in &self.members {
+            m.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.p4struct(self);
+        for m in &mut self.members {
+            m.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -306,6 +549,17 @@ pub struct StructMember {
     pub ty: Type,
     pub name: String,
     pub token: Token,
+}
+
+impl StructMember {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.struct_member(self);
+        self.ty.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.struct_member(self);
+        self.ty.accept_mut(v);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -431,6 +685,49 @@ impl Control {
         }
         names
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.control(self);
+        for var in &self.variables {
+            var.accept(v);
+        }
+        for c in &self.constants {
+            c.accept(v);
+        }
+        for p in &self.parameters {
+            p.accept(v);
+        }
+        for a in &self.actions {
+            a.accept(v);
+        }
+        for t in &self.tables {
+            t.accept(v);
+        }
+        for s in &self.apply.statements {
+            s.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.control(self);
+        for var in &mut self.variables {
+            var.accept_mut(v);
+        }
+        for c in &mut self.constants {
+            c.accept_mut(v);
+        }
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+        for a in &mut self.actions {
+            a.accept_mut(v);
+        }
+        for t in &mut self.tables {
+            t.accept_mut(v);
+        }
+        for s in &mut self.apply.statements {
+            s.accept_mut(v);
+        }
+    }
 }
 
 impl PartialEq for Control {
@@ -498,6 +795,26 @@ impl Parser {
     pub fn get_start_state(&self) -> Option<&State> {
         self.states.iter().find(|&s| s.name == "start")
     }
+
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.parser(self);
+        for p in &self.parameters {
+            p.accept(v);
+        }
+        for s in &self.states {
+            s.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.parser(self);
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+        for s in &mut self.states {
+            s.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -509,6 +826,18 @@ pub struct ControlParameter {
     pub dir_token: Token,
     pub ty_token: Token,
     pub name_token: Token,
+}
+
+impl ControlParameter {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.control_parameter(self);
+        self.ty.accept(v);
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.control_parameter(self);
+        self.ty.accept_mut(v);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -561,6 +890,24 @@ impl Action {
         }
         names
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.action(self);
+        for p in &self.parameters {
+            p.accept(v);
+        }
+        for s in &self.statement_block.statements {
+            s.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.action(self);
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+        for s in &mut self.statement_block.statements {
+            s.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -571,6 +918,17 @@ pub struct ActionParameter {
 
     pub ty_token: Token,
     pub name_token: Token,
+}
+
+impl ActionParameter {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.action_parameter(self);
+        self.ty.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.action_parameter(self);
+        self.ty.accept_mut(v);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -596,6 +954,32 @@ impl Table {
             token,
         }
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.table(self);
+        for a in &self.actions {
+            a.accept(v);
+        }
+        for (lval, mk) in &self.key {
+            lval.accept(v);
+            mk.accept(v);
+        }
+        for e in &self.const_entries {
+            e.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.table(self);
+        for a in &mut self.actions {
+            a.accept_mut(v);
+        }
+        for (lval, mk) in &mut self.key {
+            lval.accept_mut(v);
+            mk.accept_mut(v);
+        }
+        for e in &mut self.const_entries {
+            e.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -604,10 +988,38 @@ pub struct ConstTableEntry {
     pub action: ActionRef,
 }
 
+impl ConstTableEntry {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.const_table_entry(self);
+        for k in &self.keyset {
+            k.accept(v);
+        }
+        self.action.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.const_table_entry(self);
+        for k in &mut self.keyset {
+            k.accept_mut(v);
+        }
+        self.action.accept_mut(v);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct KeySetElement {
     pub value: KeySetElementValue,
     pub token: Token,
+}
+
+impl KeySetElement {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.key_set_element(self);
+        self.value.accept(v);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.key_set_element(self);
+        self.value.accept_mut(v);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -617,6 +1029,42 @@ pub enum KeySetElementValue {
     DontCare,
     Masked(Box<Expression>, Box<Expression>),
     Ranged(Box<Expression>, Box<Expression>),
+}
+
+impl KeySetElementValue {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.key_set_element_value(self);
+        match self {
+            KeySetElementValue::Expression(xpr) => xpr.accept(v),
+            KeySetElementValue::Default => {}
+            KeySetElementValue::DontCare => {}
+            KeySetElementValue::Masked(val, mask) => {
+                val.accept(v);
+                mask.accept(v);
+            }
+            KeySetElementValue::Ranged(begin, end) => {
+                begin.accept(v);
+                end.accept(v);
+            }
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.key_set_element_value(self);
+        match self {
+            KeySetElementValue::Expression(xpr) => xpr.accept_mut(v),
+            KeySetElementValue::Default => {}
+            KeySetElementValue::DontCare => {}
+            KeySetElementValue::Masked(val, mask) => {
+                val.accept_mut(v);
+                mask.accept_mut(v);
+            }
+            KeySetElementValue::Ranged(begin, end) => {
+                begin.accept_mut(v);
+                end.accept_mut(v);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -635,6 +1083,18 @@ impl ActionRef {
             parameters: Vec::new(),
         }
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.action_ref(self);
+        for p in &self.parameters {
+            p.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.action_ref(self);
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -643,6 +1103,15 @@ pub enum MatchKind {
     Ternary,
     LongestPrefixMatch,
     Range,
+}
+
+impl MatchKind {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.match_kind(self);
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.match_kind(self);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -659,6 +1128,50 @@ pub enum Statement {
     // TODO ...
 }
 
+impl Statement {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.statement(self);
+        match self {
+            Statement::Empty => {}
+            Statement::Assignment(lval, xpr) => {
+                lval.accept(v);
+                xpr.accept(v);
+            }
+            Statement::Call(call) => call.accept(v),
+            Statement::If(if_block) => if_block.accept(v),
+            Statement::Variable(var) => var.accept(v),
+            Statement::Constant(constant) => constant.accept(v),
+            Statement::Transition(transition) => transition.accept(v),
+            Statement::Return(xpr) => {
+                if let Some(rx) = xpr {
+                    rx.accept(v);
+                }
+            }
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.statement(self);
+        match self {
+            Statement::Empty => {}
+            Statement::Assignment(lval, xpr) => {
+                lval.accept_mut(v);
+                xpr.accept_mut(v);
+            }
+            Statement::Call(call) => call.accept_mut(v),
+            Statement::If(if_block) => if_block.accept_mut(v),
+            Statement::Variable(var) => var.accept_mut(v),
+            Statement::Constant(constant) => constant.accept_mut(v),
+            Statement::Transition(transition) => transition.accept_mut(v),
+            Statement::Return(xpr) => {
+                if let Some(rx) = xpr {
+                    rx.accept_mut(v);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IfBlock {
     pub predicate: Box<Expression>,
@@ -667,10 +1180,60 @@ pub struct IfBlock {
     pub else_block: Option<StatementBlock>,
 }
 
+impl IfBlock {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.if_block(self);
+        self.predicate.accept(v);
+        for s in &self.block.statements {
+            s.accept(v);
+        }
+        for ei in &self.else_ifs {
+            ei.accept(v);
+        }
+        if let Some(eb) = &self.else_block {
+            for s in &eb.statements {
+                s.accept(v);
+            }
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.if_block(self);
+        self.predicate.accept_mut(v);
+        for s in &mut self.block.statements {
+            s.accept_mut(v);
+        }
+        for ei in &mut self.else_ifs {
+            ei.accept_mut(v);
+        }
+        if let Some(eb) = &mut self.else_block {
+            for s in &mut eb.statements {
+                s.accept_mut(v);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ElseIfBlock {
     pub predicate: Box<Expression>,
     pub block: StatementBlock,
+}
+
+impl ElseIfBlock {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.else_if_block(self);
+        self.predicate.accept(v);
+        for s in &self.block.statements {
+            s.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.else_if_block(self);
+        self.predicate.accept_mut(v);
+        for s in &mut self.block.statements {
+            s.accept_mut(v);
+        }
+    }
 }
 
 /// A function or method call
@@ -678,6 +1241,24 @@ pub struct ElseIfBlock {
 pub struct Call {
     pub lval: Lvalue,
     pub args: Vec<Box<Expression>>,
+}
+
+impl Call {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.call(self);
+        self.lval.accept(v);
+        for a in &self.args {
+            a.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.call(self);
+        self.lval.accept_mut(v);
+        for a in &mut self.args {
+            a.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -724,6 +1305,12 @@ impl Lvalue {
             },
         }
     }
+    fn accept<V: Visitor>(&self, v: &V) {
+        v.lvalue(self);
+    }
+    fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.lvalue(self);
+    }
 }
 
 impl std::hash::Hash for Lvalue {
@@ -766,6 +1353,18 @@ impl State {
             token,
         }
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.state(self);
+        for s in &self.statements.statements {
+            s.accept(v);
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.state(self);
+        for s in &mut self.statements.statements {
+            s.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -774,16 +1373,71 @@ pub enum Transition {
     Select(Select),
 }
 
+impl Transition {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.transition(self);
+        match self {
+            Transition::Reference(lval) => lval.accept(v),
+            Transition::Select(sel) => sel.accept(v),
+        }
+    }
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.transition(self);
+        match self {
+            Transition::Reference(lval) => lval.accept_mut(v),
+            Transition::Select(sel) => sel.accept_mut(v),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Select {
     pub parameters: Vec<Box<Expression>>,
     pub elements: Vec<SelectElement>,
 }
 
+impl Select {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.select(self);
+        for p in &self.parameters {
+            p.accept(v);
+        }
+        for e in &self.elements {
+            e.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.select(self);
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+        for e in &mut self.elements {
+            e.accept_mut(v);
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SelectElement {
     pub keyset: Vec<KeySetElement>,
     pub name: String,
+}
+
+impl SelectElement {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.select_element(self);
+        for k in &self.keyset {
+            k.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.select_element(self);
+        for k in &mut self.keyset {
+            k.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -811,6 +1465,19 @@ impl Extern {
     pub fn get_method(&self, name: &str) -> Option<&ExternMethod> {
         self.methods.iter().find(|&m| m.name == name)
     }
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.p4extern(self);
+        for m in &self.methods {
+            m.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.p4extern(self);
+        for m in &mut self.methods {
+            m.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -819,6 +1486,24 @@ pub struct ExternMethod {
     pub name: String,
     pub type_parameters: Vec<String>,
     pub parameters: Vec<ControlParameter>,
+}
+
+impl ExternMethod {
+    pub fn accept<V: Visitor>(&self, v: &V) {
+        v.extern_method(self);
+        self.return_type.accept(v);
+        for p in &self.parameters {
+            p.accept(v);
+        }
+    }
+
+    pub fn accept_mut<V: MutVisitor>(&mut self, v: &V) {
+        v.extern_method(self);
+        self.return_type.accept_mut(v);
+        for p in &mut self.parameters {
+            p.accept_mut(v);
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -837,4 +1522,82 @@ pub enum DeclarationInfo {
 pub struct NameInfo {
     pub ty: Type,
     pub decl: DeclarationInfo,
+}
+
+pub trait Visitor {
+    fn constant(&self, _: &Constant) {}
+    fn header(&self, _: &Header) {}
+    fn p4struct(&self, _: &Struct) {}
+    fn typedef(&self, _: &Typedef) {}
+    fn control(&self, _: &Control) {}
+    fn parser(&self, _: &Parser) {}
+    fn package(&self, _: &Package) {}
+    fn package_instance(&self, _: &PackageInstance) {}
+    fn p4extern(&self, _: &Extern) {}
+
+    fn statement(&self, _: &Statement) {}
+    fn action(&self, _: &Action) {}
+    fn control_parameter(&self, _: &ControlParameter) {}
+    fn action_parameter(&self, _: &ActionParameter) {}
+    fn expression(&self, _: &Expression) {}
+    fn header_member(&self, _: &HeaderMember) {}
+    fn struct_member(&self, _: &StructMember) {}
+    fn call(&self, _: &Call) {}
+    fn typ(&self, _: &Type) {}
+    fn binop(&self, _: &BinOp) {}
+    fn lvalue(&self, _: &Lvalue) {}
+    fn variable(&self, _: &Variable) {}
+    fn if_block(&self, _: &IfBlock) {}
+    fn else_if_block(&self, _: &ElseIfBlock) {}
+    fn transition(&self, _: &Transition) {}
+    fn select(&self, _: &Select) {}
+    fn select_element(&self, _: &SelectElement) {}
+    fn key_set_element(&self, _: &KeySetElement) {}
+    fn key_set_element_value(&self, _: &KeySetElementValue) {}
+    fn table(&self, _: &Table) {}
+    fn match_kind(&self, _: &MatchKind) {}
+    fn const_table_entry(&self, _: &ConstTableEntry) {}
+    fn action_ref(&self, _: &ActionRef) {}
+    fn state(&self, _: &State) {}
+    fn package_parameter(&self, _: &PackageParameter) {}
+    fn extern_method(&self, _: &ExternMethod) {}
+}
+
+pub trait MutVisitor {
+    fn constant(&self, _: &mut Constant) {}
+    fn header(&self, _: &mut Header) {}
+    fn p4struct(&self, _: &mut Struct) {}
+    fn typedef(&self, _: &mut Typedef) {}
+    fn control(&self, _: &mut Control) {}
+    fn parser(&self, _: &mut Parser) {}
+    fn package(&self, _: &mut Package) {}
+    fn package_instance(&self, _: &mut PackageInstance) {}
+    fn p4extern(&self, _: &mut Extern) {}
+
+    fn statement(&self, _: &mut Statement) {}
+    fn action(&self, _: &mut Action) {}
+    fn control_parameter(&self, _: &mut ControlParameter) {}
+    fn action_parameter(&self, _: &mut ActionParameter) {}
+    fn expression(&self, _: &mut Expression) {}
+    fn header_member(&self, _: &mut HeaderMember) {}
+    fn struct_member(&self, _: &mut StructMember) {}
+    fn call(&self, _: &mut Call) {}
+    fn typ(&self, _: &mut Type) {}
+    fn binop(&self, _: &mut BinOp) {}
+    fn lvalue(&self, _: &mut Lvalue) {}
+    fn variable(&self, _: &mut Variable) {}
+    fn if_block(&self, _: &mut IfBlock) {}
+    fn else_if_block(&self, _: &mut ElseIfBlock) {}
+    fn transition(&self, _: &mut Transition) {}
+    fn select(&self, _: &mut Select) {}
+    fn select_element(&self, _: &mut SelectElement) {}
+    fn key_set_element(&self, _: &mut KeySetElement) {}
+    fn key_set_element_value(&self, _: &mut KeySetElementValue) {}
+    fn table(&self, _: &mut Table) {}
+    fn match_kind(&self, _: &mut MatchKind) {}
+    fn const_table_entry(&self, _: &mut ConstTableEntry) {}
+    fn action_ref(&self, _: &mut ActionRef) {}
+    fn state(&self, _: &mut State) {}
+    fn package_parameter(&self, _: &mut PackageParameter) {}
+    fn extern_method(&self, _: &mut ExternMethod) {}
 }

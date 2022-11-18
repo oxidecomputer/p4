@@ -17,7 +17,6 @@ fn run() -> Result<()> {
     let filename = Arc::new(opts.filename.clone());
     let mut ast = AST::default();
     x4c::process_file(filename, &mut ast, &opts)?;
-    let (hlir, _) = p4::check::all(&ast);
 
     if opts.check {
         return Ok(());
@@ -25,7 +24,10 @@ fn run() -> Result<()> {
 
     match opts.target {
         x4c::Target::Rust => {
+            // NOTE: it's important to sanitize *before* generating hlir as the
+            // sanitization process can change lvalue names.
             p4_rust::sanitize(&mut ast);
+            let (hlir, _) = p4::check::all(&ast);
             p4_rust::emit(
                 &ast,
                 &hlir,

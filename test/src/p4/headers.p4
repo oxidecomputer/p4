@@ -12,6 +12,12 @@ header ethernet_h {
     bit<16> ether_type;
 }
 
+header vlan_h {
+    bit<3> pcp;
+    bit<1> dei;
+    bit<12> vid;
+}
+
 header ipv6_h {
     bit<4>      version;
     bit<8>      traffic_class;

@@ -10,7 +10,7 @@ use quote::{format_ident, quote};
 use p4::ast::{
     Control, ControlParameter, DeclarationInfo, Direction, Expression,
     ExpressionKind, Lvalue, NameInfo, Parser, Table, Type, UserDefinedType,
-    AST,
+    HeaderMember, MutVisitor, StructMember, ActionParameter, AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -47,24 +47,41 @@ pub struct Settings {
     pub pipeline_name: String,
 }
 
-pub fn sanitize(ast: &mut AST) {
-    for h in &mut ast.headers {
-        for m in &mut h.members {
-            sanitize_string(&mut m.name);
+pub struct Sanitizer {}
+
+impl Sanitizer {
+    pub fn sanitize_string(s: &mut String) {
+        //TODO sanitize other problematic rust tokens
+        if s == "type" {
+            *s = "typ".to_owned();
         }
-    }
-    for s in &mut ast.structs {
-        for m in &mut s.members {
-            sanitize_string(&mut m.name);
+        if s == "match" {
+            *s = "match_".to_owned();
         }
     }
 }
 
-pub fn sanitize_string(s: &mut String) {
-    //TODO sanitize other problematic rust tokens
-    if s == "type" {
-        *s = "typ".to_owned();
+impl MutVisitor for Sanitizer {
+    fn struct_member(&self, m: &mut StructMember) {
+        Self::sanitize_string(&mut m.name);
     }
+    fn header_member(&self, m: &mut HeaderMember) {
+        Self::sanitize_string(&mut m.name);
+    }
+    fn control_parameter(&self, p: &mut ControlParameter) {
+        Self::sanitize_string(&mut p.name);
+    }
+    fn action_parameter(&self, p: &mut ActionParameter) {
+        Self::sanitize_string(&mut p.name);
+    }
+    fn lvalue(&self, lv: &mut Lvalue) {
+        Self::sanitize_string(&mut lv.name);
+    }
+}
+
+pub fn sanitize(ast: &mut AST) {
+    let s = Sanitizer{};
+    ast.accept_mut(&s);
 }
 
 pub fn emit(
