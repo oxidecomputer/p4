@@ -230,6 +230,9 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::State => {
             todo!("rust type for state");
         }
+        Type::Action => {
+            todo!("rust type for action");
+        }
     }
 }
 
@@ -275,6 +278,9 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         Type::List(_) => todo!("type size for list"),
         Type::State => {
             todo!("type size for state");
+        }
+        Type::Action => {
+            todo!("type size for action");
         }
     }
 }
@@ -344,6 +350,7 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
             DeclarationInfo::ControlTable => false,
             DeclarationInfo::ControlMember => false,
             DeclarationInfo::State => false,
+            DeclarationInfo::Action => false,
         }
     } else {
         false

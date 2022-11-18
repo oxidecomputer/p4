@@ -27,12 +27,12 @@ impl fmt::Display for SemanticError {
         let extra = if parts.len() > 1 {
             parts[1..].join("")
         } else {
-            "\n".to_string()
+            "".to_string()
         };
         writeln!(
             f,
             "{}: {}{}\n{} {}\n",
-            "error".red(),
+            "error".bright_red(),
             msg.bright_white().bold(),
             extra,
             loc,

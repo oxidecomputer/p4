@@ -211,6 +211,7 @@ pub enum Type {
     Void,
     List(Vec<Box<Type>>),
     State,
+    Action,
 }
 
 impl Type {
@@ -246,6 +247,7 @@ impl fmt::Display for Type {
             Type::Table => write!(f, "table"),
             Type::Void => write!(f, "void"),
             Type::State => write!(f, "state"),
+            Type::Action => write!(f, "action"),
             Type::List(elems) => {
                 write!(f, "list<")?;
                 for e in elems {
@@ -680,6 +682,15 @@ impl Control {
                 NameInfo {
                     ty: c.ty.clone(),
                     decl: DeclarationInfo::ControlMember,
+                },
+            );
+        }
+        for a in &self.actions {
+            names.insert(
+                a.name.clone(),
+                NameInfo {
+                    ty: Type::Action,
+                    decl: DeclarationInfo::Action,
                 },
             );
         }
@@ -1516,6 +1527,7 @@ pub enum DeclarationInfo {
     ControlTable,
     ControlMember,
     State,
+    Action,
 }
 
 #[derive(Debug, Clone)]

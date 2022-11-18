@@ -9,6 +9,7 @@ use crate::ast::{
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
+use colored::Colorize;
 
 // TODO Check List
 // This is a running list of things to check
@@ -59,6 +60,10 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     let mut hg = HlirGenerator::new(ast);
     hg.run();
     diags.extend(&hg.diags);
+
+    if !diags.errors().is_empty() {
+        return (hg.hlir, diags);
+    }
 
     for p in &ast.parsers {
         diags.extend(&ParserChecker::check(p, ast));
@@ -254,10 +259,10 @@ impl ControlChecker {
     }
 
     pub fn check_apply_ctl_apply(
-        c: &Control,
+        _c: &Control,
         call: &Call,
         ctl: &Control,
-        ast: &AST,
+        _ast: &AST,
         hlir: &Hlir,
         diags: &mut Diagnostics,
     ) {
@@ -265,13 +270,23 @@ impl ControlChecker {
         //todo!("check apply ctl");
 
         if call.args.len() != ctl.parameters.len() {
+
+            let signature: Vec<String> = ctl.parameters
+                .iter()
+                .map(|x| x.ty.to_string().bright_blue().to_string())
+                .collect();
+
+            let signature = format!("{}({})", ctl.name, signature.join(", "));
+
             diags.push(Diagnostic {
                 level: Level::Error,
                 message: format!(
-                    "{} arguments provided to control {} that only takes {}",
-                    call.args.len(),
-                    ctl.name,
-                    ctl.parameters.len(),
+                    "{} arguments provided to control {}, {} required\n    \
+                    expected signature: {}",
+                    call.args.len().to_string().yellow(),
+                    ctl.name.blue(),
+                    ctl.parameters.len().to_string().yellow(),
+                    signature,
                 ),
                 token: call.lval.token.clone(),
             });
@@ -288,12 +303,13 @@ impl ControlChecker {
                 diags.push(Diagnostic{
                     level: Level::Error,
                     message: format!(
-                        "wrong argument type for control parameter `{}`\n  \
-                         argument provided:  {}\n  \
-                         parameter expected: {}",
-                        param.name,
-                        arg_t,
-                        param.ty,
+                        "wrong argument type for {} parameter {}\n    \
+                         argument provided:  {}\n    \
+                         parameter requires: {}",
+                        ctl.name.bright_blue(),
+                        param.name.bright_blue(),
+                        format!("{}", arg_t).bright_blue(),
+                        format!("{}", param.ty).bright_blue(),
                     ),
                     token: arg.token.clone(),
                 });
@@ -387,7 +403,7 @@ impl ParserChecker {
             level: Level::Error,
             message: format!(
                 "start state not found for parser {}",
-                parser.name
+                parser.name.bright_blue(),
             ),
             token: parser.token.clone(),
         });
@@ -444,7 +460,8 @@ impl StructChecker {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!("Typename {} not found", typename),
+                        message: format!(
+                            "Typename {} not found", typename.bright_blue()),
                         token: m.token.clone(),
                     })
                 }
@@ -464,7 +481,8 @@ impl HeaderChecker {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!("Typename {} not found", typename),
+                        message: format!(
+                            "Typename {} not found", typename.bright_blue()),
                         token: m.token.clone(),
                     })
                 }
@@ -486,7 +504,11 @@ fn check_name(
             Diagnostics(vec![Diagnostic {
                 level: Level::Error,
                 message: match parent {
-                    Some(p) => format!("{} does not have member {}", p, name),
+                    Some(p) => format!(
+                        "{} does not have member {}", 
+                        p.bright_blue(), 
+                        name.bright_blue(),
+                    ),
                     None => format!("'{}' is undefined", name),
                 },
                 token: token.clone(),
@@ -661,8 +683,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type bool does not have a member {}",
-                        parts[1]
+                        "type {} does not have a member {}",
+                        "bool".bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -673,8 +696,22 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type state does not have a member {}",
-                        parts[1]
+                        "type {} does not have a member {}",
+                        "state".bright_blue(),
+                        parts[1].bright_blue(),
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::Action => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type {} does not have a member {}",
+                        "action".bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -685,8 +722,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type error does not have a member {}",
-                        parts[1]
+                        "type {} does not have a member {}",
+                        "error".bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -697,8 +735,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type bit<{}> does not have a member {}",
-                        size, parts[1]
+                        "type {} does not have a member {}",
+                        format!("bit<{}>", size).bright_blue(),
+                        parts[1],
                     ),
                     token: lval.token.clone(),
                 });
@@ -709,8 +748,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type varbit<{}> does not have a member {}",
-                        size, parts[1]
+                        "type {} does not have a member {}",
+                        format!("varbit<{}>", size).bright_blue(),
+                        parts[1]
                     ),
                     token: lval.token.clone(),
                 });
@@ -722,7 +762,8 @@ fn check_lvalue(
                     level: Level::Error,
                     message: format!(
                         "type int<{}> does not have a member {}",
-                        size, parts[1]
+                        format!("int<{}>", size).bright_blue(),
+                        parts[1]
                     ),
                     token: lval.token.clone(),
                 });
@@ -733,7 +774,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type string does not have a member {}",
+                        "type {} does not have a member {}",
+                        "string".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -754,7 +796,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type table does not have a member {}",
+                        "type {} does not have a member {}",
+                        "table".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -766,7 +809,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type void does not have a member {}",
+                        "type {} does not have a member {}",
+                        "void".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -778,7 +822,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type list does not have a member {}",
+                        "type {} does not have a member {}",
+                        "list".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -845,7 +890,10 @@ fn check_lvalue(
             } else {
                 diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("type {} is not defined", name),
+                    message: format!(
+                        "type {} is not defined",
+                        name.bright_blue(),
+                    ),
                     token: lval.token.clone(),
                 });
             }

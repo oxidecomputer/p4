@@ -66,6 +66,9 @@ impl<'a> HlirGenerator<'a> {
             for (lval, _match_kind) in &t.key {
                 self.lvalue(lval, &mut local_names);
             }
+            for lval in &t.actions {
+                self.lvalue(lval, &mut local_names);
+            }
         }
         self.statement_block(&c.apply, &mut names);
     }
@@ -246,6 +249,14 @@ impl<'a> HlirGenerator<'a> {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index a state".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
+            Type::Action=> {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "cannot index an action".into(),
                     token: lval.token.clone(),
                 });
                 None

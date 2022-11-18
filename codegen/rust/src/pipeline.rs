@@ -500,6 +500,9 @@ impl<'a> PipelineGenerator<'a> {
                     Type::State => {
                         todo!();
                     }
+                    Type::Action => {
+                        todo!();
+                    }
                     Type::Bit(n) => {
                         parameter_tokens.push(quote! {
                             let #pname = p4rs::extract_bit_action_parameter(
