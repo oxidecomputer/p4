@@ -285,6 +285,15 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
     }
 }
 
+fn type_size_bytes(ty: &Type, ast: &AST) -> usize {
+    let s = type_size(ty, ast);
+    let mut b = s >> 3;
+    if s % 8 != 0 {
+        b += 1
+    }
+    b
+}
+
 // in the case of an expression
 //
 //   a &&& b

@@ -1,8 +1,8 @@
 // Copyright 2022 Oxide Computer Company
 
 use crate::{
-    qualified_table_function_name, qualified_table_name, rust_type, type_size,
-    Context, Settings,
+    qualified_table_function_name, qualified_table_name, rust_type,
+    type_size_bytes, Context, Settings,
 };
 use p4::ast::{
     Control, Direction, MatchKind, PackageInstance, Parser, Table, Type, AST,
@@ -419,7 +419,7 @@ impl<'a> PipelineGenerator<'a> {
                 self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
                     panic!("declaration info for {:#?}", lval,)
                 });
-            let sz = type_size(&name_info.ty, self.ast) >> 3;
+            let sz = type_size_bytes(&name_info.ty, self.ast);
             match match_kind {
                 MatchKind::Exact => keys.push(quote! {
                     p4rs::extract_exact_key(
