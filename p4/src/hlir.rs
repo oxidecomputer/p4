@@ -253,7 +253,7 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
-            Type::Action=> {
+            Type::Action => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index an action".into(),

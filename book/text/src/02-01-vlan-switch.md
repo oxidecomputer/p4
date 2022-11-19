@@ -325,22 +325,14 @@ Let's jump into the control plane code.
 ```rust
 fn init_tables(pipeline: &mut main_pipeline, m1: [u8;6], m2: [u8;6]) {
     // add static forwarding entries
-    pipeline.add_fwd_fib_entry(
-        "forward",
-        &m1,
-        &0u16.to_be_bytes()
-    );
-    pipeline.add_fwd_fib_entry(
-        "forward",
-        &m2,
-        &1u16.to_be_bytes()
-    );
+    pipeline.add_fwd_fib_entry("forward", &m1, &0u16.to_be_bytes());
+    pipeline.add_fwd_fib_entry("forward", &m2, &1u16.to_be_bytes());
 
     // port 0 vlan 47
     pipeline.add_vlan_port_vlan_entry(
         "filter",
-        &0u16.to_be_bytes().to_vec(),
-        &47u16.to_be_bytes().to_vec(),
+        0u16.to_be_bytes().as_ref(),
+        47u16.to_be_bytes().as_ref(),
     );
 
     // sanity check the table
@@ -350,9 +342,10 @@ fn init_tables(pipeline: &mut main_pipeline, m1: [u8;6], m2: [u8;6]) {
     // port 1 vlan 47
     pipeline.add_vlan_port_vlan_entry(
         "filter",
-        &1u16.to_be_bytes().to_vec(),
-        &47u16.to_be_bytes().to_vec(),
+        1u16.to_be_bytes().as_ref(),
+        47u16.to_be_bytes().as_ref(),
     );
+
 }
 ```
 
@@ -415,9 +408,11 @@ and print them out to convince ourselves our code is doing what we intend.
 Now let's take a look at the test portion of our code.
 
 ```rust
-fn run_test(pipeline: main_pipeline, m2: [u8;6]) 
--> Result<(), anyhow::Error>
-{
+fn run_test(
+    pipeline: main_pipeline,
+    m2: [u8; 6],
+    m3: [u8; 6],
+) -> Result<(), anyhow::Error> {
     // create and run the softnpu instance
     let mut npu = SoftNpu::new(2, pipeline, false);
     let phy1 = npu.phy(0);

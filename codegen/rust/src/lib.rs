@@ -8,9 +8,9 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 use p4::ast::{
-    Control, ControlParameter, DeclarationInfo, Direction, Expression,
-    ExpressionKind, Lvalue, NameInfo, Parser, Table, Type, UserDefinedType,
-    HeaderMember, MutVisitor, StructMember, ActionParameter, AST,
+    ActionParameter, Control, ControlParameter, DeclarationInfo, Direction,
+    Expression, ExpressionKind, HeaderMember, Lvalue, MutVisitor, NameInfo,
+    Parser, StructMember, Table, Type, UserDefinedType, AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -80,7 +80,7 @@ impl MutVisitor for Sanitizer {
 }
 
 pub fn sanitize(ast: &mut AST) {
-    let s = Sanitizer{};
+    let s = Sanitizer {};
     ast.accept_mut(&s);
 }
 

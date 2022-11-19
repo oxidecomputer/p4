@@ -397,36 +397,27 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
                 // sc_payload
                 self.rx_p.write_at(fp, [0u8; 16].as_slice(), off);
                 off += 16;
+            } else if let Some(vid) = f.vid {
+                self.rx_p
+                    .write_at(fp, 0x8100u16.to_be_bytes().as_slice(), off);
+                off += 2;
+                self.rx_p.write_at(fp, vid.to_be_bytes().as_slice(), off);
+                off += 2;
+                self.rx_p.write_at(
+                    fp,
+                    f.ethertype.to_be_bytes().as_slice(),
+                    off,
+                );
+                off += 2;
             } else {
-                if let Some(vid) = f.vid {
-                    self.rx_p.write_at(
-                        fp,
-                        0x8100u16.to_be_bytes().as_slice(),
-                        off,
-                    );
-                    off += 2;
-                    self.rx_p.write_at(
-                        fp,
-                        vid.to_be_bytes().as_slice(),
-                        off,
-                    );
-                    off += 2;
-                    self.rx_p.write_at(
-                        fp,
-                        f.ethertype.to_be_bytes().as_slice(),
-                        off,
-                    );
-                    off += 2;
-                }
-                else {
-                    self.rx_p.write_at(
-                        fp,
-                        f.ethertype.to_be_bytes().as_slice(),
-                        off,
-                    );
-                    off += 2;
-                }
+                self.rx_p.write_at(
+                    fp,
+                    f.ethertype.to_be_bytes().as_slice(),
+                    off,
+                );
+                off += 2;
             }
+
             self.rx_p.write_at(fp, f.payload, off);
         }
         self.rx_p.produce(n)?;

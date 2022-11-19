@@ -47,12 +47,18 @@ impl<'a> ExpressionGenerator<'a> {
                                     .hlir
                                     .lvalue_decls
                                     .get(lval)
-                                    .unwrap_or_else(||
-                                        panic!("declaration info for {:#?}", lval));
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "declaration info for {:#?}",
+                                            lval
+                                        )
+                                    });
                                 match name_info.decl {
-                                    DeclarationInfo::ActionParameter(_) => quote! {
-                                        &#lhs_tks
-                                    },
+                                    DeclarationInfo::ActionParameter(_) => {
+                                        quote! {
+                                            &#lhs_tks
+                                        }
+                                    }
                                     _ => lhs_tks,
                                 }
                             }
@@ -64,20 +70,26 @@ impl<'a> ExpressionGenerator<'a> {
                                     .hlir
                                     .lvalue_decls
                                     .get(lval)
-                                    .unwrap_or_else(||
-                                        panic!("declaration info for {:#?}", lval));
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "declaration info for {:#?}",
+                                            lval
+                                        )
+                                    });
                                 match name_info.decl {
-                                    DeclarationInfo::ActionParameter(_) => quote! {
-                                        &#rhs_tks
-                                    },
+                                    DeclarationInfo::ActionParameter(_) => {
+                                        quote! {
+                                            &#rhs_tks
+                                        }
+                                    }
                                     _ => rhs_tks,
                                 }
                             }
                             _ => rhs_tks,
                         };
-                        ts.extend(lhs_tks_.clone());
+                        ts.extend(lhs_tks_);
                         ts.extend(op_tks);
-                        ts.extend(rhs_tks_.clone());
+                        ts.extend(rhs_tks_);
                     }
                     _ => {
                         ts.extend(lhs_tks);

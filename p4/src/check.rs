@@ -197,11 +197,8 @@ impl ControlChecker {
         diags: &mut Diagnostics,
     ) {
         for s in &c.apply.statements {
-            match s {
-                Statement::Call(call) => {
-                    Self::check_apply_call(c, call, ast, hlir, diags);
-                }
-                _ => {}
+            if let Statement::Call(call) = s {
+                Self::check_apply_call(c, call, ast, hlir, diags);
             }
         }
     }
@@ -218,7 +215,7 @@ impl ControlChecker {
         let name_info = match names.get(name) {
             Some(info) => info,
             None => {
-                diags.push(Diagnostic{
+                diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!("{} is undefined", name),
                     token: call.lval.token.clone(),
@@ -229,22 +226,21 @@ impl ControlChecker {
 
         match &name_info.ty {
             Type::UserDefined(name) => {
-                if let Some(ctl) = ast.get_control(&name) {
-                    return Self::check_apply_ctl_apply(
-                        c, call, ctl, ast, hlir, diags);
+                if let Some(ctl) = ast.get_control(name) {
+                    Self::check_apply_ctl_apply(c, call, ctl, ast, hlir, diags)
                 }
             }
             Type::Table => {
                 if let Some(tbl) = c.get_table(name) {
-                    return Self::check_apply_table_apply(
-                        c, call, tbl, ast, hlir, diags);
+                    Self::check_apply_table_apply(
+                        c, call, tbl, ast, hlir, diags,
+                    )
                 }
             }
             _ => {
                 //TODO
             }
         }
-
     }
 
     pub fn check_apply_table_apply(
@@ -266,12 +262,11 @@ impl ControlChecker {
         hlir: &Hlir,
         diags: &mut Diagnostics,
     ) {
-
         //todo!("check apply ctl");
 
         if call.args.len() != ctl.parameters.len() {
-
-            let signature: Vec<String> = ctl.parameters
+            let signature: Vec<String> = ctl
+                .parameters
                 .iter()
                 .map(|x| x.ty.to_string().bright_blue().to_string())
                 .collect();
@@ -294,13 +289,13 @@ impl ControlChecker {
         }
 
         for (i, arg) in call.args.iter().enumerate() {
-            let arg_t = match hlir.expression_types.get(&*arg) {
+            let arg_t = match hlir.expression_types.get(arg) {
                 Some(typ) => typ,
-                None => panic!("bug: no type for expression {:?}", &*arg),
+                None => panic!("bug: no type for expression {:?}", arg),
             };
             let param = &ctl.parameters[i];
             if arg_t != &param.ty {
-                diags.push(Diagnostic{
+                diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "wrong argument type for {} parameter {}\n    \
@@ -461,7 +456,9 @@ impl StructChecker {
                     diags.push(Diagnostic {
                         level: Level::Error,
                         message: format!(
-                            "Typename {} not found", typename.bright_blue()),
+                            "Typename {} not found",
+                            typename.bright_blue()
+                        ),
                         token: m.token.clone(),
                     })
                 }
@@ -482,7 +479,9 @@ impl HeaderChecker {
                     diags.push(Diagnostic {
                         level: Level::Error,
                         message: format!(
-                            "Typename {} not found", typename.bright_blue()),
+                            "Typename {} not found",
+                            typename.bright_blue()
+                        ),
                         token: m.token.clone(),
                     })
                 }
@@ -505,8 +504,8 @@ fn check_name(
                 level: Level::Error,
                 message: match parent {
                     Some(p) => format!(
-                        "{} does not have member {}", 
-                        p.bright_blue(), 
+                        "{} does not have member {}",
+                        p.bright_blue(),
                         name.bright_blue(),
                     ),
                     None => format!("'{}' is undefined", name),

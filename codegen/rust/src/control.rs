@@ -208,13 +208,14 @@ impl<'a> ControlGenerator<'a> {
         }
         //let dump_fmt = vec!["{}"; action.parameters.len()];
         let dump_fmt = dump_fmt.join(", ");
-        let dump_args: Vec<TokenStream> = action.parameters
+        let dump_args: Vec<TokenStream> = action
+            .parameters
             .iter()
             .map(|x| format_ident!("{}", x.name.clone()))
-            .map(|x| quote!{ #x })
+            .map(|x| quote! { #x })
             .collect();
 
-        let dump = quote!{
+        let dump = quote! {
             // TODO find a way to only allocate the string when probe is active.
             // Cannot simply return reference to string created within probe.
             let dump = format!(#dump_fmt, #(#dump_args,)*);

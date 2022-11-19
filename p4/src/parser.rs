@@ -1594,7 +1594,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 }
                 // if it's not an index and it's not a call, it's an lvalue
                 else {
-                    self.parser.backlog.push(token.clone());
+                    self.parser.backlog.push(token);
                     Expression::new(this_token, ExpressionKind::Lvalue(lval))
                 }
             }

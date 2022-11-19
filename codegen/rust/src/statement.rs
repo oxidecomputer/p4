@@ -385,18 +385,14 @@ impl<'a> StatementGenerator<'a> {
                 let et = self.hlir.expression_types.get(a.as_ref()).unwrap();
                 // if the argument is an lvalue and a rust type that gets passed
                 // by reference, take a ref
-                match a.as_ref().kind {
-                    ExpressionKind::Lvalue(_) => {
-                        match et {
-                            Type::Bit(_) | Type::Varbit(_) | Type::Int(_) => {
-                                arg_xpr = quote!{ &#arg_xpr };
-                            }
-                            _ => {}
+                if let ExpressionKind::Lvalue(_) = a.as_ref().kind {
+                    match et {
+                        Type::Bit(_) | Type::Varbit(_) | Type::Int(_) => {
+                            arg_xpr = quote! { &#arg_xpr };
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
-
                 let local_name = format_ident!("arg{}", i);
                 if let ExpressionKind::BitLit(_, _) = a.as_ref().kind {
                     locals.push(quote! {
