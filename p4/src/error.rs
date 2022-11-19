@@ -22,10 +22,19 @@ impl fmt::Display for SemanticError {
         let loc = format!("[{}:{}]", self.at.line + 1, self.at.col + 1)
             .as_str()
             .bright_red();
+        let parts: Vec<&str> = self.message.split_inclusive('\n').collect();
+        let msg = parts[0];
+        let extra = if parts.len() > 1 {
+            parts[1..].join("")
+        } else {
+            "".to_string()
+        };
         writeln!(
             f,
-            "{}\n{} {}\n",
-            self.message.bright_white(),
+            "{}: {}{}\n{} {}\n",
+            "error".bright_red(),
+            msg.bright_white().bold(),
+            extra,
             loc,
             *self.at.file,
         )?;

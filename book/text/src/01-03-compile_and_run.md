@@ -13,7 +13,7 @@ All of the programs in this book are available as buildable programs in the
 [oxidecomputer/p4](https://github.com/oxidecomputer/p4) repository in the
 `book/code` directory.
 
-```rust,noplayground
+```rust
 use tests::softnpu::{RxFrame, SoftNpu, TxFrame};
 use tests::{expect_frames};
 
@@ -39,7 +39,7 @@ fn main() -> Result<(), anyhow::Error> {
 
 The program starts with a few Rust imports.
 
-```rust,noplayground
+```rust
 use tests::softnpu::{RxFrame, SoftNpu, TxFrame};
 use tests::{expect_frames};
 ```
@@ -53,14 +53,14 @@ The next line is using the `x4c` compiler to translate P4 code into Rust code
 and dumping that Rust code into our program. The macro literally expands into
 the Rust code emitted by the compiler for the specified P4 source file.
 
-```rust,noplayground
+```rust
 p4_macro::use_p4!(p4 = "book/code/src/bin/hello-world.p4", pipeline_name = "hello");
 ```
 
 The main artifact this produces is a Rust `struct` called `main_pipeline` which is used
 in the code that comes next.
 
-```rust,noplayground
+```rust
 let pipeline = main_pipeline::new();
 let mut npu = SoftNpu::new(2, pipeline, false);
 let phy1 = npu.phy(0);
@@ -76,14 +76,14 @@ process those packets.
 
 Next we run our program on the SoftNpu ASIC.
 
-```rust,noplayground
+```rust
 npu.run();
 ```
 
 However, this does not actually do anything until we pass some packets through
 it, so lets do that.
 
-```rust,noplayground
+```rust
 phy1.send(&[TxFrame::new(phy2.mac, 0, b"hello")])?;
 ```
 
@@ -95,7 +95,7 @@ used in the outgoing Ethernet frame.
 Based on the logic in our P4 program, we would expect this packet to come out
 the second port. Let's test that.
 
-```rust,noplayground
+```rust
 expect_frames!(phy2, &[RxFrame::new(phy1.mac, 0, b"hello")]);
 ```
 
@@ -110,7 +110,7 @@ To complete the hello world program, we do the same thing in the opposite
 direction. Sending the byte string `"world"` as an Ethernet payload into port 2
 and assert that it comes out port 1.
 
-```rust,noplayground
+```rust
 phy2.send(&[TxFrame::new(phy1.mac, 0, b"world")])?;
 expect_frames!(phy1, &[RxFrame::new(phy2.mac, 0, b"world")]);
 ```
@@ -119,7 +119,7 @@ The `expect_frames` macro will also print payloads and the port they came from.
 
 When we run this program we see the following.
 
-```
+```bash
 $ cargo run --bin hello-world
    Compiling x4c-book v0.1.0 (/home/ry/src/p4/book/code)
     Finished dev [unoptimized + debuginfo] target(s) in 2.05s

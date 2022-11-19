@@ -8,7 +8,7 @@ use crate::{
 };
 use p4::ast::{
     Action, Control, ControlParameter, Direction, ExpressionKind,
-    KeySetElementValue, MatchKind, Statement, Table, Type, AST,
+    KeySetElementValue, MatchKind, Table, Type, AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -202,6 +202,26 @@ impl<'a> ControlGenerator<'a> {
             }
         }
 
+        let mut dump_fmt = Vec::new();
+        for p in &action.parameters {
+            dump_fmt.push(p.name.clone() + "={}");
+        }
+        //let dump_fmt = vec!["{}"; action.parameters.len()];
+        let dump_fmt = dump_fmt.join(", ");
+        let dump_args: Vec<TokenStream> = action
+            .parameters
+            .iter()
+            .map(|x| format_ident!("{}", x.name.clone()))
+            .map(|x| quote! { #x })
+            .collect();
+
+        let dump = quote! {
+            // TODO find a way to only allocate the string when probe is active.
+            // Cannot simply return reference to string created within probe.
+            let dump = format!(#dump_fmt, #(#dump_args,)*);
+            softnpu_provider::action!(|| (&dump));
+        };
+
         for arg in &action.parameters {
             // if the type is user defined, check to ensure it's defined
             if let Type::UserDefined(ref typename) = arg.ty {
@@ -244,6 +264,8 @@ impl<'a> ControlGenerator<'a> {
                     //Generate dtrace prbes that allow us to trace control
                     //action flows.
                     //println!("####{}####", #__name);
+
+                    #dump
 
                     #body
                 }
@@ -448,21 +470,6 @@ impl<'a> ControlGenerator<'a> {
         (table_type, tokens)
     }
 
-    fn generate_control_apply_stmt(
-        &mut self,
-        control: &Control,
-        stmt: &Statement,
-        tokens: &mut TokenStream,
-    ) {
-        let mut names = control.names();
-        let sg = StatementGenerator::new(
-            self.ast,
-            self.hlir,
-            StatementContext::Control(control),
-        );
-        tokens.extend(sg.generate_statement(stmt, &mut names));
-    }
-
     fn generate_control_apply_body(
         &mut self,
         control: &Control,
@@ -483,9 +490,14 @@ impl<'a> ControlGenerator<'a> {
             }
         }
 
-        for stmt in &control.apply.statements {
-            self.generate_control_apply_stmt(control, stmt, &mut tokens);
-        }
+        let mut names = control.names();
+        let sg = StatementGenerator::new(
+            self.ast,
+            self.hlir,
+            StatementContext::Control(control),
+        );
+        tokens.extend(sg.generate_block(&control.apply, &mut names));
+
         tokens
     }
 

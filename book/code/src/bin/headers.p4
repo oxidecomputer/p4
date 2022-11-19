@@ -16,6 +16,7 @@ header vlan_h {
     bit<3> pcp;
     bit<1> dei;
     bit<12> vid;
+    bit<16> ether_type;
 }
 
 header ipv6_h {

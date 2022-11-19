@@ -53,10 +53,10 @@ const h=/\[(?:[^\\\]]|\\.)*\]|\(\??|\\([1-9][0-9]*)|\\./
 i+=a.substring(0,e.index),
 a=a.substring(e.index+e[0].length),"\\"===e[0][0]&&e[1]?i+="\\"+(Number(e[1])+n):(i+=e[0],
 "("===e[0]&&t++)}return i})).map((e=>`(${e})`)).join(n)}
-const E="[a-zA-Z]\\w*",y="[a-zA-Z_]\\w*",w="\\b\\d+(\\.\\d+)?",N="(-?)(\\b0[xX][a-fA-F0-9]+|(\\b\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)",v="\\b(0b[01]+)",k={
-begin:"\\\\[\\s\\S]",relevance:0},O={scope:"string",begin:"'",end:"'",
-illegal:"\\n",contains:[k]},x={scope:"string",begin:'"',end:'"',illegal:"\\n",
-contains:[k]},M=(e,n,t={})=>{const a=i({scope:"comment",begin:e,end:n,
+const E="[a-zA-Z]\\w*",y="[a-zA-Z_]\\w*",w="\\b\\d+(\\.\\d+)?",N="(-?)(\\b0[xX][a-fA-F0-9]+|(\\b\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)",v="\\b(0b[01]+)",O={
+begin:"\\\\[\\s\\S]",relevance:0},k={scope:"string",begin:"'",end:"'",
+illegal:"\\n",contains:[O]},x={scope:"string",begin:'"',end:'"',illegal:"\\n",
+contains:[O]},M=(e,n,t={})=>{const a=i({scope:"comment",begin:e,end:n,
 contains:[]},t);a.contains.push({scope:"doctag",
 begin:"[ ]*(?=(TODO|FIXME|NOTE|BUG|OPTIMIZE|HACK|XXX):)",
 end:/(TODO|FIXME|NOTE|BUG|OPTIMIZE|HACK|XXX):/,excludeBegin:!0,relevance:0})
@@ -69,14 +69,14 @@ RE_STARTERS_RE:"!|!=|!==|%|%=|&|&&|&=|\\*|\\*=|\\+|\\+=|,|-|-=|/=|/|:|;|<<|<<=|<
 SHEBANG:(e={})=>{const n=/^#![ ]*\//
 ;return e.binary&&(e.begin=m(n,/.*\b/,e.binary,/\b.*/)),i({scope:"meta",begin:n,
 end:/$/,relevance:0,"on:begin":(e,n)=>{0!==e.index&&n.ignoreMatch()}},e)},
-BACKSLASH_ESCAPE:k,APOS_STRING_MODE:O,QUOTE_STRING_MODE:x,PHRASAL_WORDS_MODE:{
+BACKSLASH_ESCAPE:O,APOS_STRING_MODE:k,QUOTE_STRING_MODE:x,PHRASAL_WORDS_MODE:{
 begin:/\b(a|an|the|are|I'm|isn't|don't|doesn't|won't|but|just|should|pretty|simply|enough|gonna|going|wtf|so|such|will|you|your|they|like|more)\b/
 },COMMENT:M,C_LINE_COMMENT_MODE:S,C_BLOCK_COMMENT_MODE:A,HASH_COMMENT_MODE:C,
 NUMBER_MODE:{scope:"number",begin:w,relevance:0},C_NUMBER_MODE:{scope:"number",
 begin:N,relevance:0},BINARY_NUMBER_MODE:{scope:"number",begin:v,relevance:0},
 REGEXP_MODE:{begin:/(?=\/[^/\n]*\/)/,contains:[{scope:"regexp",begin:/\//,
-end:/\/[gimuy]*/,illegal:/\n/,contains:[k,{begin:/\[/,end:/\]/,relevance:0,
-contains:[k]}]}]},TITLE_MODE:{scope:"title",begin:E,relevance:0},
+end:/\/[gimuy]*/,illegal:/\n/,contains:[O,{begin:/\[/,end:/\]/,relevance:0,
+contains:[O]}]}]},TITLE_MODE:{scope:"title",begin:E,relevance:0},
 UNDERSCORE_TITLE_MODE:{scope:"title",begin:y,relevance:0},METHOD_GUARD:{
 begin:"\\.\\s*[a-zA-Z_]\\w*",relevance:0},END_SAME_AS_BEGIN:e=>Object.assign(e,{
 "on:begin":(e,n)=>{n.data._beginMatch=e[1]},"on:end":(e,n)=>{
@@ -184,39 +184,39 @@ q("10.7.0","Please use highlight(code, options) instead.\nhttps://github.com/hig
 i=e,a=n),void 0===t&&(t=!0);const r={code:a,language:i};x("before:highlight",r)
 ;const s=r.result?r.result:f(r.language,r.code,t)
 ;return s.code=r.code,x("after:highlight",s),s}function f(e,n,i,r){
-const l=Object.create(null);function c(){if(!O.keywords)return void M.addText(S)
-;let e=0;O.keywordPatternRe.lastIndex=0;let n=O.keywordPatternRe.exec(S),t=""
+const l=Object.create(null);function c(){if(!k.keywords)return void M.addText(S)
+;let e=0;k.keywordPatternRe.lastIndex=0;let n=k.keywordPatternRe.exec(S),t=""
 ;for(;n;){t+=S.substring(e,n.index)
-;const i=w.case_insensitive?n[0].toLowerCase():n[0],r=(a=i,O.keywords[a]);if(r){
+;const i=w.case_insensitive?n[0].toLowerCase():n[0],r=(a=i,k.keywords[a]);if(r){
 const[e,a]=r
 ;if(M.addText(t),t="",l[i]=(l[i]||0)+1,l[i]<=7&&(A+=a),e.startsWith("_"))t+=n[0];else{
 const t=w.classNameAliases[e]||e;M.addKeyword(n[0],t)}}else t+=n[0]
-;e=O.keywordPatternRe.lastIndex,n=O.keywordPatternRe.exec(S)}var a
-;t+=S.substring(e),M.addText(t)}function g(){null!=O.subLanguage?(()=>{
-if(""===S)return;let e=null;if("string"==typeof O.subLanguage){
-if(!a[O.subLanguage])return void M.addText(S)
-;e=f(O.subLanguage,S,!0,x[O.subLanguage]),x[O.subLanguage]=e._top
-}else e=E(S,O.subLanguage.length?O.subLanguage:null)
-;O.relevance>0&&(A+=e.relevance),M.addSublanguage(e._emitter,e.language)
+;e=k.keywordPatternRe.lastIndex,n=k.keywordPatternRe.exec(S)}var a
+;t+=S.substring(e),M.addText(t)}function g(){null!=k.subLanguage?(()=>{
+if(""===S)return;let e=null;if("string"==typeof k.subLanguage){
+if(!a[k.subLanguage])return void M.addText(S)
+;e=f(k.subLanguage,S,!0,x[k.subLanguage]),x[k.subLanguage]=e._top
+}else e=E(S,k.subLanguage.length?k.subLanguage:null)
+;k.relevance>0&&(A+=e.relevance),M.addSublanguage(e._emitter,e.language)
 })():c(),S=""}function u(e,n){let t=1;const a=n.length-1;for(;t<=a;){
 if(!e._emit[t]){t++;continue}const a=w.classNameAliases[e[t]]||e[t],i=n[t]
 ;a?M.addKeyword(i,a):(S=i,c(),S=""),t++}}function b(e,n){
 return e.scope&&"string"==typeof e.scope&&M.openNode(w.classNameAliases[e.scope]||e.scope),
 e.beginScope&&(e.beginScope._wrap?(M.addKeyword(S,w.classNameAliases[e.beginScope._wrap]||e.beginScope._wrap),
-S=""):e.beginScope._multi&&(u(e.beginScope,n),S="")),O=Object.create(e,{parent:{
-value:O}}),O}function m(e,n,a){let i=((e,n)=>{const t=e&&e.exec(n)
+S=""):e.beginScope._multi&&(u(e.beginScope,n),S="")),k=Object.create(e,{parent:{
+value:k}}),k}function m(e,n,a){let i=((e,n)=>{const t=e&&e.exec(n)
 ;return t&&0===t.index})(e.endRe,a);if(i){if(e["on:end"]){const a=new t(e)
 ;e["on:end"](n,a),a.isMatchIgnored&&(i=!1)}if(i){
 for(;e.endsParent&&e.parent;)e=e.parent;return e}}
 if(e.endsWithParent)return m(e.parent,n,a)}function p(e){
-return 0===O.matcher.regexIndex?(S+=e[0],1):(R=!0,0)}function _(e){
-const t=e[0],a=n.substring(e.index),i=m(O,e,a);if(!i)return ee;const r=O
-;O.endScope&&O.endScope._wrap?(g(),
-M.addKeyword(t,O.endScope._wrap)):O.endScope&&O.endScope._multi?(g(),
-u(O.endScope,e)):r.skip?S+=t:(r.returnEnd||r.excludeEnd||(S+=t),
+return 0===k.matcher.regexIndex?(S+=e[0],1):(R=!0,0)}function _(e){
+const t=e[0],a=n.substring(e.index),i=m(k,e,a);if(!i)return ee;const r=k
+;k.endScope&&k.endScope._wrap?(g(),
+M.addKeyword(t,k.endScope._wrap)):k.endScope&&k.endScope._multi?(g(),
+u(k.endScope,e)):r.skip?S+=t:(r.returnEnd||r.excludeEnd||(S+=t),
 g(),r.excludeEnd&&(S=t));do{
-O.scope&&M.closeNode(),O.skip||O.subLanguage||(A+=O.relevance),O=O.parent
-}while(O!==i.parent);return i.starts&&b(i.starts,e),r.returnEnd?0:t.length}
+k.scope&&M.closeNode(),k.skip||k.subLanguage||(A+=k.relevance),k=k.parent
+}while(k!==i.parent);return i.starts&&b(i.starts,e),r.returnEnd?0:t.length}
 let h={};function y(a,r){const o=r&&r[0];if(S+=a,null==o)return g(),0
 ;if("begin"===h.type&&"end"===r.type&&h.index===r.index&&""===o){
 if(S+=n.slice(r.index,r.index+1),!s){const n=Error(`0 width match regex (${e})`)
@@ -227,28 +227,28 @@ const n=e[0],a=e.rule,i=new t(a),r=[a.__beforeBegin,a["on:begin"]]
 ;return a.skip?S+=n:(a.excludeBegin&&(S+=n),
 g(),a.returnBegin||a.excludeBegin||(S=n)),b(a,e),a.returnBegin?0:n.length})(r)
 ;if("illegal"===r.type&&!i){
-const e=Error('Illegal lexeme "'+o+'" for mode "'+(O.scope||"<unnamed>")+'"')
-;throw e.mode=O,e}if("end"===r.type){const e=_(r);if(e!==ee)return e}
+const e=Error('Illegal lexeme "'+o+'" for mode "'+(k.scope||"<unnamed>")+'"')
+;throw e.mode=k,e}if("end"===r.type){const e=_(r);if(e!==ee)return e}
 if("illegal"===r.type&&""===o)return 1
 ;if(T>1e5&&T>3*r.index)throw Error("potential infinite loop, way more iterations than matches")
 ;return S+=o,o.length}const w=v(e)
 ;if(!w)throw K(o.replace("{}",e)),Error('Unknown language: "'+e+'"')
-;const N=Q(w);let k="",O=r||N;const x={},M=new d.__emitter(d);(()=>{const e=[]
-;for(let n=O;n!==w;n=n.parent)n.scope&&e.unshift(n.scope)
+;const N=Q(w);let O="",k=r||N;const x={},M=new d.__emitter(d);(()=>{const e=[]
+;for(let n=k;n!==w;n=n.parent)n.scope&&e.unshift(n.scope)
 ;e.forEach((e=>M.openNode(e)))})();let S="",A=0,C=0,T=0,R=!1;try{
-for(O.matcher.considerAll();;){
-T++,R?R=!1:O.matcher.considerAll(),O.matcher.lastIndex=C
-;const e=O.matcher.exec(n);if(!e)break;const t=y(n.substring(C,e.index),e)
+for(k.matcher.considerAll();;){
+T++,R?R=!1:k.matcher.considerAll(),k.matcher.lastIndex=C
+;const e=k.matcher.exec(n);if(!e)break;const t=y(n.substring(C,e.index),e)
 ;C=e.index+t}
-return y(n.substring(C)),M.closeAllNodes(),M.finalize(),k=M.toHTML(),{
-language:e,value:k,relevance:A,illegal:!1,_emitter:M,_top:O}}catch(t){
+return y(n.substring(C)),M.closeAllNodes(),M.finalize(),O=M.toHTML(),{
+language:e,value:O,relevance:A,illegal:!1,_emitter:M,_top:k}}catch(t){
 if(t.message&&t.message.includes("Illegal"))return{language:e,value:J(n),
 illegal:!0,relevance:0,_illegalBy:{message:t.message,index:C,
-context:n.slice(C-100,C+100),mode:t.mode,resultSoFar:k},_emitter:M};if(s)return{
-language:e,value:J(n),illegal:!1,relevance:0,errorRaised:t,_emitter:M,_top:O}
+context:n.slice(C-100,C+100),mode:t.mode,resultSoFar:O},_emitter:M};if(s)return{
+language:e,value:J(n),illegal:!1,relevance:0,errorRaised:t,_emitter:M,_top:k}
 ;throw t}}function E(e,n){n=n||d.languages||Object.keys(a);const t=(e=>{
 const n={value:J(e),illegal:!1,relevance:0,_top:l,_emitter:new d.__emitter(d)}
-;return n._emitter.addText(e),n})(e),i=n.filter(v).filter(O).map((n=>f(n,e,!1)))
+;return n._emitter.addText(e),n})(e),i=n.filter(v).filter(k).map((n=>f(n,e,!1)))
 ;i.unshift(t);const r=i.sort(((e,n)=>{
 if(e.relevance!==n.relevance)return n.relevance-e.relevance
 ;if(e.language&&n.language){if(v(e.language).supersetOf===n.language)return 1
@@ -273,8 +273,8 @@ language:r.secondBest.language,relevance:r.secondBest.relevance
 }),x("after:highlightElement",{el:e,result:r,text:a})}let w=!1;function N(){
 "loading"!==document.readyState?document.querySelectorAll(d.cssSelector).forEach(y):w=!0
 }function v(e){return e=(e||"").toLowerCase(),a[e]||a[i[e]]}
-function k(e,{languageName:n}){"string"==typeof e&&(e=[e]),e.forEach((e=>{
-i[e.toLowerCase()]=n}))}function O(e){const n=v(e)
+function O(e,{languageName:n}){"string"==typeof e&&(e=[e]),e.forEach((e=>{
+i[e.toLowerCase()]=n}))}function k(e){const n=v(e)
 ;return n&&!n.disableAutodetect}function x(e,n){const t=e;r.forEach((e=>{
 e[t]&&e[t](n)}))}
 "undefined"!=typeof window&&window.addEventListener&&window.addEventListener("DOMContentLoaded",(()=>{
@@ -289,11 +289,11 @@ N(),q("10.6.0","initHighlightingOnLoad() deprecated.  Use highlightAll() now.")
 },registerLanguage:(e,t)=>{let i=null;try{i=t(n)}catch(n){
 if(K("Language definition for '{}' could not be registered.".replace("{}",e)),
 !s)throw n;K(n),i=l}
-i.name||(i.name=e),a[e]=i,i.rawDefinition=t.bind(null,n),i.aliases&&k(i.aliases,{
+i.name||(i.name=e),a[e]=i,i.rawDefinition=t.bind(null,n),i.aliases&&O(i.aliases,{
 languageName:e})},unregisterLanguage:e=>{delete a[e]
 ;for(const n of Object.keys(i))i[n]===e&&delete i[n]},
-listLanguages:()=>Object.keys(a),getLanguage:v,registerAliases:k,
-autoDetection:O,inherit:Y,addPlugin:e=>{(e=>{
+listLanguages:()=>Object.keys(a),getLanguage:v,registerAliases:O,
+autoDetection:k,inherit:Y,addPlugin:e=>{(e=>{
 e["before:highlightBlock"]&&!e["before:highlightElement"]&&(e["before:highlightElement"]=n=>{
 e["before:highlightBlock"](Object.assign({block:n.el},n))
 }),e["after:highlightBlock"]&&!e["after:highlightElement"]&&(e["after:highlightElement"]=n=>{
@@ -368,8 +368,8 @@ begin:n.concat(/\./,n.lookahead(n.concat(t,/(?![0-9A-Za-z$_(])/))),end:t,
 excludeBegin:!0,keywords:"prototype",className:"property",relevance:0},v={
 match:[/get|set/,/\s+/,t,/(?=\()/],className:{1:"keyword",3:"title.function"},
 contains:[{begin:/\(\)/},_]
-},k="(\\([^()]*(\\([^()]*(\\([^()]*\\)[^()]*)*\\)[^()]*)*\\)|"+e.UNDERSCORE_IDENT_RE+")\\s*=>",O={
-match:[/const|var|let/,/\s+/,t,/\s*/,/=\s*/,/(async\s*)?/,n.lookahead(k)],
+},O="(\\([^()]*(\\([^()]*(\\([^()]*\\)[^()]*)*\\)[^()]*)*\\)|"+e.UNDERSCORE_IDENT_RE+")\\s*=>",k={
+match:[/const|var|let/,/\s+/,t,/\s*/,/=\s*/,/(async\s*)?/,n.lookahead(O)],
 keywords:"async",className:{1:"keyword",3:"title.function"},contains:[_]}
 ;return{name:"Javascript",aliases:["js","jsx","mjs","cjs"],keywords:i,exports:{
 PARAMS_CONTAINS:p,CLASS_REFERENCE:f},illegal:/#(?![$_A-z])/,
@@ -377,10 +377,10 @@ contains:[e.SHEBANG({label:"shebang",binary:"node",relevance:5}),{
 label:"use_strict",className:"meta",relevance:10,
 begin:/^\s*['"]use (strict|asm)['"]/
 },e.APOS_STRING_MODE,e.QUOTE_STRING_MODE,c,d,g,u,{match:/\$\d+/},o,f,{
-className:"attr",begin:t+n.lookahead(":"),relevance:0},O,{
+className:"attr",begin:t+n.lookahead(":"),relevance:0},k,{
 begin:"("+e.RE_STARTERS_RE+"|\\b(case|return|throw)\\b)\\s*",
 keywords:"return throw case",relevance:0,contains:[u,e.REGEXP_MODE,{
-className:"function",begin:k,returnBegin:!0,end:"\\s*=>",contains:[{
+className:"function",begin:O,returnBegin:!0,end:"\\s*=>",contains:[{
 className:"params",variants:[{begin:e.UNDERSCORE_IDENT_RE,relevance:0},{
 className:null,begin:/\(\s*\)/,skip:!0},{begin:/\(/,end:/\)/,excludeBegin:!0,
 excludeEnd:!0,keywords:i,contains:p}]}]},{begin:/,/,relevance:0},{match:/\s+/,
@@ -395,7 +395,7 @@ className:"title.function"})]},{match:/\.\.\./,relevance:0},N,{match:"\\$"+t,
 relevance:0},{match:[/\bconstructor(?=\s*\()/],className:{1:"title.function"},
 contains:[_]},y,{relevance:0,match:/\b[A-Z][A-Z_0-9]+\b/,
 className:"variable.constant"},h,v,{match:/\$[(.]/}]}}
-const Ne=e=>m(/\b/,e,/\w$/.test(e)?/\b/:/\B/),ve=["Protocol","Type"].map(Ne),ke=["init","self"].map(Ne),Oe=["Any","Self"],xe=["actor","any","associatedtype","async","await",/as\?/,/as!/,"as","break","case","catch","class","continue","convenience","default","defer","deinit","didSet","distributed","do","dynamic","else","enum","extension","fallthrough",/fileprivate\(set\)/,"fileprivate","final","for","func","get","guard","if","import","indirect","infix",/init\?/,/init!/,"inout",/internal\(set\)/,"internal","in","is","isolated","nonisolated","lazy","let","mutating","nonmutating",/open\(set\)/,"open","operator","optional","override","postfix","precedencegroup","prefix",/private\(set\)/,"private","protocol",/public\(set\)/,"public","repeat","required","rethrows","return","set","some","static","struct","subscript","super","switch","throws","throw",/try\?/,/try!/,"try","typealias",/unowned\(safe\)/,/unowned\(unsafe\)/,"unowned","var","weak","where","while","willSet"],Me=["false","nil","true"],Se=["assignment","associativity","higherThan","left","lowerThan","none","right"],Ae=["#colorLiteral","#column","#dsohandle","#else","#elseif","#endif","#error","#file","#fileID","#fileLiteral","#filePath","#function","#if","#imageLiteral","#keyPath","#line","#selector","#sourceLocation","#warn_unqualified_access","#warning"],Ce=["abs","all","any","assert","assertionFailure","debugPrint","dump","fatalError","getVaList","isKnownUniquelyReferenced","max","min","numericCast","pointwiseMax","pointwiseMin","precondition","preconditionFailure","print","readLine","repeatElement","sequence","stride","swap","swift_unboxFromSwiftValueWithType","transcode","type","unsafeBitCast","unsafeDowncast","withExtendedLifetime","withUnsafeMutablePointer","withUnsafePointer","withVaList","withoutActuallyEscaping","zip"],Te=p(/[/=\-+!*%<>&|^~?]/,/[\u00A1-\u00A7]/,/[\u00A9\u00AB]/,/[\u00AC\u00AE]/,/[\u00B0\u00B1]/,/[\u00B6\u00BB\u00BF\u00D7\u00F7]/,/[\u2016-\u2017]/,/[\u2020-\u2027]/,/[\u2030-\u203E]/,/[\u2041-\u2053]/,/[\u2055-\u205E]/,/[\u2190-\u23FF]/,/[\u2500-\u2775]/,/[\u2794-\u2BFF]/,/[\u2E00-\u2E7F]/,/[\u3001-\u3003]/,/[\u3008-\u3020]/,/[\u3030]/),Re=p(Te,/[\u0300-\u036F]/,/[\u1DC0-\u1DFF]/,/[\u20D0-\u20FF]/,/[\uFE00-\uFE0F]/,/[\uFE20-\uFE2F]/),De=m(Te,Re,"*"),Ie=p(/[a-zA-Z_]/,/[\u00A8\u00AA\u00AD\u00AF\u00B2-\u00B5\u00B7-\u00BA]/,/[\u00BC-\u00BE\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]/,/[\u0100-\u02FF\u0370-\u167F\u1681-\u180D\u180F-\u1DBF]/,/[\u1E00-\u1FFF]/,/[\u200B-\u200D\u202A-\u202E\u203F-\u2040\u2054\u2060-\u206F]/,/[\u2070-\u20CF\u2100-\u218F\u2460-\u24FF\u2776-\u2793]/,/[\u2C00-\u2DFF\u2E80-\u2FFF]/,/[\u3004-\u3007\u3021-\u302F\u3031-\u303F\u3040-\uD7FF]/,/[\uF900-\uFD3D\uFD40-\uFDCF\uFDF0-\uFE1F\uFE30-\uFE44]/,/[\uFE47-\uFEFE\uFF00-\uFFFD]/),Le=p(Ie,/\d/,/[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/),Be=m(Ie,Le,"*"),$e=m(/[A-Z]/,Le,"*"),ze=["autoclosure",m(/convention\(/,p("swift","block","c"),/\)/),"discardableResult","dynamicCallable","dynamicMemberLookup","escaping","frozen","GKInspectable","IBAction","IBDesignable","IBInspectable","IBOutlet","IBSegueAction","inlinable","main","nonobjc","NSApplicationMain","NSCopying","NSManaged",m(/objc\(/,Be,/\)/),"objc","objcMembers","propertyWrapper","requires_stored_property_inits","resultBuilder","testable","UIApplicationMain","unknown","usableFromInline"],Fe=["iOS","iOSApplicationExtension","macOS","macOSApplicationExtension","macCatalyst","macCatalystApplicationExtension","watchOS","watchOSApplicationExtension","tvOS","tvOSApplicationExtension","swift"]
+const Ne=e=>m(/\b/,e,/\w$/.test(e)?/\b/:/\B/),ve=["Protocol","Type"].map(Ne),Oe=["init","self"].map(Ne),ke=["Any","Self"],xe=["actor","any","associatedtype","async","await",/as\?/,/as!/,"as","break","case","catch","class","continue","convenience","default","defer","deinit","didSet","distributed","do","dynamic","else","enum","extension","fallthrough",/fileprivate\(set\)/,"fileprivate","final","for","func","get","guard","if","import","indirect","infix",/init\?/,/init!/,"inout",/internal\(set\)/,"internal","in","is","isolated","nonisolated","lazy","let","mutating","nonmutating",/open\(set\)/,"open","operator","optional","override","postfix","precedencegroup","prefix",/private\(set\)/,"private","protocol",/public\(set\)/,"public","repeat","required","rethrows","return","set","some","static","struct","subscript","super","switch","throws","throw",/try\?/,/try!/,"try","typealias",/unowned\(safe\)/,/unowned\(unsafe\)/,"unowned","var","weak","where","while","willSet"],Me=["false","nil","true"],Se=["assignment","associativity","higherThan","left","lowerThan","none","right"],Ae=["#colorLiteral","#column","#dsohandle","#else","#elseif","#endif","#error","#file","#fileID","#fileLiteral","#filePath","#function","#if","#imageLiteral","#keyPath","#line","#selector","#sourceLocation","#warn_unqualified_access","#warning"],Ce=["abs","all","any","assert","assertionFailure","debugPrint","dump","fatalError","getVaList","isKnownUniquelyReferenced","max","min","numericCast","pointwiseMax","pointwiseMin","precondition","preconditionFailure","print","readLine","repeatElement","sequence","stride","swap","swift_unboxFromSwiftValueWithType","transcode","type","unsafeBitCast","unsafeDowncast","withExtendedLifetime","withUnsafeMutablePointer","withUnsafePointer","withVaList","withoutActuallyEscaping","zip"],Te=p(/[/=\-+!*%<>&|^~?]/,/[\u00A1-\u00A7]/,/[\u00A9\u00AB]/,/[\u00AC\u00AE]/,/[\u00B0\u00B1]/,/[\u00B6\u00BB\u00BF\u00D7\u00F7]/,/[\u2016-\u2017]/,/[\u2020-\u2027]/,/[\u2030-\u203E]/,/[\u2041-\u2053]/,/[\u2055-\u205E]/,/[\u2190-\u23FF]/,/[\u2500-\u2775]/,/[\u2794-\u2BFF]/,/[\u2E00-\u2E7F]/,/[\u3001-\u3003]/,/[\u3008-\u3020]/,/[\u3030]/),Re=p(Te,/[\u0300-\u036F]/,/[\u1DC0-\u1DFF]/,/[\u20D0-\u20FF]/,/[\uFE00-\uFE0F]/,/[\uFE20-\uFE2F]/),De=m(Te,Re,"*"),Ie=p(/[a-zA-Z_]/,/[\u00A8\u00AA\u00AD\u00AF\u00B2-\u00B5\u00B7-\u00BA]/,/[\u00BC-\u00BE\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]/,/[\u0100-\u02FF\u0370-\u167F\u1681-\u180D\u180F-\u1DBF]/,/[\u1E00-\u1FFF]/,/[\u200B-\u200D\u202A-\u202E\u203F-\u2040\u2054\u2060-\u206F]/,/[\u2070-\u20CF\u2100-\u218F\u2460-\u24FF\u2776-\u2793]/,/[\u2C00-\u2DFF\u2E80-\u2FFF]/,/[\u3004-\u3007\u3021-\u302F\u3031-\u303F\u3040-\uD7FF]/,/[\uF900-\uFD3D\uFD40-\uFDCF\uFDF0-\uFE1F\uFE30-\uFE44]/,/[\uFE47-\uFEFE\uFF00-\uFFFD]/),Le=p(Ie,/\d/,/[\u0300-\u036F\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/),Be=m(Ie,Le,"*"),$e=m(/[A-Z]/,Le,"*"),ze=["autoclosure",m(/convention\(/,p("swift","block","c"),/\)/),"discardableResult","dynamicCallable","dynamicMemberLookup","escaping","frozen","GKInspectable","IBAction","IBDesignable","IBInspectable","IBOutlet","IBSegueAction","inlinable","main","nonobjc","NSApplicationMain","NSCopying","NSManaged",m(/objc\(/,Be,/\)/),"objc","objcMembers","propertyWrapper","requires_stored_property_inits","resultBuilder","testable","UIApplicationMain","unknown","usableFromInline"],Fe=["iOS","iOSApplicationExtension","macOS","macOSApplicationExtension","macCatalyst","macCatalystApplicationExtension","watchOS","watchOSApplicationExtension","tvOS","tvOSApplicationExtension","swift"]
 ;var Ue=Object.freeze({__proto__:null,grmr_bash:e=>{const n=e.regex,t={},a={
 begin:/\$\{/,end:/\}/,contains:["self",{begin:/:-/,contains:[t]}]}
 ;Object.assign(t,{className:"variable",variants:[{
@@ -797,20 +797,20 @@ className:"string"}),{className:"string",begin:/<.*?>/,end:/$/,illegal:"\\n"
 },e.C_LINE_COMMENT_MODE,e.C_BLOCK_COMMENT_MODE]},{className:"class",
 begin:"("+t.keyword.join("|")+")\\b",end:/(\{|$)/,excludeEnd:!0,keywords:t,
 contains:[e.UNDERSCORE_TITLE_MODE]},{begin:"\\."+e.UNDERSCORE_IDENT_RE,
-relevance:0}]}},grmr_p4:e=>{e.regex,e.COMMENT("//","$",{contains:[{begin:/\\\n/
-}]});const n={
+relevance:0}]}},grmr_p4:e=>{e.regex;const n=e.COMMENT("//","$",{contains:[{
+begin:/\\\n/}]}),t={
 keyword:["parser","control","state","in","out","inout","transition","struct","header","default_action","action","key","actions","entries","const","table","apply","exact","lpm","ternary","range","if","else"],
 type:["bit","packet_in"],literal:"true false"};return{name:"P4",aliases:[],
-keywords:n,disableAutodetect:!0,illegal:"</",contains:[].concat([{
+keywords:t,disableAutodetect:!0,illegal:"</",contains:[].concat([{
 className:"type",variants:[{match:/[a-z\d_]*_[th]\s/}]},{className:"function",
 variants:[{match:/state [a-z\d_]*/}],keywords:{literal:"state"}},{
 className:"function",variants:[{match:/\saction [a-z\d_]*/}],keywords:{
 literal:"action default_action"}},{className:"number",variants:[{
-begin:"\\b(0b[01']+)"},{begin:/([1-9][0-9]*w\d+)/},{
+begin:"\\b(0b[01']+)"},{begin:/([1-9][0-9]*w(0x)?\d+)/},{
 begin:"(-?)\\b([\\d']+(\\.[\\d']*)?|\\.[\\d']+)((ll|LL|l|L)(u|U)?|(u|U)(ll|LL|l|L)?|f|F|b|B)"
 },{
 begin:"(-?)(\\b0[xX][a-fA-F0-9']+|(\\b[\\d']+(\\.[\\d']*)?|\\.[\\d']+)([eE][-+]?[\\d']+)?)"
-}],relevance:0}]),exports:{keywords:n}}},grmr_perl:e=>{
+}],relevance:0},n,e.C_BLOCK_COMMENT_MODE]),exports:{keywords:t}}},grmr_perl:e=>{
 const n=e.regex,t=/[dualxmsipngr]{0,12}/,a={$pattern:/[\w.]+/,
 keyword:"abs accept alarm and atan2 bind binmode bless break caller chdir chmod chomp chop chown chr chroot close closedir connect continue cos crypt dbmclose dbmopen defined delete die do dump each else elsif endgrent endhostent endnetent endprotoent endpwent endservent eof eval exec exists exit exp fcntl fileno flock for foreach fork format formline getc getgrent getgrgid getgrnam gethostbyaddr gethostbyname gethostent getlogin getnetbyaddr getnetbyname getnetent getpeername getpgrp getpriority getprotobyname getprotobynumber getprotoent getpwent getpwnam getpwuid getservbyname getservbyport getservent getsockname getsockopt given glob gmtime goto grep gt hex if index int ioctl join keys kill last lc lcfirst length link listen local localtime log lstat lt ma map mkdir msgctl msgget msgrcv msgsnd my ne next no not oct open opendir or ord our pack package pipe pop pos print printf prototype push q|0 qq quotemeta qw qx rand read readdir readline readlink readpipe recv redo ref rename require reset return reverse rewinddir rindex rmdir say scalar seek seekdir select semctl semget semop send setgrent sethostent setnetent setpgrp setpriority setprotoent setpwent setservent setsockopt shift shmctl shmget shmread shmwrite shutdown sin sleep socket socketpair sort splice split sprintf sqrt srand stat state study sub substr symlink syscall sysopen sysread sysseek system syswrite tell telldir tie tied time times tr truncate uc ucfirst umask undef unless unlink unpack unshift untie until use utime values vec wait waitpid wantarray warn when while write x|0 xor y|0"
 },i={className:"subst",begin:"[$@]\\{",end:"\\}",keywords:a},r={begin:/->\{/,
@@ -1085,11 +1085,11 @@ begin:/'/,end:/'/,contains:[{begin:/''/}]}]},{begin:/"/,end:/"/,contains:[{
 begin:/""/}]},e.C_NUMBER_MODE,e.C_BLOCK_COMMENT_MODE,t,{className:"operator",
 begin:/[-+*/=%^~]|&&?|\|\|?|!=?|<(?:=>?|<|>)?|>[>=]?/,relevance:0}]}},
 grmr_swift:e=>{const n={match:/\s+/,relevance:0},t=e.COMMENT("/\\*","\\*/",{
-contains:["self"]}),a=[e.C_LINE_COMMENT_MODE,t],i={match:[/\./,p(...ve,...ke)],
+contains:["self"]}),a=[e.C_LINE_COMMENT_MODE,t],i={match:[/\./,p(...ve,...Oe)],
 className:{2:"keyword"}},r={match:m(/\./,p(...xe)),relevance:0
 },s=xe.filter((e=>"string"==typeof e)).concat(["_|0"]),o={variants:[{
 className:"keyword",
-match:p(...xe.filter((e=>"string"!=typeof e)).concat(Oe).map(Ne),...ke)}]},l={
+match:p(...xe.filter((e=>"string"!=typeof e)).concat(ke).map(Ne),...Oe)}]},l={
 $pattern:p(/\b\w+/,/#\w+/),keyword:s.concat(Ae),literal:Me},c=[i,r,o],d=[{
 match:m(/\./,p(...Ce)),relevance:0},{className:"built_in",
 match:m(/\b/,p(...Ce),/(?=\()/)}],u={match:/->/,relevance:0},b=[u,{
@@ -1104,8 +1104,8 @@ match:m(/\\/,e,/[\t ]*(?:[\r\n]|\r\n)/)}),y=(e="")=>({className:"subst",
 label:"interpol",begin:m(/\\/,e,/\(/),end:/\)/}),w=(e="")=>({begin:m(e,/"""/),
 end:m(/"""/,e),contains:[f(e),E(e),y(e)]}),N=(e="")=>({begin:m(e,/"/),
 end:m(/"/,e),contains:[f(e),y(e)]}),v={className:"string",
-variants:[w(),w("#"),w("##"),w("###"),N(),N("#"),N("##"),N("###")]},k={
-match:m(/`/,Be,/`/)},O=[k,{className:"variable",match:/\$\d+/},{
+variants:[w(),w("#"),w("##"),w("###"),N(),N("#"),N("##"),N("###")]},O={
+match:m(/`/,Be,/`/)},k=[O,{className:"variable",match:/\$\d+/},{
 className:"variable",match:`\\$${Le}+`}],x=[{match:/(@|#(un)?)available/,
 className:"keyword",starts:{contains:[{begin:/\(/,end:/\)/,keywords:Fe,
 contains:[...b,h,v]}]}},{className:"keyword",match:m(/@/,p(...ze))},{
@@ -1117,25 +1117,25 @@ match:/\.\.\./,relevance:0},{match:m(/\s+&\s+/,g($e)),relevance:0}]},S={
 begin:/</,end:/>/,keywords:l,contains:[...a,...c,...x,u,M]};M.contains.push(S)
 ;const A={begin:/\(/,end:/\)/,relevance:0,keywords:l,contains:["self",{
 match:m(Be,/\s*:/),keywords:"_|0",relevance:0
-},...a,...c,...d,...b,h,v,...O,...x,M]},C={begin:/</,end:/>/,contains:[...a,M]
+},...a,...c,...d,...b,h,v,...k,...x,M]},C={begin:/</,end:/>/,contains:[...a,M]
 },T={begin:/\(/,end:/\)/,keywords:l,contains:[{
 begin:p(g(m(Be,/\s*:/)),g(m(Be,/\s+/,Be,/\s*:/))),end:/:/,relevance:0,
 contains:[{className:"keyword",match:/\b_\b/},{className:"params",match:Be}]
 },...a,...c,...b,h,v,...x,M,A],endsParent:!0,illegal:/["']/},R={
-match:[/func/,/\s+/,p(k.match,Be,De)],className:{1:"keyword",3:"title.function"
+match:[/func/,/\s+/,p(O.match,Be,De)],className:{1:"keyword",3:"title.function"
 },contains:[C,T,n],illegal:[/\[/,/%/]},D={
 match:[/\b(?:subscript|init[?!]?)/,/\s*(?=[<(])/],className:{1:"keyword"},
 contains:[C,T,n],illegal:/\[|%/},I={match:[/operator/,/\s+/,De],className:{
 1:"keyword",3:"title"}},L={begin:[/precedencegroup/,/\s+/,$e],className:{
 1:"keyword",3:"title"},contains:[M],keywords:[...Se,...Me],end:/}/}
 ;for(const e of v.variants){const n=e.contains.find((e=>"interpol"===e.label))
-;n.keywords=l;const t=[...c,...d,...b,h,v,...O];n.contains=[...t,{begin:/\(/,
+;n.keywords=l;const t=[...c,...d,...b,h,v,...k];n.contains=[...t,{begin:/\(/,
 end:/\)/,contains:["self",...t]}]}return{name:"Swift",keywords:l,
 contains:[...a,R,D,{beginKeywords:"struct protocol class extension enum actor",
 end:"\\{",excludeEnd:!0,keywords:l,contains:[e.inherit(e.TITLE_MODE,{
 className:"title.class",begin:/[A-Za-z$_][\u00C0-\u02B80-9A-Za-z$_]*/}),...c]
 },I,L,{beginKeywords:"import",end:/$/,contains:[...a],relevance:0
-},...c,...d,...b,h,v,...O,...x,M,A]}},grmr_typescript:e=>{
+},...c,...d,...b,h,v,...k,...x,M,A]}},grmr_typescript:e=>{
 const n=we(e),t=["any","void","number","boolean","string","object","never","symbol","bigint","unknown"],a={
 beginKeywords:"namespace",end:/\{/,excludeEnd:!0,
 contains:[n.exports.CLASS_REFERENCE]},i={beginKeywords:"interface",end:/\{/,

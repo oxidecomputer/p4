@@ -241,12 +241,14 @@ pub struct TxFrame<'a> {
     pub ethertype: u16,
     pub payload: &'a [u8],
     pub sc_egress: u16,
+    pub vid: Option<u16>,
 }
 
 pub struct RxFrame<'a> {
     pub src: [u8; 6],
     pub ethertype: u16,
     pub payload: &'a [u8],
+    pub vid: Option<u16>,
 }
 
 impl<'a> RxFrame<'a> {
@@ -255,6 +257,20 @@ impl<'a> RxFrame<'a> {
             src,
             ethertype,
             payload,
+            vid: None,
+        }
+    }
+    pub fn newv(
+        src: [u8; 6],
+        ethertype: u16,
+        payload: &'a [u8],
+        vid: u16,
+    ) -> Self {
+        Self {
+            src,
+            ethertype,
+            payload,
+            vid: Some(vid),
         }
     }
 }
@@ -266,6 +282,22 @@ impl<'a> TxFrame<'a> {
             ethertype,
             payload,
             sc_egress: 0,
+            vid: None,
+        }
+    }
+
+    pub fn newv(
+        dst: [u8; 6],
+        ethertype: u16,
+        payload: &'a [u8],
+        vid: u16,
+    ) -> Self {
+        Self {
+            dst,
+            ethertype,
+            payload,
+            sc_egress: 0,
+            vid: Some(vid),
         }
     }
 }
@@ -365,6 +397,18 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
                 // sc_payload
                 self.rx_p.write_at(fp, [0u8; 16].as_slice(), off);
                 off += 16;
+            } else if let Some(vid) = f.vid {
+                self.rx_p
+                    .write_at(fp, 0x8100u16.to_be_bytes().as_slice(), off);
+                off += 2;
+                self.rx_p.write_at(fp, vid.to_be_bytes().as_slice(), off);
+                off += 2;
+                self.rx_p.write_at(
+                    fp,
+                    f.ethertype.to_be_bytes().as_slice(),
+                    off,
+                );
+                off += 2;
             } else {
                 self.rx_p.write_at(
                     fp,
@@ -373,6 +417,7 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
                 );
                 off += 2;
             }
+
             self.rx_p.write_at(fp, f.payload, off);
         }
         self.rx_p.produce(n)?;
@@ -385,11 +430,17 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
         loop {
             for fp in self.tx_c.consumable() {
                 let b = self.tx_c.read(fp);
+                let et = u16::from_be_bytes([b[12], b[13]]);
+                let payload = if et == 0x8100 {
+                    b[18..].to_vec()
+                } else {
+                    b[14..].to_vec()
+                };
                 let frame = OwnedFrame::new(
                     b[0..6].try_into().unwrap(),
                     b[6..12].try_into().unwrap(),
-                    u16::from_be_bytes([b[12], b[13]]),
-                    b[14..].to_vec(),
+                    et,
+                    payload,
                 );
                 buf.push(frame);
             }

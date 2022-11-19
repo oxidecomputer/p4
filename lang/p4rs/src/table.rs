@@ -200,7 +200,13 @@ pub fn sort_entries_by_priority<const D: usize, A: Clone>(
 
 pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
     match key {
-        Key::Exact(x) => selector == &x.value,
+        Key::Exact(x) => {
+            let hit = selector == &x.value;
+            if !hit {
+                //println!("{:x} != {:x}", selector, x.value);
+            }
+            hit
+        }
         Key::Range(begin, end) => {
             selector >= &begin.value && selector <= &end.value
         }

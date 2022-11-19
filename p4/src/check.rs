@@ -3,12 +3,13 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
+    Call, Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
     NameInfo, Parser, State, Statement, StatementBlock, Struct, Table,
     Transition, Type, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
+use colored::Colorize;
 
 // TODO Check List
 // This is a running list of things to check
@@ -60,6 +61,10 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     hg.run();
     diags.extend(&hg.diags);
 
+    if !diags.errors().is_empty() {
+        return (hg.hlir, diags);
+    }
+
     for p in &ast.parsers {
         diags.extend(&ParserChecker::check(p, ast));
     }
@@ -85,6 +90,7 @@ impl ControlChecker {
         Self::check_tables(c, &names, ast, &mut diags);
         Self::check_variables(c, ast, &mut diags);
         Self::check_actions(c, ast, hlir, &mut diags);
+        Self::check_apply(c, ast, hlir, &mut diags);
         diags
     }
 
@@ -183,6 +189,128 @@ impl ControlChecker {
             }
         }
     }
+
+    pub fn check_apply(
+        c: &Control,
+        ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
+        for s in &c.apply.statements {
+            if let Statement::Call(call) = s {
+                Self::check_apply_call(c, call, ast, hlir, diags);
+            }
+        }
+    }
+
+    pub fn check_apply_call(
+        c: &Control,
+        call: &Call,
+        ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
+        let name = call.lval.root();
+        let names = c.names();
+        let name_info = match names.get(name) {
+            Some(info) => info,
+            None => {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!("{} is undefined", name),
+                    token: call.lval.token.clone(),
+                });
+                return;
+            }
+        };
+
+        match &name_info.ty {
+            Type::UserDefined(name) => {
+                if let Some(ctl) = ast.get_control(name) {
+                    Self::check_apply_ctl_apply(c, call, ctl, ast, hlir, diags)
+                }
+            }
+            Type::Table => {
+                if let Some(tbl) = c.get_table(name) {
+                    Self::check_apply_table_apply(
+                        c, call, tbl, ast, hlir, diags,
+                    )
+                }
+            }
+            _ => {
+                //TODO
+            }
+        }
+    }
+
+    pub fn check_apply_table_apply(
+        _c: &Control,
+        _call: &Call,
+        _tbl: &Table,
+        _ast: &AST,
+        _hlir: &Hlir,
+        _diags: &mut Diagnostics,
+    ) {
+        //TODO
+    }
+
+    pub fn check_apply_ctl_apply(
+        _c: &Control,
+        call: &Call,
+        ctl: &Control,
+        _ast: &AST,
+        hlir: &Hlir,
+        diags: &mut Diagnostics,
+    ) {
+        //todo!("check apply ctl");
+
+        if call.args.len() != ctl.parameters.len() {
+            let signature: Vec<String> = ctl
+                .parameters
+                .iter()
+                .map(|x| x.ty.to_string().bright_blue().to_string())
+                .collect();
+
+            let signature = format!("{}({})", ctl.name, signature.join(", "));
+
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "{} arguments provided to control {}, {} required\n    \
+                    expected signature: {}",
+                    call.args.len().to_string().yellow(),
+                    ctl.name.blue(),
+                    ctl.parameters.len().to_string().yellow(),
+                    signature,
+                ),
+                token: call.lval.token.clone(),
+            });
+            return;
+        }
+
+        for (i, arg) in call.args.iter().enumerate() {
+            let arg_t = match hlir.expression_types.get(arg) {
+                Some(typ) => typ,
+                None => panic!("bug: no type for expression {:?}", arg),
+            };
+            let param = &ctl.parameters[i];
+            if arg_t != &param.ty {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "wrong argument type for {} parameter {}\n    \
+                         argument provided:  {}\n    \
+                         parameter requires: {}",
+                        ctl.name.bright_blue(),
+                        param.name.bright_blue(),
+                        format!("{}", arg_t).bright_blue(),
+                        format!("{}", param.ty).bright_blue(),
+                    ),
+                    token: arg.token.clone(),
+                });
+            }
+        }
+    }
 }
 
 fn check_statement_block(
@@ -270,7 +398,7 @@ impl ParserChecker {
             level: Level::Error,
             message: format!(
                 "start state not found for parser {}",
-                parser.name
+                parser.name.bright_blue(),
             ),
             token: parser.token.clone(),
         });
@@ -327,7 +455,10 @@ impl StructChecker {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!("Typename {} not found", typename),
+                        message: format!(
+                            "Typename {} not found",
+                            typename.bright_blue()
+                        ),
                         token: m.token.clone(),
                     })
                 }
@@ -347,7 +478,10 @@ impl HeaderChecker {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
-                        message: format!("Typename {} not found", typename),
+                        message: format!(
+                            "Typename {} not found",
+                            typename.bright_blue()
+                        ),
                         token: m.token.clone(),
                     })
                 }
@@ -369,7 +503,11 @@ fn check_name(
             Diagnostics(vec![Diagnostic {
                 level: Level::Error,
                 message: match parent {
-                    Some(p) => format!("{} does not have member {}", p, name),
+                    Some(p) => format!(
+                        "{} does not have member {}",
+                        p.bright_blue(),
+                        name.bright_blue(),
+                    ),
                     None => format!("'{}' is undefined", name),
                 },
                 token: token.clone(),
@@ -544,8 +682,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type bool does not have a member {}",
-                        parts[1]
+                        "type {} does not have a member {}",
+                        "bool".bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -556,8 +695,22 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type state does not have a member {}",
-                        parts[1]
+                        "type {} does not have a member {}",
+                        "state".bright_blue(),
+                        parts[1].bright_blue(),
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::Action => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type {} does not have a member {}",
+                        "action".bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -568,8 +721,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type error does not have a member {}",
-                        parts[1]
+                        "type {} does not have a member {}",
+                        "error".bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -580,8 +734,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type bit<{}> does not have a member {}",
-                        size, parts[1]
+                        "type {} does not have a member {}",
+                        format!("bit<{}>", size).bright_blue(),
+                        parts[1],
                     ),
                     token: lval.token.clone(),
                 });
@@ -592,8 +747,9 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type varbit<{}> does not have a member {}",
-                        size, parts[1]
+                        "type {} does not have a member {}",
+                        format!("varbit<{}>", size).bright_blue(),
+                        parts[1]
                     ),
                     token: lval.token.clone(),
                 });
@@ -605,7 +761,8 @@ fn check_lvalue(
                     level: Level::Error,
                     message: format!(
                         "type int<{}> does not have a member {}",
-                        size, parts[1]
+                        format!("int<{}>", size).bright_blue(),
+                        parts[1]
                     ),
                     token: lval.token.clone(),
                 });
@@ -616,7 +773,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type string does not have a member {}",
+                        "type {} does not have a member {}",
+                        "string".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -637,7 +795,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type table does not have a member {}",
+                        "type {} does not have a member {}",
+                        "table".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -649,7 +808,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type void does not have a member {}",
+                        "type {} does not have a member {}",
+                        "void".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -661,7 +821,8 @@ fn check_lvalue(
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "type list does not have a member {}",
+                        "type {} does not have a member {}",
+                        "list".bright_blue(),
                         parts[1]
                     ),
                     token: lval.token.clone(),
@@ -728,7 +889,10 @@ fn check_lvalue(
             } else {
                 diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("type {} is not defined", name),
+                    message: format!(
+                        "type {} is not defined",
+                        name.bright_blue(),
+                    ),
                     token: lval.token.clone(),
                 });
             }
