@@ -7,3 +7,6 @@ title = "The x4c Book"
 
 [output.html]
 additional-css = ["./theme/highlight.css"]
+
+[output.html.playground]
+runnable = false
