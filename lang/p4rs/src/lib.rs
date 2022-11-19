@@ -348,9 +348,12 @@ pub fn extract_bit_action_parameter(
     offset: usize,
     size: usize,
 ) -> BitVec<u8, Msb0> {
-    let size = size >> 3;
+    let mut byte_size = size >> 3;
+    if size % 8 != 0 {
+        byte_size += 1;
+    }
     let b: BitVec<u8, Msb0> =
-        BitVec::from_slice(&parameter_data[offset..offset + size]);
+        BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
 
     // NOTE this barfing and then unbarfing a vec is to handle the p4
     // confused-endian data model.
