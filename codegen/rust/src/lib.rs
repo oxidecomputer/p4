@@ -190,6 +190,7 @@ fn dtrace_probes() -> TokenStream {
             fn control_accepted(_: &str) {}
             fn control_table_hit(_: &str) {}
             fn control_table_miss(_: &str) {}
+            fn action(_: &str) {}
         }
     }
 }
@@ -360,6 +361,7 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
             DeclarationInfo::ControlMember => false,
             DeclarationInfo::State => false,
             DeclarationInfo::Action => false,
+            DeclarationInfo::ActionParameter(_) => false,
         }
     } else {
         false

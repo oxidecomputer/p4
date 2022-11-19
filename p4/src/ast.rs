@@ -895,7 +895,7 @@ impl Action {
                 p.name.clone(),
                 NameInfo {
                     ty: p.ty.clone(),
-                    decl: DeclarationInfo::Parameter(p.direction),
+                    decl: DeclarationInfo::ActionParameter(p.direction),
                 },
             );
         }
@@ -1528,6 +1528,7 @@ pub enum DeclarationInfo {
     ControlMember,
     State,
     Action,
+    ActionParameter(Direction),
 }
 
 #[derive(Debug, Clone)]

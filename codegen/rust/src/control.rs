@@ -202,6 +202,25 @@ impl<'a> ControlGenerator<'a> {
             }
         }
 
+        let mut dump_fmt = Vec::new();
+        for p in &action.parameters {
+            dump_fmt.push(p.name.clone() + "={}");
+        }
+        //let dump_fmt = vec!["{}"; action.parameters.len()];
+        let dump_fmt = dump_fmt.join(", ");
+        let dump_args: Vec<TokenStream> = action.parameters
+            .iter()
+            .map(|x| format_ident!("{}", x.name.clone()))
+            .map(|x| quote!{ #x })
+            .collect();
+
+        let dump = quote!{
+            // TODO find a way to only allocate the string when probe is active.
+            // Cannot simply return reference to string created within probe.
+            let dump = format!(#dump_fmt, #(#dump_args,)*);
+            softnpu_provider::action!(|| (&dump));
+        };
+
         for arg in &action.parameters {
             // if the type is user defined, check to ensure it's defined
             if let Type::UserDefined(ref typename) = arg.ty {
@@ -244,6 +263,8 @@ impl<'a> ControlGenerator<'a> {
                     //Generate dtrace prbes that allow us to trace control
                     //action flows.
                     //println!("####{}####", #__name);
+
+                    #dump
 
                     #body
                 }

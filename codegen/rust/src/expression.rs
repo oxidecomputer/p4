@@ -40,6 +40,45 @@ impl<'a> ExpressionGenerator<'a> {
                             p4rs::bitmath::add(#lhs_tks.clone(), #rhs_tks.clone())
                         });
                     }
+                    BinOp::Eq => {
+                        let lhs_tks_ = match &lhs.as_ref().kind {
+                            ExpressionKind::Lvalue(lval) => {
+                                let name_info = self
+                                    .hlir
+                                    .lvalue_decls
+                                    .get(lval)
+                                    .unwrap_or_else(||
+                                        panic!("declaration info for {:#?}", lval));
+                                match name_info.decl {
+                                    DeclarationInfo::ActionParameter(_) => quote! {
+                                        &#lhs_tks
+                                    },
+                                    _ => lhs_tks,
+                                }
+                            }
+                            _ => lhs_tks,
+                        };
+                        let rhs_tks_ = match &rhs.as_ref().kind {
+                            ExpressionKind::Lvalue(lval) => {
+                                let name_info = self
+                                    .hlir
+                                    .lvalue_decls
+                                    .get(lval)
+                                    .unwrap_or_else(||
+                                        panic!("declaration info for {:#?}", lval));
+                                match name_info.decl {
+                                    DeclarationInfo::ActionParameter(_) => quote! {
+                                        &#rhs_tks
+                                    },
+                                    _ => rhs_tks,
+                                }
+                            }
+                            _ => rhs_tks,
+                        };
+                        ts.extend(lhs_tks_.clone());
+                        ts.extend(op_tks);
+                        ts.extend(rhs_tks_.clone());
+                    }
                     _ => {
                         ts.extend(lhs_tks);
                         ts.extend(op_tks);
@@ -150,6 +189,11 @@ impl<'a> ExpressionGenerator<'a> {
             DeclarationInfo::HeaderMember => quote! {
                 #lvalue
             },
+            /*
+            DeclarationInfo::ActionParameter(_) => quote! {
+                &#lvalue
+            },
+            */
             _ => lvalue,
         }
     }
