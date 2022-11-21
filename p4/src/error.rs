@@ -19,29 +19,7 @@ pub struct SemanticError {
 
 impl fmt::Display for SemanticError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let loc = format!("[{}:{}]", self.at.line + 1, self.at.col + 1)
-            .as_str()
-            .bright_red();
-        let parts: Vec<&str> = self.message.split_inclusive('\n').collect();
-        let msg = parts[0];
-        let extra = if parts.len() > 1 {
-            parts[1..].join("")
-        } else {
-            "".to_string()
-        };
-        writeln!(
-            f,
-            "{}: {}{}\n{} {}\n",
-            "error".bright_red(),
-            msg.bright_white().bold(),
-            extra,
-            loc,
-            *self.at.file,
-        )?;
-        writeln!(f, "  {}", self.source)?;
-
-        let carat_line = carat_line(&self.source, &self.at);
-        write!(f, "  {}", carat_line.bright_red())
+        fmt_common(&self.at, &self.message, &self.source, f)
     }
 }
 
@@ -61,20 +39,7 @@ pub struct ParserError {
 
 impl fmt::Display for ParserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let loc = format!("[{}:{}]", self.at.line + 1, self.at.col + 1)
-            .as_str()
-            .bright_red();
-        writeln!(
-            f,
-            "{}\n{} {}\n",
-            self.message.bright_white(),
-            loc,
-            *self.at.file,
-        )?;
-        writeln!(f, "  {}", self.source)?;
-
-        let carat_line = carat_line(&self.source, &self.at);
-        write!(f, "  {}", carat_line.bright_red())
+        fmt_common(&self.at, &self.message, &self.source, f)
     }
 }
 
@@ -100,26 +65,13 @@ pub struct TokenError {
 
 impl fmt::Display for TokenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let loc = format!("[{}:{}]", self.line + 1, self.col + 1)
-            .as_str()
-            .bright_red();
-        writeln!(
-            f,
-            "{}\n{} {}\n",
-            "unrecognized token".bright_white(),
-            loc,
-            *self.file,
-        )?;
-        writeln!(f, "  {}", self.source)?;
-
         let at = Token {
             kind: Kind::Eof,
             line: self.line,
             col: self.col,
             file: Arc::new(self.source.clone()),
         };
-        let carat_line = carat_line(&self.source, &at);
-        write!(f, "  {}", carat_line.bright_red())
+        fmt_common(&at, "unrecognized token", &self.source, f)
     }
 }
 
@@ -221,4 +173,35 @@ fn carat_line(line: &str, at: &Token) -> String {
         }
     }
     carat_line
+}
+
+fn fmt_common(
+    at: &Token,
+    message: &str,
+    source: &str,
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    let loc = format!("[{}:{}]", at.line + 1, at.col + 1)
+        .as_str()
+        .bright_red();
+    let parts: Vec<&str> = message.split_inclusive('\n').collect();
+    let msg = parts[0];
+    let extra = if parts.len() > 1 {
+        parts[1..].join("")
+    } else {
+        "".to_string()
+    };
+    writeln!(
+        f,
+        "{}: {}{}\n{} {}\n",
+        "error".bright_red(),
+        msg.bright_white().bold(),
+        extra,
+        loc,
+        *at.file,
+    )?;
+    writeln!(f, "  {}", source)?;
+
+    let carat_line = carat_line(source, at);
+    write!(f, "  {}", carat_line.bright_red())
 }
