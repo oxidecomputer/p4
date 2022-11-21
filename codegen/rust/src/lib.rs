@@ -221,6 +221,9 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::ExternFunction => {
             todo!("rust type for extern function");
         }
+        Type::HeaderMethod => {
+            todo!("rust type for header method");
+        }
         Type::Table => {
             todo!("rust type for table");
         }
@@ -271,6 +274,9 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         }
         Type::ExternFunction => {
             todo!("type size for extern function");
+        }
+        Type::HeaderMethod => {
+            todo!("type size for header method");
         }
         Type::Table => {
             todo!("type size for table");

@@ -357,6 +357,14 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
+            Type::HeaderMethod => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "cannot index a header method".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
             Type::Table => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,

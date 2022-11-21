@@ -791,6 +791,15 @@ fn check_lvalue(
                 });
             }
         }
+        Type::HeaderMethod => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "header methods do not have members".into(),
+                    token: lval.token.clone(),
+                });
+            }
+        }
         Type::Table => {
             if parts.len() > 1 && parts.last() != Some(&"apply") {
                 diags.push(Diagnostic {

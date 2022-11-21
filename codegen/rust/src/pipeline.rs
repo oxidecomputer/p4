@@ -529,6 +529,9 @@ impl<'a> PipelineGenerator<'a> {
                     Type::ExternFunction => {
                         todo!();
                     }
+                    Type::HeaderMethod => {
+                        todo!();
+                    }
                     Type::Table => {
                         todo!();
                     }

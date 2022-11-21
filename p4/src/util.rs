@@ -20,6 +20,7 @@ pub fn resolve_lvalue(
         Type::Int(_) => root.clone(),
         Type::String => root.clone(),
         Type::ExternFunction => root.clone(),
+        Type::HeaderMethod => root.clone(),
         Type::Table => root.clone(),
         Type::Void => root.clone(),
         Type::List(_) => root.clone(),
