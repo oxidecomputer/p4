@@ -106,7 +106,7 @@ impl<'a> StructGenerator<'a> {
         };
         if !valid_member_size.is_empty() {
             structure.extend(quote! {
-                impl p4rs::Headers for #name {
+                impl #name {
                     fn valid_header_size(&self) -> usize {
                         let mut x: usize = 0;
                         #(#valid_member_size)*
@@ -128,7 +128,7 @@ impl<'a> StructGenerator<'a> {
             })
         } else {
             structure.extend(quote! {
-                impl p4rs::Headers for #name {
+                impl #name {
                     fn valid_header_size(&self) -> usize { 0 }
 
                     fn to_bitvec(&self) -> BitVec<u8, Msb0> {

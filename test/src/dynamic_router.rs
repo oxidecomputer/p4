@@ -34,7 +34,7 @@ p4_macro::use_p4!(
 
 #[test]
 fn dynamic_router2() -> Result<(), anyhow::Error> {
-    let mut pipeline = main_pipeline::new();
+    let mut pipeline = main_pipeline::new(4);
 
     //
     // add table entries

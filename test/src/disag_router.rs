@@ -29,7 +29,7 @@ p4_macro::use_p4!(p4 = "test/src/p4/router.p4", pipeline_name = "disag",);
 
 #[test]
 fn disag_router() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(4, main_pipeline::new(), true);
+    let mut npu = SoftNpu::new(4, main_pipeline::new(4), true);
     let cpu = npu.phy(0);
     let phy1 = npu.phy(1);
     let phy2 = npu.phy(2);

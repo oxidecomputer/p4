@@ -1,7 +1,7 @@
 struct ingress_metadata_t {
     bit<16> port;
-    bool nat;
-    bit<16> nat_id;
+    bool nat; // XXX this should be a program specific thing
+    bit<16> nat_id; // XXX this should be a program specific thing
     bool drop;
 }
 

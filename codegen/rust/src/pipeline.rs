@@ -111,9 +111,8 @@ impl<'a> PipelineGenerator<'a> {
         let (egress_member, egress_initializer) =
             self.control_entrypoint("egress", egress);
 
-        let pipeline_impl_parse = self.pipeline_impl_parse(parser);
-        let pipeline_impl_ingress = self.pipeline_impl_ingress(parser, ingress);
-        let pipeline_impl_egress = self.pipeline_impl_egress(parser, egress);
+        let pipeline_impl_process_packet =
+            self.pipeline_impl_process_packet(parser, ingress, egress);
 
         let add_table_entry_method =
             self.add_table_entry_method(ingress, egress);
@@ -125,8 +124,6 @@ impl<'a> PipelineGenerator<'a> {
 
         let table_modifiers = self.table_modifiers(ingress, egress);
 
-        let parsed_type = rust_type(&parser.parameters[1].ty);
-
         let c_create_fn =
             format_ident!("_{}_pipeline_create", self.settings.pipeline_name);
 
@@ -135,50 +132,26 @@ impl<'a> PipelineGenerator<'a> {
                 #(#table_members),*,
                 #parse_member,
                 #ingress_member,
-                #egress_member
-            }
-
-            impl p4rs::IngressMetadata for ingress_metadata_t {
-                fn port(&self) -> u16 {
-                    self.port.load_le()
-                }
-                fn dropped(&self) -> bool {
-                    self.drop
-                }
-            }
-
-            impl p4rs::EgressMetadata for egress_metadata_t {
-                fn port(&self) -> u16 {
-                    self.port.load_le()
-                }
-                fn broadcast(&self) -> bool {
-                    self.broadcast
-                }
-                fn dropped(&self) -> bool {
-                    self.drop
-                }
+                #egress_member,
+                radix: u16,
             }
 
             impl #pipeline_name {
-                pub fn new() -> Self {
+                pub fn new(radix: u16) -> Self {
                     usdt::register_probes().unwrap();
                     Self {
                         #(#table_initializers),*,
                         #parser_initializer,
                         #ingress_initializer,
                         #egress_initializer,
+                        radix,
                     }
                 }
                 #table_modifiers
             }
 
             impl p4rs::Pipeline for #pipeline_name {
-                type Header = #parsed_type;
-                type I = ingress_metadata_t;
-                type E = egress_metadata_t;
-                #pipeline_impl_parse
-                #pipeline_impl_ingress
-                #pipeline_impl_egress
+                #pipeline_impl_process_packet
                 #add_table_entry_method
                 #remove_table_entry_method
                 #get_table_entries_method
@@ -188,18 +161,10 @@ impl<'a> PipelineGenerator<'a> {
             unsafe impl Send for #pipeline_name { }
 
             #[no_mangle]
-            pub extern "C" fn #c_create_fn()
-            -> *mut dyn p4rs::Pipeline<
-                Header = #parsed_type,
-                I = ingress_metadata_t,
-                E = egress_metadata_t,
-            >{
-                let pipeline = main_pipeline::new();
-                let boxpipe: Box<dyn p4rs::Pipeline<
-                    Header = #parsed_type,
-                    I = ingress_metadata_t,
-                    E = egress_metadata_t,
-                >> = Box::new(pipeline);
+            pub extern "C" fn #c_create_fn(radix: u16)
+            -> *mut dyn p4rs::Pipeline{
+                let pipeline = main_pipeline::new(radix);
+                let boxpipe: Box<dyn p4rs::Pipeline> = Box::new(pipeline);
                 Box::into_raw(boxpipe)
             }
         };
@@ -207,16 +172,50 @@ impl<'a> PipelineGenerator<'a> {
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);
     }
 
-    fn pipeline_impl_parse(&mut self, parser: &Parser) -> TokenStream {
+    fn pipeline_impl_process_packet(
+        &mut self,
+        parser: &Parser,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
         let parsed_type = rust_type(&parser.parameters[1].ty);
+        // determine table arguments
+        let ingress_tables = ingress.tables(self.ast);
+        //TODO(dry)
+        let mut ingress_tbl_args = Vec::new();
+        for (cs, t) in ingress_tables {
+            let qtfn = qualified_table_function_name(&cs, t);
+            let name = format_ident!("{}", qtfn);
+            ingress_tbl_args.push(quote! {
+                &self.#name
+            });
+        }
+        let egress_tables = egress.tables(self.ast);
+        let mut egress_tbl_args = Vec::new();
+        for (cs, t) in egress_tables {
+            let qtfn = qualified_table_function_name(&cs, t);
+            let name = format_ident!("{}", qtfn);
+            egress_tbl_args.push(quote! {
+                &self.#name
+            });
+        }
 
         quote! {
-            fn parse<'a>(
+            fn process_packet<'a>(
                 &mut self,
                 port: u16,
                 pkt: &mut packet_in<'a>,
-            ) -> Option<(#parsed_type, ingress_metadata_t, egress_metadata_t)> {
+            ) -> Vec<(packet_out<'a>, u16)> {
+
+                //
+                // Instantiate the parser out type
+                //
+
                 let mut parsed = #parsed_type::default();
+
+                //
+                // Instantiate ingress/egress metadata
+                //
 
                 let mut ingress_metadata = ingress_metadata_t{
                     port: {
@@ -226,105 +225,98 @@ impl<'a> PipelineGenerator<'a> {
                     },
                     ..Default::default()
                 };
-                let egress_metadata = egress_metadata_t::default();
+                let mut egress_metadata = egress_metadata_t::default();
+
+                //
+                // Run the parser block
+                //
 
                 let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
                 if !accept {
                     // drop the packet
                     softnpu_provider::parser_dropped!(||());
-                    return None
+                    return Vec::new();
                 }
+                let dump = parsed.dump();
+                softnpu_provider::parser_accepted!(||(&dump));
 
-                Some((parsed, ingress_metadata, egress_metadata))
-            }
-        }
-    }
+                //
+                // Calculate parsed header size
+                //
 
-    fn pipeline_impl_ingress(
-        &mut self,
-        parser: &Parser,
-        control: &Control,
-    ) -> TokenStream {
-        let parsed_type = rust_type(&parser.parameters[1].ty);
-
-        // determine table arguments
-        let tables = control.tables(self.ast);
-        let mut tbl_args = Vec::new();
-        for (cs, t) in tables {
-            let qtfn = qualified_table_function_name(&cs, t);
-            let name = format_ident!("{}", qtfn);
-            tbl_args.push(quote! {
-                &self.#name
-            });
-        }
-
-        quote! {
-            fn ingress(
-                &mut self,
-                parsed: &mut #parsed_type,
-                ingress_metadata: &mut ingress_metadata_t,
-                egress_metadata: &mut egress_metadata_t,
-            ) {
                 let parsed_size = parsed.valid_header_size() >> 3;
+
+                //
+                // Run the ingress block
+                //
+
                 (self.ingress)(
-                    parsed,
-                    ingress_metadata,
-                    egress_metadata,
-                    #(#tbl_args),*
+                    &mut parsed,
+                    &mut ingress_metadata,
+                    &mut egress_metadata,
+                    #(#ingress_tbl_args),*
                 );
-            }
-        }
-    }
 
-    fn pipeline_impl_egress(
-        &mut self,
-        parser: &Parser,
-        control: &Control,
-    ) -> TokenStream {
-        let parsed_type = rust_type(&parser.parameters[1].ty);
-
-        // determine table arguments
-        let tables = control.tables(self.ast);
-        let mut tbl_args = Vec::new();
-        for (cs, t) in tables {
-            let qtfn = qualified_table_function_name(&cs, t);
-            let name = format_ident!("{}", qtfn);
-            tbl_args.push(quote! {
-                &self.#name
-            });
-        }
-
-        quote! {
-            fn egress<'a>(
-                &mut self,
-                parsed: &mut #parsed_type,
-                ingress_metadata: &mut ingress_metadata_t,
-                egress_metadata: &mut egress_metadata_t,
-                pkt: &mut packet_in<'a>,
-                parsed_size: usize,
-            ) -> Option<packet_out<'a>> {
-
-                let dump = parsed.dump();
-                if egress_metadata.port.is_empty()
-                    || egress_metadata.drop {
-                    softnpu_provider::control_dropped!(||(&dump));
-                    return None;
-                }
-
-                let dump = parsed.dump();
-                softnpu_provider::control_accepted!(||(&dump));
-
-                let bv = parsed.to_bitvec();
-                let buf = bv.as_raw_slice();
-                if parsed_size > pkt.data.len() {
-                    panic!("balderdash!");
-                }
-                let out = packet_out{
-                    header_data: buf.to_owned(),
-                    payload_data: &pkt.data[parsed_size..],
+                let ports = if egress_metadata.broadcast {
+                    (0..self.radix).collect::<Vec<u16>>()
+                } else {
+                    if egress_metadata.port.is_empty() || egress_metadata.drop {
+                        Vec::new()
+                    } else {
+                        vec![egress_metadata.port.load_le()]
+                    }
                 };
 
-                Some(out)
+                let dump = parsed.dump();
+
+                //
+                // Determine egress ports
+                //
+
+                if ports.is_empty() {
+                    softnpu_provider::ingress_dropped!(||(&dump));
+                    return Vec::new();
+                }
+
+                softnpu_provider::ingress_accepted!(||(&dump));
+
+                let mut result = Vec::new();
+
+                for port in ports {
+
+                    //
+                    // Run the egress block
+                    //
+
+                    egress_metadata.port.store_le(port);
+
+                    (self.egress)(
+                        &mut parsed,
+                        &mut ingress_metadata,
+                        &mut egress_metadata,
+                        #(#egress_tbl_args),*
+                    );
+
+                    if egress_metadata.drop {
+                        continue;
+                    }
+
+                    //
+                    // Create the packet output.
+                    //
+
+                    let bv = parsed.to_bitvec();
+                    let buf = bv.as_raw_slice();
+                    let out = packet_out{
+                        header_data: buf.to_owned(),
+                        payload_data: &pkt.data[parsed_size..],
+                    };
+                    result.push((out, port))
+
+                }
+
+                result
+
             }
         }
     }

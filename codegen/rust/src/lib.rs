@@ -186,10 +186,14 @@ fn dtrace_probes() -> TokenStream {
             fn parser_transition(_: &str) {}
             fn parser_dropped() {}
             fn control_apply(_: &str) {}
-            fn control_dropped(_: &str) {}
-            fn control_accepted(_: &str) {}
             fn control_table_hit(_: &str) {}
             fn control_table_miss(_: &str) {}
+            fn ingress_dropped(_: &str) {}
+            fn ingress_accepted(_: &str) {}
+            fn egress_dropped(_: &str) {}
+            fn egress_accepted(_: &str) {}
+            fn egress_table_hit(_: &str) {}
+            fn egress_table_miss(_: &str) {}
             fn action(_: &str) {}
         }
     }

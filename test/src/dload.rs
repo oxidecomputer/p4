@@ -5,7 +5,7 @@ p4_macro::use_p4!(
 
 #[test]
 fn pipeline_create() -> Result<(), anyhow::Error> {
-    let p = unsafe { &mut *_dload_pipeline_create() };
+    let p = unsafe { &mut *_dload_pipeline_create(2) };
 
     let port: u16 = 47;
     let data = [0u8; 500];
@@ -15,8 +15,8 @@ fn pipeline_create() -> Result<(), anyhow::Error> {
     };
 
     // the goal is simply not to explode
-    let result = p.parse(port, &mut pkt);
-    assert!(result.is_none());
+    let result = p.process_packet(port, &mut pkt);
+    assert!(result.is_empty());
 
     Ok(())
 }
@@ -37,11 +37,7 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
     //TODO this is problematic, as we'll not know what these types are under
     //normal dynamic loading circumstances.
     let func: libloading::Symbol<
-        unsafe extern "C" fn() -> *mut dyn p4rs::Pipeline<
-            Header = <main_pipeline as p4rs::Pipeline>::Header,
-            I = <main_pipeline as p4rs::Pipeline>::I,
-            E = <main_pipeline as p4rs::Pipeline>::E,
-        >,
+        unsafe extern "C" fn(u16) -> *mut dyn p4rs::Pipeline,
     > = match unsafe { lib.get(b"_main_pipeline_create") } {
         Ok(f) => f,
         Err(e) => {
@@ -49,7 +45,7 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
         }
     };
 
-    let mut p = unsafe { Box::from_raw(func()) };
+    let mut p = unsafe { Box::from_raw(func(2)) };
 
     let port: u16 = 47;
     let data = [0u8; 500];
@@ -59,8 +55,8 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
     };
 
     // the goal is simply not to explode
-    let result = p.parse(port, &mut pkt);
-    assert!(result.is_none());
+    let result = p.process_packet(port, &mut pkt);
+    assert!(result.is_empty());
 
     Ok(())
 }

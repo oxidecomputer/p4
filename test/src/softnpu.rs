@@ -1,7 +1,6 @@
 use crate::packet;
 use colored::Colorize;
 use p4rs::packet_in;
-use p4rs::{EgressMetadata, Headers, IngressMetadata};
 use rand::Rng;
 use std::net::Ipv6Addr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -136,71 +135,37 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
 
                     let mut pkt = packet_in::new(content);
 
-                    let (mut hdr, mut ingress_md, mut egress_md) =
-                        match pipeline.parse(i as u16, &mut pkt) {
-                            Some(hdr) => hdr,
-                            None => {
-                                println!("parser drop");
-                                continue;
-                            }
-                        };
+                    let port = i as u16;
+                    let output = pipeline.process_packet(port, &mut pkt);
+                    for (out_pkt, out_port) in &output {
+                        let out_port = *out_port as usize;
+                        //
+                        // get frame for packet
+                        //
 
-                    let parsed_size = hdr.valid_header_size() >> 3;
+                        let phy = &inner_phys[out_port];
+                        let eg = &phy.tx_p;
+                        let mut fps = eg.reserve(1).unwrap();
+                        let fp = fps.next().unwrap();
 
-                    pipeline.ingress(&mut hdr, &mut ingress_md, &mut egress_md);
-                    if ingress_md.dropped() {
-                        println!("ingress drop");
-                        continue;
+                        //
+                        // emit headers
+                        //
+
+                        eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
+
+                        //
+                        // emit payload
+                        //
+
+                        eg.write_at(
+                            fp,
+                            out_pkt.payload_data,
+                            out_pkt.header_data.len(),
+                        );
+
+                        egress_count[out_port] += 1;
                     }
-
-                    let out_pkt = match pipeline.egress(
-                        &mut hdr,
-                        &mut ingress_md,
-                        &mut egress_md,
-                        &mut pkt,
-                        parsed_size,
-                    ) {
-                        Some(out) => out,
-                        None => {
-                            println!("egress drop");
-                            continue;
-                        }
-                    };
-                    if egress_md.dropped() {
-                        println!("egress drop");
-                        continue;
-                    }
-
-                    let port = egress_md.port() as usize;
-
-                    //TODO handle bcast
-
-                    //
-                    // get frame for packet
-                    //
-
-                    let phy = &inner_phys[port];
-                    let eg = &phy.tx_p;
-                    let mut fps = eg.reserve(1).unwrap();
-                    let fp = fps.next().unwrap();
-
-                    //
-                    // emit headers
-                    //
-
-                    eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
-
-                    //
-                    // emit payload
-                    //
-
-                    eg.write_at(
-                        fp,
-                        out_pkt.payload_data,
-                        out_pkt.header_data.len(),
-                    );
-
-                    egress_count[port] += 1;
                 }
                 ig.rx_c.consume(frames_in).unwrap();
                 ig.rx_counter.fetch_add(frames_in, Ordering::Relaxed);

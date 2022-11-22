@@ -24,7 +24,7 @@ p4_macro::use_p4!(
 
 #[test]
 fn basic_router2() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(2, main_pipeline::new(), false);
+    let mut npu = SoftNpu::new(2, main_pipeline::new(2), false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
 

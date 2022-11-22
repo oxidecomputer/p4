@@ -9,19 +9,16 @@
 //! interfaces for table manipulation and packet i/o.
 //!
 //! ```rust
-//! use p4rs::{
-//!     packet_in, packet_out, Pipeline, Headers, IngressMetadata,
-//!     EgressMetadata
-//! };
+//! use p4rs::{ packet_in, packet_out, Pipeline };
 //! use std::net::Ipv6Addr;
 //!
-//! struct Handler<H: Headers, I: IngressMetadata, E: EgressMetadata> {
-//!     pipe: Box<dyn Pipeline<Header = H, I = I, E = E>>
+//! struct Handler {
+//!     pipe: Box<dyn Pipeline>
 //! }
 //!
-//! impl<H: Headers, I: IngressMetadata, E: EgressMetadata> Handler<H, I, E> {
+//! impl Handler {
 //!     /// Create a new pipeline handler.
-//!     fn new(pipe: Box<dyn Pipeline::<Header = H, I = I, E = E>>) -> Self {
+//!     fn new(pipe: Box<dyn Pipeline>) -> Self {
 //!         Self{ pipe }
 //!     }
 //!
@@ -32,37 +29,12 @@
 //!
 //!         let mut input = packet_in::new(pkt);
 //!
-//!         let (mut hdr, mut ingress_md, mut egress_md) =
-//!             match self.pipe.parse(port, &mut input) {
-//!             Some(hdr) => hdr,
-//!             None => {
-//!                 return;
-//!             }
-//!         };
-//!         let parsed_size = hdr.valid_header_size() >> 3;
-//!
-//!         self.pipe.ingress(&mut hdr, &mut ingress_md, &mut egress_md);
-//!         if ingress_md.dropped() {
-//!             return;
+//!         let output =  self.pipe.process_packet(port, &mut input);
+//!         for (out_pkt, out_port) in &output {
+//!             let mut out = out_pkt.header_data.clone();
+//!             out.extend_from_slice(out_pkt.payload_data);
+//!             self.send_packet(*out_port, &out);
 //!         }
-//!
-//!         let out_pkt = match self.pipe.egress(
-//!             &mut hdr,
-//!             &mut ingress_md,
-//!             &mut egress_md,
-//!             &mut input,
-//!             parsed_size,
-//!         ) {
-//!             Some(out) => out,
-//!             None => return,
-//!         };
-//!         if egress_md.dropped() {
-//!             return;
-//!         }
-//!
-//!         let mut out = out_pkt.header_data.clone();
-//!         out.extend_from_slice(out_pkt.payload_data);
-//!         self.send_packet(egress_md.port(), &out);
 //!
 //!     }
 //!
@@ -182,49 +154,15 @@ pub struct TableEntry {
     pub parameter_data: Vec<u8>,
 }
 
-pub trait IngressMetadata {
-    fn port(&self) -> u16;
-    fn dropped(&self) -> bool;
-}
-
-pub trait EgressMetadata {
-    fn port(&self) -> u16;
-    fn broadcast(&self) -> bool;
-    fn dropped(&self) -> bool;
-}
-
-pub trait Headers {
-    fn valid_header_size(&self) -> usize;
-    fn to_bitvec(&self) -> BitVec<u8, Msb0>;
-    fn dump(&self) -> String;
-}
-
 pub trait Pipeline: Send {
-    type Header: Headers;
-    type I: IngressMetadata;
-    type E: EgressMetadata;
-
-    fn parse<'a>(
+    /// Process an input packet and produce a set of output packets. Normally
+    /// there will be a single output packet. However, if the pipeline sets
+    /// `egress_metadata_t.broadcast` there may be multiple output packets.
+    fn process_packet<'a>(
         &mut self,
         port: u16,
         pkt: &mut packet_in<'a>,
-    ) -> Option<(Self::Header, Self::I, Self::E)>;
-
-    fn ingress(
-        &mut self,
-        parsed: &mut Self::Header,
-        ingress_metadata: &mut Self::I,
-        egress_metadata: &mut Self::E,
-    );
-
-    fn egress<'a>(
-        &mut self,
-        parsed: &mut Self::Header,
-        ingress_metadata: &mut Self::I,
-        egress_metadata: &mut Self::E,
-        pkt: &mut packet_in<'a>,
-        parsed_size: usize,
-    ) -> Option<packet_out<'a>>;
+    ) -> Vec<(packet_out<'a>, u16)>;
 
     //TODO use struct TableEntry?
     /// Add an entry to a table identified by table_id.
