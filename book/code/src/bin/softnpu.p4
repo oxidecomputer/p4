@@ -2,6 +2,7 @@ struct ingress_metadata_t {
     bit<16> port;
     bool nat;
     bit<16> nat_id;
+    bool drop;
 }
 
 struct egress_metadata_t {
@@ -9,6 +10,7 @@ struct egress_metadata_t {
     bit<128> nexthop_v6;
     bit<32> nexthop_v4;
     bool drop;
+    bool broadcast;
 }
 
 extern Checksum {

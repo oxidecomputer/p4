@@ -4,7 +4,8 @@
 
 SoftNPU(
     parse(),
-    ingress()
+    ingress(),
+    egress()
 ) main;
 
 struct headers_t {
@@ -205,4 +206,12 @@ control ingress(
             router.apply(hdr, ingress, egress);
         }
     }
+}
+
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
 }

@@ -9,16 +9,19 @@
 //! interfaces for table manipulation and packet i/o.
 //!
 //! ```rust
-//! use p4rs::{packet_in, packet_out, Pipeline};
+//! use p4rs::{
+//!     packet_in, packet_out, Pipeline, Headers, IngressMetadata,
+//!     EgressMetadata
+//! };
 //! use std::net::Ipv6Addr;
 //!
-//! struct Handler {
-//!     pipe: Box<dyn Pipeline>
+//! struct Handler<H: Headers, I: IngressMetadata, E: EgressMetadata> {
+//!     pipe: Box<dyn Pipeline<Header = H, I = I, E = E>>
 //! }
 //!
-//! impl Handler {
+//! impl<H: Headers, I: IngressMetadata, E: EgressMetadata> Handler<H, I, E> {
 //!     /// Create a new pipeline handler.
-//!     fn new(pipe: Box<dyn Pipeline>) -> Self {
+//!     fn new(pipe: Box<dyn Pipeline::<Header = H, I = I, E = E>>) -> Self {
 //!         Self{ pipe }
 //!     }
 //!
@@ -26,6 +29,42 @@
 //!     /// an output result, send the processed packet to the output port
 //!     /// returned by the pipeline.
 //!     fn handle_packet(&mut self, port: u16, pkt: &[u8]) {
+//!
+//!         let mut input = packet_in::new(pkt);
+//!
+//!         let (mut hdr, mut ingress_md, mut egress_md) =
+//!             match self.pipe.parse(port, &mut input) {
+//!             Some(hdr) => hdr,
+//!             None => {
+//!                 return;
+//!             }
+//!         };
+//!         let parsed_size = hdr.valid_header_size() >> 3;
+//!
+//!         self.pipe.ingress(&mut hdr, &mut ingress_md, &mut egress_md);
+//!         if ingress_md.dropped() {
+//!             return;
+//!         }
+//!
+//!         let out_pkt = match self.pipe.egress(
+//!             &mut hdr,
+//!             &mut ingress_md,
+//!             &mut egress_md,
+//!             &mut input,
+//!             parsed_size,
+//!         ) {
+//!             Some(out) => out,
+//!             None => return,
+//!         };
+//!         if egress_md.dropped() {
+//!             return;
+//!         }
+//!
+//!         let mut out = out_pkt.header_data.clone();
+//!         out.extend_from_slice(out_pkt.payload_data);
+//!         self.send_packet(egress_md.port(), &out);
+//!
+//!         /*
 //!         let mut input = packet_in::new(pkt);
 //!         if let Some((mut out_pkt, out_port)) =
 //!             self.pipe.process_packet(port, &mut input) {
@@ -36,6 +75,7 @@
 //!             self.send_packet(out_port, &out);
 //!
 //!         }
+//!         */
 //!     }
 //!
 //!     /// Add a routing table entry. Packets for the provided destination will
@@ -154,14 +194,58 @@ pub struct TableEntry {
     pub parameter_data: Vec<u8>,
 }
 
+pub trait IngressMetadata {
+    fn port(&self) -> u16;
+    fn dropped(&self) -> bool;
+}
+
+pub trait EgressMetadata {
+    fn port(&self) -> u16;
+    fn broadcast(&self) -> bool;
+    fn dropped(&self) -> bool;
+}
+
+pub trait Headers {
+    fn valid_header_size(&self) -> usize;
+    fn to_bitvec(&self) -> BitVec<u8, Msb0>;
+    fn dump(&self) -> String;
+}
+
 pub trait Pipeline: Send {
+    type Header: Headers;
+    type I: IngressMetadata;
+    type E: EgressMetadata;
     /// Process a packet for the specified port optionally producing an output
     /// packet and output port number.
-    fn process_packet<'a>(
+    //XXX
+    //fn process_packet<'a>(
+    //    &mut self,
+    //    port: u16,
+    //    pkt: &mut packet_in<'a>,
+    //) -> Option<(packet_out<'a>, u16)>;
+    //XXX
+
+    fn parse<'a>(
         &mut self,
         port: u16,
         pkt: &mut packet_in<'a>,
-    ) -> Option<(packet_out<'a>, u16)>;
+    ) -> Option<(Self::Header, Self::I, Self::E)>;
+
+    fn ingress(
+        &mut self,
+        parsed: &mut Self::Header,
+        ingress_metadata: &mut Self::I,
+        egress_metadata: &mut Self::E,
+    );
+
+    fn egress<'a>(
+        &mut self,
+        parsed: &mut Self::Header,
+        ingress_metadata: &mut Self::I,
+        egress_metadata: &mut Self::E,
+        pkt: &mut packet_in<'a>,
+        parsed_size: usize,
+    ) -> Option<packet_out<'a>>;
 
     //TODO use struct TableEntry?
     /// Add an entry to a table identified by table_id.

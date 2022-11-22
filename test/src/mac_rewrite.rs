@@ -41,17 +41,17 @@ fn mac_rewrite2() -> Result<(), anyhow::Error> {
     let addr_e: Ipv6Addr = "fe80::aae1:deff:fe01:701e".parse().unwrap();
 
     pipeline.add_local_local_entry(
-        "local".into(),
+        "set_local".into(),
         addr_c.octets().as_ref(),
         &Vec::new(),
     );
     pipeline.add_local_local_entry(
-        "local".into(),
+        "set_local".into(),
         addr_d.octets().as_ref(),
         &Vec::new(),
     );
     pipeline.add_local_local_entry(
-        "local".into(),
+        "set_local".into(),
         addr_e.octets().as_ref(),
         &Vec::new(),
     );

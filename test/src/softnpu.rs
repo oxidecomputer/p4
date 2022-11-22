@@ -1,6 +1,7 @@
 use crate::packet;
 use colored::Colorize;
 use p4rs::packet_in;
+use p4rs::{EgressMetadata, Headers, IngressMetadata};
 use rand::Rng;
 use std::net::Ipv6Addr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -135,6 +136,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
 
                     let mut pkt = packet_in::new(content);
 
+                    /*
                     match pipeline.process_packet(i as u16, &mut pkt) {
                         Some((out_pkt, port)) => {
                             let port = port as usize;
@@ -170,6 +172,73 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                             println!("drop");
                         }
                     }
+                    */
+
+                    let (mut hdr, mut ingress_md, mut egress_md) =
+                        match pipeline.parse(i as u16, &mut pkt) {
+                            Some(hdr) => hdr,
+                            None => {
+                                println!("parser drop");
+                                continue;
+                            }
+                        };
+
+                    let parsed_size = hdr.valid_header_size() >> 3;
+
+                    pipeline.ingress(&mut hdr, &mut ingress_md, &mut egress_md);
+                    if ingress_md.dropped() {
+                        println!("ingress drop");
+                        continue;
+                    }
+
+                    let out_pkt = match pipeline.egress(
+                        &mut hdr,
+                        &mut ingress_md,
+                        &mut egress_md,
+                        &mut pkt,
+                        parsed_size,
+                    ) {
+                        Some(out) => out,
+                        None => {
+                            println!("egress drop");
+                            continue;
+                        }
+                    };
+                    if egress_md.dropped() {
+                        println!("egress drop");
+                        continue;
+                    }
+
+                    let port = egress_md.port() as usize;
+
+                    //TODO handle bcast
+
+                    //
+                    // get frame for packet
+                    //
+
+                    let phy = &inner_phys[port];
+                    let eg = &phy.tx_p;
+                    let mut fps = eg.reserve(1).unwrap();
+                    let fp = fps.next().unwrap();
+
+                    //
+                    // emit headers
+                    //
+
+                    eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
+
+                    //
+                    // emit payload
+                    //
+
+                    eg.write_at(
+                        fp,
+                        out_pkt.payload_data,
+                        out_pkt.header_data.len(),
+                    );
+
+                    egress_count[port] += 1;
                 }
                 ig.rx_c.consume(frames_in).unwrap();
                 ig.rx_counter.fetch_add(frames_in, Ordering::Relaxed);

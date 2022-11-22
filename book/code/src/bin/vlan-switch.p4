@@ -80,7 +80,7 @@ control ingress(
         bool vlan_ok = false;
         vlan.apply(ingress.port, vid, vlan_ok);
         if (vlan_ok == false) {
-            egress.drop = true;
+            ingress.drop = true;
             return;
         }
 
@@ -90,13 +90,22 @@ control ingress(
         // check vlan on egress
         vlan.apply(egress.port, vid, vlan_ok);
         if (vlan_ok == false) {
-            egress.drop = true;
+            ingress.drop = true;
             return;
         }
     }
 }
 
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+}
+
 SoftNPU(
     parse(), 
-    ingress()
+    ingress(),
+    egress()
 ) main;

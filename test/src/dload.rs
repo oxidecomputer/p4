@@ -15,7 +15,7 @@ fn pipeline_create() -> Result<(), anyhow::Error> {
     };
 
     // the goal is simply not to explode
-    let result = p.process_packet(port, &mut pkt);
+    let result = p.parse(port, &mut pkt);
     assert!(result.is_none());
 
     Ok(())
@@ -34,8 +34,14 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
             panic!("failed to load p4 program: {}", e);
         }
     };
+    //TODO this is problematic, as we'll not know what these types are under
+    //normal dynamic loading circumstances.
     let func: libloading::Symbol<
-        unsafe extern "C" fn() -> *mut dyn p4rs::Pipeline,
+        unsafe extern "C" fn() -> *mut dyn p4rs::Pipeline<
+            Header = <main_pipeline as p4rs::Pipeline>::Header,
+            I = <main_pipeline as p4rs::Pipeline>::I,
+            E = <main_pipeline as p4rs::Pipeline>::E,
+        >,
     > = match unsafe { lib.get(b"_main_pipeline_create") } {
         Ok(f) => f,
         Err(e) => {
@@ -53,7 +59,7 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
     };
 
     // the goal is simply not to explode
-    let result = p.process_packet(port, &mut pkt);
+    let result = p.parse(port, &mut pkt);
     assert!(result.is_none());
 
     Ok(())
