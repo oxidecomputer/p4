@@ -206,7 +206,6 @@ impl<'a> PipelineGenerator<'a> {
                 port: u16,
                 pkt: &mut packet_in<'a>,
             ) -> Vec<(packet_out<'a>, u16)> {
-
                 //
                 // Instantiate the parser out type
                 //
@@ -257,8 +256,19 @@ impl<'a> PipelineGenerator<'a> {
                     #(#ingress_tbl_args),*
                 );
 
+                //
+                // Determine egress ports
+                //
+
                 let ports = if egress_metadata.broadcast {
-                    (0..self.radix).collect::<Vec<u16>>()
+                    let mut ports = Vec::new();
+                    for p in 0..self.radix {
+                        if p == port {
+                            continue;
+                        }
+                        ports.push(p);
+                    }
+                    ports
                 } else {
                     if egress_metadata.port.is_empty() || egress_metadata.drop {
                         Vec::new()
@@ -269,10 +279,6 @@ impl<'a> PipelineGenerator<'a> {
 
                 let dump = parsed.dump();
 
-                //
-                // Determine egress ports
-                //
-
                 if ports.is_empty() {
                     softnpu_provider::ingress_dropped!(||(&dump));
                     return Vec::new();
@@ -280,8 +286,11 @@ impl<'a> PipelineGenerator<'a> {
 
                 softnpu_provider::ingress_accepted!(||(&dump));
 
+                //
+                // Run output of ingress block through egress block on each
+                // egress port.
+                //
                 let mut result = Vec::new();
-
                 for port in ports {
 
                     //
@@ -314,9 +323,7 @@ impl<'a> PipelineGenerator<'a> {
                     result.push((out, port))
 
                 }
-
                 result
-
             }
         }
     }

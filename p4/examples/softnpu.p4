@@ -1,3 +1,4 @@
+//FIXME there are a number of compilation issues with this file
 typedef bit<4> PortId;
 
 const PortId REAL_PORT_COUNT = 4w4;
@@ -24,7 +25,14 @@ control NpuIngress<H>(
     inout egress_metadata_t egress_meta,
 );
 
+control NpuEgress<H>(
+    inout H hdr,
+    inout ingress_metadata_t ingress_meta,
+    inout egress_metadata_t egress_meta,
+);
+
 package SoftNPU<H>(
     NpuParser<H> p,
     NpuIngress<H> ingress,
+    NpuEgress<H> ingress,
 );

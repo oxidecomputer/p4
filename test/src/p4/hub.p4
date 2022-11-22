@@ -42,6 +42,7 @@ control ingress(
 
     action forward(bit<16> port) {
         egress.port = port;
+        egress.broadcast = true;
     }
 
     table tbl {
