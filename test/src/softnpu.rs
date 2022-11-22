@@ -136,44 +136,6 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
 
                     let mut pkt = packet_in::new(content);
 
-                    /*
-                    match pipeline.process_packet(i as u16, &mut pkt) {
-                        Some((out_pkt, port)) => {
-                            let port = port as usize;
-
-                            //
-                            // get frame for packet
-                            //
-
-                            let phy = &inner_phys[port];
-                            let eg = &phy.tx_p;
-                            let mut fps = eg.reserve(1).unwrap();
-                            let fp = fps.next().unwrap();
-
-                            //
-                            // emit headers
-                            //
-
-                            eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
-
-                            //
-                            // emit payload
-                            //
-
-                            eg.write_at(
-                                fp,
-                                out_pkt.payload_data,
-                                out_pkt.header_data.len(),
-                            );
-
-                            egress_count[port] += 1;
-                        }
-                        None => {
-                            println!("drop");
-                        }
-                    }
-                    */
-
                     let (mut hdr, mut ingress_md, mut egress_md) =
                         match pipeline.parse(i as u16, &mut pkt) {
                             Some(hdr) => hdr,

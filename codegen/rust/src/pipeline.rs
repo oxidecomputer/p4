@@ -111,12 +111,6 @@ impl<'a> PipelineGenerator<'a> {
         let (egress_member, egress_initializer) =
             self.control_entrypoint("egress", egress);
 
-        // XXX
-        //let control_ = ingress; //hack in something
-        //let pipeline_impl_process_packet =
-        //    self.pipeline_impl_process_packet(parser, control_);
-        // XXX
-
         let pipeline_impl_parse = self.pipeline_impl_parse(parser);
         let pipeline_impl_ingress = self.pipeline_impl_ingress(parser, ingress);
         let pipeline_impl_egress = self.pipeline_impl_egress(parser, egress);
@@ -182,7 +176,6 @@ impl<'a> PipelineGenerator<'a> {
                 type Header = #parsed_type;
                 type I = ingress_metadata_t;
                 type E = egress_metadata_t;
-                //XXX #pipeline_impl_process_packet
                 #pipeline_impl_parse
                 #pipeline_impl_ingress
                 #pipeline_impl_egress
@@ -332,117 +325,6 @@ impl<'a> PipelineGenerator<'a> {
                 };
 
                 Some(out)
-            }
-        }
-    }
-
-    //XXX break up
-    fn _pipeline_impl_process_packet(
-        &mut self,
-        _parser: &Parser,
-        _control: &Control,
-    ) -> TokenStream {
-        /*
-        let parsed_type = rust_type(&parser.parameters[1].ty);
-
-        // determine table arguments
-        let tables = control.tables(self.ast);
-        let mut tbl_args = Vec::new();
-        for (cs, t) in tables {
-            let qtfn = qualified_table_function_name(&cs, t);
-            let name = format_ident!("{}", qtfn);
-            tbl_args.push(quote! {
-                &self.#name
-            });
-        }
-        */
-
-        quote! {
-            fn process_packet<'a>(
-                &mut self,
-                port: u16,
-                pkt: &mut packet_in<'a>,
-            ) -> Option<(packet_out<'a>, u16)> {
-
-                panic!("depracated!");
-
-                /*
-                //
-                // 1. Instantiate the parser out type
-                //
-
-                let mut parsed = #parsed_type::default();
-
-                //
-                // 2. Instantiate ingress/egress metadata
-                //
-                let mut ingress_metadata = ingress_metadata_t{
-                    port: {
-                        let mut x = bitvec![mut u8, Msb0; 0; 16];
-                        x.store_le(port);
-                        x
-                    },
-                    ..Default::default()
-                };
-                let mut egress_metadata = egress_metadata_t::default();
-
-                //
-                // 3. run the parser block
-                //
-                let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
-                if !accept {
-                    // drop the packet
-                    softnpu_provider::parser_dropped!(||());
-                    return None
-                }
-                let dump = parsed.dump();
-                softnpu_provider::parser_accepted!(||(&dump));
-
-                //
-                // 4. Calculate parsed header size
-                //
-
-                let parsed_size = parsed.valid_header_size() >> 3;
-
-                //
-                // 5. Run the control block
-                //
-
-                (self.control)(
-                    &mut parsed,
-                    &mut ingress_metadata,
-                    &mut egress_metadata,
-                    #(#tbl_args),*
-                );
-
-                //
-                // 6. Determine egress port
-                //
-
-                let port: u16 = if egress_metadata.port.is_empty()
-                    || egress_metadata.drop {
-                    softnpu_provider::control_dropped!(||(&dump));
-                    return None;
-                } else {
-                    egress_metadata.port.load_le()
-                };
-
-                let dump = parsed.dump();
-                softnpu_provider::control_accepted!(||(&dump));
-
-                //
-                // 7. Create the packet output.
-
-                let bv = parsed.to_bitvec();
-                let buf = bv.as_raw_slice();
-                let out = packet_out{
-                    header_data: buf.to_owned(),
-                    payload_data: &pkt.data[parsed_size..],
-                };
-
-                Some((out, port))
-                */
-
             }
         }
     }

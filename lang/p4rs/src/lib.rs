@@ -64,18 +64,6 @@
 //!         out.extend_from_slice(out_pkt.payload_data);
 //!         self.send_packet(egress_md.port(), &out);
 //!
-//!         /*
-//!         let mut input = packet_in::new(pkt);
-//!         if let Some((mut out_pkt, out_port)) =
-//!             self.pipe.process_packet(port, &mut input) {
-//!
-//!             let mut out = out_pkt.header_data.clone();
-//!             out.extend_from_slice(out_pkt.payload_data);
-//!
-//!             self.send_packet(out_port, &out);
-//!
-//!         }
-//!         */
 //!     }
 //!
 //!     /// Add a routing table entry. Packets for the provided destination will
@@ -215,15 +203,6 @@ pub trait Pipeline: Send {
     type Header: Headers;
     type I: IngressMetadata;
     type E: EgressMetadata;
-    /// Process a packet for the specified port optionally producing an output
-    /// packet and output port number.
-    //XXX
-    //fn process_packet<'a>(
-    //    &mut self,
-    //    port: u16,
-    //    pkt: &mut packet_in<'a>,
-    //) -> Option<(packet_out<'a>, u16)>;
-    //XXX
 
     fn parse<'a>(
         &mut self,
