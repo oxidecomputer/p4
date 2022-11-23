@@ -75,10 +75,10 @@ const FBUF: usize = 4096;
 const MTU: usize = 1500;
 
 pub struct SoftNpu<P: p4rs::Pipeline> {
+    pub pipeline: Option<P>,
     inner_phys: Option<Vec<InnerPhy<RING, FBUF, MTU>>>,
     outer_phys: Vec<Arc<OuterPhy<RING, FBUF, MTU>>>,
     _fb: Arc<FrameBuffer<FBUF, MTU>>,
-    pipeline: Option<P>,
 }
 
 impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
@@ -458,6 +458,10 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
         self.rx_counter.fetch_add(buf.len(), Ordering::Relaxed);
 
         buf
+    }
+
+    pub fn recv_buffer_len(&self) -> usize {
+        self.tx_c.consumable().count()
     }
 
     pub fn tx_count(&self) -> usize {
