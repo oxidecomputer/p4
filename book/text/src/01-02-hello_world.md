@@ -289,10 +289,13 @@ struct headers_t {
 
 struct ingress_metadata_t {
     bit<16> port;
+    bool drop;
 }
 
 struct egress_metadata_t {
     bit<16> port;
+    bool drop;
+    bool broadcast;
 }
 
 header ethernet_h {
@@ -349,9 +352,20 @@ control ingress(
 
 }
 
+// We do not use an egress controller in this example, but one is required for
+// SoftNPU so just use an empty controller here.
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+}
+
 SoftNPU(
     parse(),
-    ingress()
+    ingress(),
+    egress(),
 ) main;
 ```
 

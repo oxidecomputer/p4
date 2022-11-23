@@ -298,7 +298,7 @@ p4_macro::use_p4!(
 );
 
 fn main() -> Result<(), anyhow::Error> {
-    let mut pipeline = main_pipeline::new();
+    let mut pipeline = main_pipeline::new(2);
 
     let m1 = [0x33, 0x33, 0x33, 0x33, 0x33, 0x33];
     let m2 = [0x44, 0x44, 0x44, 0x44, 0x44, 0x44];
