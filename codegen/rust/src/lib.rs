@@ -379,17 +379,29 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
 }
 
 fn qualified_table_name(
+    control: Option<&Control>,
     chain: &Vec<(String, &Control)>,
     table: &Table,
 ) -> String {
-    table_qname(chain, table, '.')
+    match control {
+        Some(control) => {
+            format!("{}.{}", control.name, table_qname(chain, table, '.'))
+        }
+        _ => table_qname(chain, table, '.'),
+    }
 }
 
 fn qualified_table_function_name(
+    control: Option<&Control>,
     chain: &Vec<(String, &Control)>,
     table: &Table,
 ) -> String {
-    table_qname(chain, table, '_')
+    match control {
+        Some(control) => {
+            format!("{}_{}", control.name, table_qname(chain, table, '_'))
+        }
+        _ => table_qname(chain, table, '_'),
+    }
 }
 
 fn table_qname(

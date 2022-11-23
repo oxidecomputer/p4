@@ -184,7 +184,7 @@ impl<'a> PipelineGenerator<'a> {
         //TODO(dry)
         let mut ingress_tbl_args = Vec::new();
         for (cs, t) in ingress_tables {
-            let qtfn = qualified_table_function_name(&cs, t);
+            let qtfn = qualified_table_function_name(Some(ingress), &cs, t);
             let name = format_ident!("{}", qtfn);
             ingress_tbl_args.push(quote! {
                 &self.#name
@@ -193,7 +193,7 @@ impl<'a> PipelineGenerator<'a> {
         let egress_tables = egress.tables(self.ast);
         let mut egress_tbl_args = Vec::new();
         for (cs, t) in egress_tables {
-            let qtfn = qualified_table_function_name(&cs, t);
+            let qtfn = qualified_table_function_name(Some(egress), &cs, t);
             let name = format_ident!("{}", qtfn);
             egress_tbl_args.push(quote! {
                 &self.#name
@@ -339,11 +339,12 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let control = cs.last().unwrap().1;
-            let qtn = qualified_table_function_name(&cs, table);
-            let (_, mut param_types) = cg.control_parameters(control);
+            let table_control = cs.last().unwrap().1;
+            let qtn = qualified_table_function_name(Some(control), &cs, table);
+            let fqtn = qualified_table_function_name(Some(control), &cs, table);
+            let (_, mut param_types) = cg.control_parameters(table_control);
 
-            for var in &control.variables {
+            for var in &table_control.variables {
                 if let Type::UserDefined(typename) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
@@ -362,11 +363,12 @@ impl<'a> PipelineGenerator<'a> {
                     >
             };
             let qtn = format_ident!("{}", qtn);
+            let fqtn = format_ident!("{}", fqtn);
             members.push(quote! {
                 pub #qtn: #table_type
             });
             initializers.push(quote! {
-                #qtn: #qtn()
+                #qtn: #fqtn()
             })
         }
 
@@ -380,19 +382,21 @@ impl<'a> PipelineGenerator<'a> {
     ) -> TokenStream {
         let mut body = TokenStream::new();
 
-        let mut tables = ingress.tables(self.ast);
-        tables.extend_from_slice(&egress.tables(self.ast));
-        for (cs, table) in tables.iter() {
-            let qtn = qualified_table_name(cs, table);
-            let qtfn = qualified_table_function_name(cs, table);
-            let call = format_ident!("add_{}_entry", qtfn);
-            body.extend(quote! {
-                #qtn => self.#call(
-                    action_id,
-                    keyset_data,
-                    parameter_data,
-                ),
-            });
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qtfn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("add_{}_entry", qtfn);
+                body.extend(quote! {
+                    #qtn => self.#call(
+                        action_id,
+                        keyset_data,
+                        parameter_data,
+                    ),
+                });
+            }
         }
 
         body.extend(quote! {
@@ -421,15 +425,17 @@ impl<'a> PipelineGenerator<'a> {
     ) -> TokenStream {
         let mut body = TokenStream::new();
 
-        let mut tables = ingress.tables(self.ast);
-        tables.extend_from_slice(&egress.tables(self.ast));
-        for (cs, table) in tables.iter() {
-            let qtn = qualified_table_name(cs, table);
-            let qftn = qualified_table_function_name(cs, table);
-            let call = format_ident!("remove_{}_entry", qftn);
-            body.extend(quote! {
-                #qtn => self.#call(keyset_data),
-            });
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qftn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("remove_{}_entry", qftn);
+                body.extend(quote! {
+                    #qtn => self.#call(keyset_data),
+                });
+            }
         }
 
         body.extend(quote!{
@@ -455,10 +461,12 @@ impl<'a> PipelineGenerator<'a> {
         egress: &Control,
     ) -> TokenStream {
         let mut names = Vec::new();
-        let mut tables = ingress.tables(self.ast);
-        tables.extend_from_slice(&egress.tables(self.ast));
-        for (cs, table) in &tables {
-            names.push(qualified_table_name(cs, table));
+
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in &tables {
+                names.push(qualified_table_name(Some(control), cs, table));
+            }
         }
         quote! {
             fn get_table_ids(&self) -> Vec<&str> {
@@ -474,15 +482,17 @@ impl<'a> PipelineGenerator<'a> {
     ) -> TokenStream {
         let mut body = TokenStream::new();
 
-        let mut tables = ingress.tables(self.ast);
-        tables.extend_from_slice(&egress.tables(self.ast));
-        for (cs, table) in tables.iter() {
-            let qtn = qualified_table_name(cs, table);
-            let qtfn = qualified_table_function_name(cs, table);
-            let call = format_ident!("get_{}_entries", qtfn);
-            body.extend(quote! {
-                #qtn => Some(self.#call()),
-            });
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qtfn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("get_{}_entries", qtfn);
+                body.extend(quote! {
+                    #qtn => Some(self.#call()),
+                });
+            }
         }
 
         body.extend(quote! {
@@ -519,14 +529,23 @@ impl<'a> PipelineGenerator<'a> {
     ) {
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let control = cs.last().unwrap().1;
-            let qtfn = qualified_table_function_name(&cs, table);
-            tokens.extend(self.add_table_entry_function(table, control, &qtfn));
-            tokens.extend(
-                self.remove_table_entry_function(table, control, &qtfn),
-            );
-            tokens
-                .extend(self.get_table_entries_function(table, control, &qtfn));
+            let table_control = cs.last().unwrap().1;
+            let qtfn = qualified_table_function_name(Some(control), &cs, table);
+            tokens.extend(self.add_table_entry_function(
+                table,
+                table_control,
+                &qtfn,
+            ));
+            tokens.extend(self.remove_table_entry_function(
+                table,
+                table_control,
+                &qtfn,
+            ));
+            tokens.extend(self.get_table_entries_function(
+                table,
+                table_control,
+                &qtfn,
+            ));
         }
     }
 

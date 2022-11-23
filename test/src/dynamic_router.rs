@@ -44,19 +44,31 @@ fn dynamic_router2() -> Result<(), anyhow::Error> {
     let mut buf = prefix.octets().to_vec();
     buf.push(24); // prefix length
 
-    pipeline.add_router_router_entry("forward", &buf, &1u16.to_be_bytes());
+    pipeline.add_ingress_router_router_entry(
+        "forward",
+        &buf,
+        &1u16.to_be_bytes(),
+    );
 
     let prefix: Ipv6Addr = "fd00:2000::".parse().unwrap();
     let mut buf = prefix.octets().to_vec();
     buf.push(24); // prefix length
 
-    pipeline.add_router_router_entry("forward", &buf, &2u16.to_be_bytes());
+    pipeline.add_ingress_router_router_entry(
+        "forward",
+        &buf,
+        &2u16.to_be_bytes(),
+    );
 
     let prefix: Ipv6Addr = "fd00:3000::".parse().unwrap();
     let mut buf = prefix.octets().to_vec();
     buf.push(24); // prefix length
 
-    pipeline.add_router_router_entry("forward", &buf, &3u16.to_be_bytes());
+    pipeline.add_ingress_router_router_entry(
+        "forward",
+        &buf,
+        &3u16.to_be_bytes(),
+    );
 
     //
     // run program

@@ -80,6 +80,11 @@ pub struct SoftNpu<P: p4rs::Pipeline> {
 }
 
 impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
+    /// Create a new SoftNpu ASIC emulator. The `radix` indicates the number of
+    /// ports. The `pipeline` is the `x4c` compiled program that the ASIC will
+    /// run. When `cpu_port` is set to true, sidecar data in `TxFrame` elements
+    /// will be added to packets sent through port 0 (as a sidecar header) on
+    /// the way to the ASIC.
     pub fn new(radix: usize, pipeline: P, cpu_port: bool) -> Self {
         let fb = Arc::new(FrameBuffer::<FBUF, MTU>::new());
         let mut inner_phys = Vec::new();

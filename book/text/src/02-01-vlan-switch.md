@@ -325,22 +325,22 @@ Let's jump into the control plane code.
 ```rust
 fn init_tables(pipeline: &mut main_pipeline, m1: [u8;6], m2: [u8;6]) {
     // add static forwarding entries
-    pipeline.add_fwd_fib_entry("forward", &m1, &0u16.to_be_bytes());
-    pipeline.add_fwd_fib_entry("forward", &m2, &1u16.to_be_bytes());
+    pipeline.add_ingress_fwd_fib_entry("forward", &m1, &0u16.to_be_bytes());
+    pipeline.add_ingress_fwd_fib_entry("forward", &m2, &1u16.to_be_bytes());
 
     // port 0 vlan 47
-    pipeline.add_vlan_port_vlan_entry(
+    pipeline.add_ingress_vlan_port_vlan_entry(
         "filter",
         0u16.to_be_bytes().as_ref(),
         47u16.to_be_bytes().as_ref(),
     );
 
     // sanity check the table
-    let x = pipeline.get_vlan_port_vlan_entries();
+    let x = pipeline.get_ingress_vlan_port_vlan_entries();
     println!("{:#?}", x);
 
     // port 1 vlan 47
-    pipeline.add_vlan_port_vlan_entry(
+    pipeline.add_ingress_vlan_port_vlan_entry(
         "filter",
         1u16.to_be_bytes().as_ref(),
         47u16.to_be_bytes().as_ref(),

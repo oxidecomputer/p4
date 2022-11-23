@@ -444,7 +444,8 @@ impl<'a> StatementGenerator<'a> {
 
             let tables = control_instance.tables(self.ast);
             for (cs, table) in tables {
-                let qtn = crate::qualified_table_function_name(&cs, table);
+                let qtn =
+                    crate::qualified_table_function_name(None, &cs, table);
                 let name = format_ident!("{}_{}", c.lval.root(), qtn);
                 args.push(quote! { #name });
             }
