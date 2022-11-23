@@ -99,7 +99,7 @@ impl<'a> StructGenerator<'a> {
         let name = format_ident!("{}", s.name);
 
         let mut structure = quote! {
-            #[derive(Debug, Default)]
+            #[derive(Debug, Default, Clone)]
             pub struct #name {
                 #(#members),*
             }

@@ -19,6 +19,8 @@ pub fn do_expect_frames(
     loop {
         let fs = phy.recv();
         frames.extend_from_slice(&fs);
+        // TODO this is not a great interface, if frames.len() > n, we should do
+        // something besides hang forever.
         if frames.len() == n {
             break;
         }
@@ -176,6 +178,9 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                 ig.rx_counter.fetch_add(frames_in, Ordering::Relaxed);
 
                 for (j, n) in egress_count.iter().enumerate() {
+                    if *n == 0 {
+                        continue;
+                    }
                     let phy = &inner_phys[j];
                     phy.tx_p.produce(*n).unwrap();
                     phy.tx_counter.fetch_add(*n, Ordering::Relaxed);

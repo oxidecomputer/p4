@@ -40,7 +40,7 @@ impl<'a> ExpressionGenerator<'a> {
                             p4rs::bitmath::add(#lhs_tks.clone(), #rhs_tks.clone())
                         });
                     }
-                    BinOp::Eq => {
+                    BinOp::Eq | BinOp::NotEq => {
                         let lhs_tks_ = match &lhs.as_ref().kind {
                             ExpressionKind::Lvalue(lval) => {
                                 let name_info = self
@@ -105,10 +105,6 @@ impl<'a> ExpressionGenerator<'a> {
                 ts
             }
             ExpressionKind::Slice(begin, end) => {
-                /*
-                let lhs = self.generate_expression(begin.as_ref());
-                let rhs = self.generate_expression(end.as_ref());
-                */
                 let l = match &begin.kind {
                     ExpressionKind::IntegerLit(v) => *v as usize,
                     _ => panic!("slice ranges can only be integer literals"),

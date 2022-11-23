@@ -291,22 +291,29 @@ impl<'a> PipelineGenerator<'a> {
                 // egress port.
                 //
                 let mut result = Vec::new();
-                for port in ports {
+                for eport in ports {
+
+                    let mut egm = egress_metadata.clone();
+                    let mut parsed_ = parsed.clone();
 
                     //
                     // Run the egress block
                     //
 
-                    egress_metadata.port.store_le(port);
+                    egm.port = {
+                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        x.store_le(eport);
+                        x
+                    };
 
                     (self.egress)(
-                        &mut parsed,
+                        &mut parsed_,
                         &mut ingress_metadata,
-                        &mut egress_metadata,
+                        &mut egm,
                         #(#egress_tbl_args),*
                     );
 
-                    if egress_metadata.drop {
+                    if egm.drop {
                         continue;
                     }
 
@@ -314,13 +321,13 @@ impl<'a> PipelineGenerator<'a> {
                     // Create the packet output.
                     //
 
-                    let bv = parsed.to_bitvec();
+                    let bv = parsed_.to_bitvec();
                     let buf = bv.as_raw_slice();
                     let out = packet_out{
                         header_data: buf.to_owned(),
                         payload_data: &pkt.data[parsed_size..],
                     };
-                    result.push((out, port))
+                    result.push((out, eport))
 
                 }
                 result

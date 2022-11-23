@@ -422,7 +422,7 @@ pub enum ExpressionKind {
     List(Vec<Box<Expression>>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
     Add,
     Subtract,
