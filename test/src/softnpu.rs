@@ -19,6 +19,8 @@ pub fn do_expect_frames(
     loop {
         let fs = phy.recv();
         frames.extend_from_slice(&fs);
+        // TODO this is not a great interface, if frames.len() > n, we should do
+        // something besides hang forever.
         if frames.len() == n {
             break;
         }
@@ -73,13 +75,18 @@ const FBUF: usize = 4096;
 const MTU: usize = 1500;
 
 pub struct SoftNpu<P: p4rs::Pipeline> {
+    pub pipeline: Option<P>,
     inner_phys: Option<Vec<InnerPhy<RING, FBUF, MTU>>>,
     outer_phys: Vec<Arc<OuterPhy<RING, FBUF, MTU>>>,
     _fb: Arc<FrameBuffer<FBUF, MTU>>,
-    pipeline: Option<P>,
 }
 
 impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
+    /// Create a new SoftNpu ASIC emulator. The `radix` indicates the number of
+    /// ports. The `pipeline` is the `x4c` compiled program that the ASIC will
+    /// run. When `cpu_port` is set to true, sidecar data in `TxFrame` elements
+    /// will be added to packets sent through port 0 (as a sidecar header) on
+    /// the way to the ASIC.
     pub fn new(radix: usize, pipeline: P, cpu_port: bool) -> Self {
         let fb = Arc::new(FrameBuffer::<FBUF, MTU>::new());
         let mut inner_phys = Vec::new();
@@ -135,46 +142,45 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
 
                     let mut pkt = packet_in::new(content);
 
-                    match pipeline.process_packet(i as u16, &mut pkt) {
-                        Some((out_pkt, port)) => {
-                            let port = port as usize;
+                    let port = i as u16;
+                    let output = pipeline.process_packet(port, &mut pkt);
+                    for (out_pkt, out_port) in &output {
+                        let out_port = *out_port as usize;
+                        //
+                        // get frame for packet
+                        //
 
-                            //
-                            // get frame for packet
-                            //
+                        let phy = &inner_phys[out_port];
+                        let eg = &phy.tx_p;
+                        let mut fps = eg.reserve(1).unwrap();
+                        let fp = fps.next().unwrap();
 
-                            let phy = &inner_phys[port];
-                            let eg = &phy.tx_p;
-                            let mut fps = eg.reserve(1).unwrap();
-                            let fp = fps.next().unwrap();
+                        //
+                        // emit headers
+                        //
 
-                            //
-                            // emit headers
-                            //
+                        eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
 
-                            eg.write_at(fp, out_pkt.header_data.as_slice(), 0);
+                        //
+                        // emit payload
+                        //
 
-                            //
-                            // emit payload
-                            //
+                        eg.write_at(
+                            fp,
+                            out_pkt.payload_data,
+                            out_pkt.header_data.len(),
+                        );
 
-                            eg.write_at(
-                                fp,
-                                out_pkt.payload_data,
-                                out_pkt.header_data.len(),
-                            );
-
-                            egress_count[port] += 1;
-                        }
-                        None => {
-                            println!("drop");
-                        }
+                        egress_count[out_port] += 1;
                     }
                 }
                 ig.rx_c.consume(frames_in).unwrap();
                 ig.rx_counter.fetch_add(frames_in, Ordering::Relaxed);
 
                 for (j, n) in egress_count.iter().enumerate() {
+                    if *n == 0 {
+                        continue;
+                    }
                     let phy = &inner_phys[j];
                     phy.tx_p.produce(*n).unwrap();
                     phy.tx_counter.fetch_add(*n, Ordering::Relaxed);
@@ -452,6 +458,10 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
         self.rx_counter.fetch_add(buf.len(), Ordering::Relaxed);
 
         buf
+    }
+
+    pub fn recv_buffer_len(&self) -> usize {
+        self.tx_c.consumable().count()
     }
 
     pub fn tx_count(&self) -> usize {

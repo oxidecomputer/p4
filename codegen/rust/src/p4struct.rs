@@ -99,7 +99,7 @@ impl<'a> StructGenerator<'a> {
         let name = format_ident!("{}", s.name);
 
         let mut structure = quote! {
-            #[derive(Debug, Default)]
+            #[derive(Debug, Default, Clone)]
             pub struct #name {
                 #(#members),*
             }
@@ -107,13 +107,13 @@ impl<'a> StructGenerator<'a> {
         if !valid_member_size.is_empty() {
             structure.extend(quote! {
                 impl #name {
-                    pub fn valid_header_size(&self) -> usize {
+                    fn valid_header_size(&self) -> usize {
                         let mut x: usize = 0;
                         #(#valid_member_size)*
                         x
                     }
 
-                    pub fn to_bitvec(&self) -> BitVec<u8, Msb0> {
+                    fn to_bitvec(&self) -> BitVec<u8, Msb0> {
                         let mut x =
                             bitvec![u8, Msb0; 0; self.valid_header_size()];
                         let mut off = 0;
@@ -121,7 +121,7 @@ impl<'a> StructGenerator<'a> {
                         x
                     }
 
-                    pub fn dump(&self) -> String {
+                    fn dump(&self) -> String {
                         #dump
                     }
                 }
@@ -129,13 +129,13 @@ impl<'a> StructGenerator<'a> {
         } else {
             structure.extend(quote! {
                 impl #name {
-                    pub fn valid_header_size(&self) -> usize { 0 }
+                    fn valid_header_size(&self) -> usize { 0 }
 
-                    pub fn to_bitvec(&self) -> BitVec<u8, Msb0> {
+                    fn to_bitvec(&self) -> BitVec<u8, Msb0> {
                         bitvec![u8, Msb0; 0; 0]
                     }
 
-                    pub fn dump(&self) -> String {
+                    fn dump(&self) -> String {
                         std::string::String::new()
                     }
                 }

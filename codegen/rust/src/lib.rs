@@ -186,10 +186,14 @@ fn dtrace_probes() -> TokenStream {
             fn parser_transition(_: &str) {}
             fn parser_dropped() {}
             fn control_apply(_: &str) {}
-            fn control_dropped(_: &str) {}
-            fn control_accepted(_: &str) {}
             fn control_table_hit(_: &str) {}
             fn control_table_miss(_: &str) {}
+            fn ingress_dropped(_: &str) {}
+            fn ingress_accepted(_: &str) {}
+            fn egress_dropped(_: &str) {}
+            fn egress_accepted(_: &str) {}
+            fn egress_table_hit(_: &str) {}
+            fn egress_table_miss(_: &str) {}
             fn action(_: &str) {}
         }
     }
@@ -220,6 +224,9 @@ fn rust_type(ty: &Type) -> TokenStream {
         }
         Type::ExternFunction => {
             todo!("rust type for extern function");
+        }
+        Type::HeaderMethod => {
+            todo!("rust type for header method");
         }
         Type::Table => {
             todo!("rust type for table");
@@ -271,6 +278,9 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         }
         Type::ExternFunction => {
             todo!("type size for extern function");
+        }
+        Type::HeaderMethod => {
+            todo!("type size for header method");
         }
         Type::Table => {
             todo!("type size for table");
@@ -369,17 +379,29 @@ fn is_rust_reference(lval: &Lvalue, names: &HashMap<String, NameInfo>) -> bool {
 }
 
 fn qualified_table_name(
+    control: Option<&Control>,
     chain: &Vec<(String, &Control)>,
     table: &Table,
 ) -> String {
-    table_qname(chain, table, '.')
+    match control {
+        Some(control) => {
+            format!("{}.{}", control.name, table_qname(chain, table, '.'))
+        }
+        _ => table_qname(chain, table, '.'),
+    }
 }
 
 fn qualified_table_function_name(
+    control: Option<&Control>,
     chain: &Vec<(String, &Control)>,
     table: &Table,
 ) -> String {
-    table_qname(chain, table, '_')
+    match control {
+        Some(control) => {
+            format!("{}_{}", control.name, table_qname(chain, table, '_'))
+        }
+        _ => table_qname(chain, table, '_'),
+    }
 }
 
 fn table_qname(

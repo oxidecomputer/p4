@@ -212,6 +212,7 @@ pub enum Type {
     List(Vec<Box<Type>>),
     State,
     Action,
+    HeaderMethod,
 }
 
 impl Type {
@@ -248,6 +249,7 @@ impl fmt::Display for Type {
             Type::Void => write!(f, "void"),
             Type::State => write!(f, "state"),
             Type::Action => write!(f, "action"),
+            Type::HeaderMethod => write!(f, "header method"),
             Type::List(elems) => {
                 write!(f, "list<")?;
                 for e in elems {
@@ -420,7 +422,7 @@ pub enum ExpressionKind {
     List(Vec<Box<Expression>>),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
     Add,
     Subtract,
@@ -463,6 +465,27 @@ impl Header {
     }
     pub fn names(&self) -> HashMap<String, NameInfo> {
         let mut names = HashMap::new();
+        names.insert(
+            "setValid".into(),
+            NameInfo {
+                ty: Type::HeaderMethod,
+                decl: DeclarationInfo::Method,
+            },
+        );
+        names.insert(
+            "setInvalid".into(),
+            NameInfo {
+                ty: Type::HeaderMethod,
+                decl: DeclarationInfo::Method,
+            },
+        );
+        names.insert(
+            "isValid".into(),
+            NameInfo {
+                ty: Type::HeaderMethod,
+                decl: DeclarationInfo::Method,
+            },
+        );
         for p in &self.members {
             names.insert(
                 p.name.clone(),

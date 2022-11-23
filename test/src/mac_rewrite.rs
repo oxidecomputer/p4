@@ -31,7 +31,7 @@ p4_macro::use_p4!(
 
 #[test]
 fn mac_rewrite2() -> Result<(), anyhow::Error> {
-    let mut pipeline = main_pipeline::new();
+    let mut pipeline = main_pipeline::new(4);
 
     //
     // add table entries
@@ -40,37 +40,37 @@ fn mac_rewrite2() -> Result<(), anyhow::Error> {
     let addr_d: Ipv6Addr = "fe80::aae1:deff:fe01:701d".parse().unwrap();
     let addr_e: Ipv6Addr = "fe80::aae1:deff:fe01:701e".parse().unwrap();
 
-    pipeline.add_local_local_entry(
-        "local".into(),
+    pipeline.add_ingress_local_local_entry(
+        "set_local".into(),
         addr_c.octets().as_ref(),
         &Vec::new(),
     );
-    pipeline.add_local_local_entry(
-        "local".into(),
+    pipeline.add_ingress_local_local_entry(
+        "set_local".into(),
         addr_d.octets().as_ref(),
         &Vec::new(),
     );
-    pipeline.add_local_local_entry(
-        "local".into(),
+    pipeline.add_ingress_local_local_entry(
+        "set_local".into(),
         addr_e.octets().as_ref(),
         &Vec::new(),
     );
 
     // resolver table entries
 
-    pipeline.add_router_resolver_resolver_entry(
+    pipeline.add_ingress_router_resolver_resolver_entry(
         "rewrite_dst".into(),
         addr_c.octets().as_ref(),
         &[0x44, 0x44, 0x44, 0x44, 0x44, 0x44],
     );
 
-    pipeline.add_router_resolver_resolver_entry(
+    pipeline.add_ingress_router_resolver_resolver_entry(
         "rewrite_dst".into(),
         addr_d.octets().as_ref(),
         &[0x33, 0x33, 0x33, 0x33, 0x33, 0x33],
     );
 
-    pipeline.add_router_resolver_resolver_entry(
+    pipeline.add_ingress_router_resolver_resolver_entry(
         "rewrite_dst".into(),
         addr_e.octets().as_ref(),
         &[0x22, 0x22, 0x22, 0x22, 0x22, 0x22],
@@ -83,21 +83,21 @@ fn mac_rewrite2() -> Result<(), anyhow::Error> {
     key.push(24); // prefix length
     let mut args = 1u16.to_be_bytes().to_vec();
     args.extend_from_slice(&addr_c.octets());
-    pipeline.add_router_router_entry("forward", &key, &args);
+    pipeline.add_ingress_router_router_entry("forward", &key, &args);
 
     let prefix: Ipv6Addr = "fd00:2000::".parse().unwrap();
     let mut key = prefix.octets().to_vec();
     key.push(24); // prefix length
     let mut args = 2u16.to_be_bytes().to_vec();
     args.extend_from_slice(&addr_d.octets());
-    pipeline.add_router_router_entry("forward", &key, &args);
+    pipeline.add_ingress_router_router_entry("forward", &key, &args);
 
     let prefix: Ipv6Addr = "fd00:3000::".parse().unwrap();
     let mut key = prefix.octets().to_vec();
     key.push(24); // prefix length
     let mut args = 3u16.to_be_bytes().to_vec();
     args.extend_from_slice(&addr_e.octets());
-    pipeline.add_router_router_entry("forward", &key, &args);
+    pipeline.add_ingress_router_router_entry("forward", &key, &args);
 
     //
     // run program

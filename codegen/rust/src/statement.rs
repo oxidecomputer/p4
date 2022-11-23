@@ -381,18 +381,8 @@ impl<'a> StatementGenerator<'a> {
             let mut locals = Vec::new();
             let mut args = Vec::new();
             for (i, a) in c.args.iter().enumerate() {
-                let mut arg_xpr = eg.generate_expression(a.as_ref());
+                let arg_xpr = eg.generate_expression(a.as_ref());
                 let et = self.hlir.expression_types.get(a.as_ref()).unwrap();
-                // if the argument is an lvalue and a rust type that gets passed
-                // by reference, take a ref
-                if let ExpressionKind::Lvalue(_) = a.as_ref().kind {
-                    match et {
-                        Type::Bit(_) | Type::Varbit(_) | Type::Int(_) => {
-                            arg_xpr = quote! { &#arg_xpr };
-                        }
-                        _ => {}
-                    }
-                }
                 let local_name = format_ident!("arg{}", i);
                 if let ExpressionKind::BitLit(_, _) = a.as_ref().kind {
                     locals.push(quote! {
@@ -414,6 +404,9 @@ impl<'a> StatementGenerator<'a> {
                                     )
                                     });
                                 match name_info.decl {
+                                    // if this is a control parameter, it should
+                                    // already have the correct reference
+                                    // annotations
                                     DeclarationInfo::Parameter(_) => {
                                         args.push(arg_xpr);
                                     }
@@ -434,6 +427,14 @@ impl<'a> StatementGenerator<'a> {
                         ExpressionKind::BitLit(_, _) => {
                             args.push(quote! { &#local_name })
                         }
+                        // if the argument is an lvalue and a rust type that
+                        // gets passed by reference, take a ref
+                        ExpressionKind::Lvalue(_) => match et {
+                            Type::Bit(_) | Type::Varbit(_) | Type::Int(_) => {
+                                args.push(quote! { &#arg_xpr });
+                            }
+                            _ => {}
+                        },
                         _ => {
                             args.push(arg_xpr);
                         }
@@ -443,7 +444,8 @@ impl<'a> StatementGenerator<'a> {
 
             let tables = control_instance.tables(self.ast);
             for (cs, table) in tables {
-                let qtn = crate::qualified_table_function_name(&cs, table);
+                let qtn =
+                    crate::qualified_table_function_name(None, &cs, table);
                 let name = format_ident!("{}_{}", c.lval.root(), qtn);
                 args.push(quote! { #name });
             }

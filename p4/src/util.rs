@@ -10,7 +10,7 @@ pub fn resolve_lvalue(
 ) -> Result<NameInfo, String> {
     let root = match names.get(lval.root()) {
         Some(name_info) => name_info,
-        None => return Err(format!("codegen: unresolved lval {:#?}", lval)),
+        None => return Err(format!("{} not found", lval.root())),
     };
     let result = match &root.ty {
         Type::Bool => root.clone(),
@@ -20,6 +20,7 @@ pub fn resolve_lvalue(
         Type::Int(_) => root.clone(),
         Type::String => root.clone(),
         Type::ExternFunction => root.clone(),
+        Type::HeaderMethod => root.clone(),
         Type::Table => root.clone(),
         Type::Void => root.clone(),
         Type::List(_) => root.clone(),
@@ -36,7 +37,7 @@ pub fn resolve_lvalue(
                 resolve_lvalue(&lval.pop_left(), ast, &parent.names())?
             } else {
                 return Err(format!(
-                    "codegen: User defined name '{}' does not exist",
+                    "User defined name '{}' does not exist",
                     name
                 ));
             }

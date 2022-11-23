@@ -357,6 +357,14 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
+            Type::HeaderMethod => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "cannot index a header method".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
             Type::Table => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
@@ -446,12 +454,12 @@ impl<'a> HlirGenerator<'a> {
                     .insert(lval.clone(), name_info.clone());
                 Some(name_info.ty)
             }
-            Err(_e) => {
+            Err(e) => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "could not resolve lvalue: {}",
-                        lval.name,
+                        "could not resolve lvalue: {}\n    {}",
+                        lval.name, e,
                     ),
                     token: lval.token.clone(),
                 });

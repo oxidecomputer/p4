@@ -6,11 +6,13 @@ struct headers_t {
 
 struct ingress_metadata_t {
     bit<16> port;
+    bool drop;
 }
 
 struct egress_metadata_t {
     bit<16> port;
     bool drop;
+    bool broadcast;
 }
 
 header ethernet_h {
@@ -66,7 +68,16 @@ control ingress(
 
 }
 
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+}
+
 SoftNPU(
     parse(),
-    ingress()
+    ingress(),
+    egress()
 ) main;

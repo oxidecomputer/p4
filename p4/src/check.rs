@@ -196,6 +196,7 @@ impl ControlChecker {
         hlir: &Hlir,
         diags: &mut Diagnostics,
     ) {
+        diags.extend(&check_statement_block_lvalues(&c.apply, ast, &c.names()));
         for s in &c.apply.statements {
             if let Statement::Call(call) = s {
                 Self::check_apply_call(c, call, ast, hlir, diags);
@@ -736,7 +737,7 @@ fn check_lvalue(
                     message: format!(
                         "type {} does not have a member {}",
                         format!("bit<{}>", size).bright_blue(),
-                        parts[1],
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -749,7 +750,7 @@ fn check_lvalue(
                     message: format!(
                         "type {} does not have a member {}",
                         format!("varbit<{}>", size).bright_blue(),
-                        parts[1]
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -762,7 +763,7 @@ fn check_lvalue(
                     message: format!(
                         "type int<{}> does not have a member {}",
                         format!("int<{}>", size).bright_blue(),
-                        parts[1]
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -775,7 +776,7 @@ fn check_lvalue(
                     message: format!(
                         "type {} does not have a member {}",
                         "string".bright_blue(),
-                        parts[1]
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -790,14 +791,23 @@ fn check_lvalue(
                 });
             }
         }
-        Type::Table => {
+        Type::HeaderMethod => {
             if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "header methods do not have members".into(),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::Table => {
+            if parts.len() > 1 && parts.last() != Some(&"apply") {
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
                         "type {} does not have a member {}",
                         "table".bright_blue(),
-                        parts[1]
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -810,7 +820,7 @@ fn check_lvalue(
                     message: format!(
                         "type {} does not have a member {}",
                         "void".bright_blue(),
-                        parts[1]
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -823,7 +833,7 @@ fn check_lvalue(
                     message: format!(
                         "type {} does not have a member {}",
                         "list".bright_blue(),
-                        parts[1]
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });
@@ -885,6 +895,18 @@ fn check_lvalue(
                         Some(&parent.name),
                     );
                     diags.extend(&sub_diags);
+                }
+            } else if let Some(_control) = ast.get_control(&name) {
+                if parts.len() > 1 && parts.last() != Some(&"apply") {
+                    diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!(
+                            "Control {} has no member {}",
+                            name.bright_blue(),
+                            parts.last().unwrap().bright_blue(),
+                        ),
+                        token: lval.token.clone(),
+                    });
                 }
             } else {
                 diags.push(Diagnostic {

@@ -73,7 +73,10 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_identifier(&mut self) -> Result<(String, Token), Error> {
+    fn parse_identifier(
+        &mut self,
+        what: &str,
+    ) -> Result<(String, Token), Error> {
         let token = self.next_token()?;
         Ok((
             match token.kind {
@@ -87,8 +90,8 @@ impl<'a> Parser<'a> {
                     return Err(ParserError {
                         at: token.clone(),
                         message: format!(
-                            "Found {} expected identifier.",
-                            token.kind,
+                            "Found {} expected {}.",
+                            token.kind, what,
                         ),
                         source: self.lexer.lines[token.line].into(),
                     }
@@ -99,11 +102,11 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_lvalue(&mut self) -> Result<Lvalue, Error> {
+    fn parse_lvalue(&mut self, what: &str) -> Result<Lvalue, Error> {
         let mut name = String::new();
         let mut first_token = None;
         loop {
-            let (ident, tk) = self.parse_identifier()?;
+            let (ident, tk) = self.parse_identifier(what)?;
             match first_token {
                 Some(_) => {}
                 None => first_token = Some(tk),
@@ -224,7 +227,7 @@ impl<'a> Parser<'a> {
             Vec::new()
         };
 
-        let (name, _) = self.parse_identifier()?;
+        let (name, _) = self.parse_identifier("variable name")?;
 
         let token = self.next_token()?;
         // check for initializer
@@ -253,7 +256,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_constant(&mut self) -> Result<Constant, Error> {
         let (ty, _) = self.parse_type()?;
-        let (name, _) = self.parse_identifier()?;
+        let (name, _) = self.parse_identifier("constant name")?;
         self.expect_token(lexer::Kind::Equals)?;
         let initializer = self.parse_expression()?;
         self.expect_token(lexer::Kind::Semicolon)?;
@@ -557,7 +560,7 @@ impl<'a> Parser<'a> {
             // parse a parameter
             let (direction, dtk) = self.parse_direction()?;
             let (ty, ttk) = self.parse_type()?;
-            let (name, ntk) = self.parse_identifier()?;
+            let (name, ntk) = self.parse_identifier("parameter name")?;
             let token = self.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
                 result.push(ControlParameter {
@@ -592,7 +595,7 @@ impl<'a> Parser<'a> {
         self.expect_token(lexer::Kind::AngleOpen)?;
 
         loop {
-            let (ident, _) = self.parse_identifier()?;
+            let (ident, _) = self.parse_identifier("type parameter name")?;
             result.push(ident);
 
             let token = self.next_token()?;
@@ -670,7 +673,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         let (ty, _) = self.parser.parse_type()?;
 
         // next comes a name
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("constant name")?;
 
         // then an initializer
         self.parser.expect_token(lexer::Kind::Equals)?;
@@ -687,7 +690,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
     pub fn handle_header_decl(&mut self, ast: &mut AST) -> Result<(), Error> {
         // the first token of a header must be an identifier
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("header name")?;
 
         // next the header body starts with an open curly brace
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
@@ -709,7 +712,8 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
             // parse a header member
             let (ty, tyt) = self.parser.parse_type()?;
-            let (name, _) = self.parser.parse_identifier()?;
+            let (name, _) =
+                self.parser.parse_identifier("header member name")?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
             header.members.push(HeaderMember {
@@ -726,7 +730,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
     pub fn handle_struct_decl(&mut self, ast: &mut AST) -> Result<(), Error> {
         // the first token of a struct must be an identifier
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("struct name")?;
 
         // next the struct body starts with an open curly brace
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
@@ -748,7 +752,8 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
             // parse a struct member
             let (ty, tyt) = self.parser.parse_type()?;
-            let (name, _) = self.parser.parse_identifier()?;
+            let (name, _) =
+                self.parser.parse_identifier("struct member name")?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
             p4_struct.members.push(StructMember {
@@ -768,7 +773,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         let (ty, _) = self.parser.parse_type()?;
 
         // next must be a name
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("typedef name")?;
 
         self.parser.expect_token(lexer::Kind::Semicolon)?;
 
@@ -796,7 +801,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
     }
 
     pub fn handle_package(&mut self, ast: &mut AST) -> Result<(), Error> {
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("package name")?;
         let mut pkg = Package::new(name);
 
         let token = self.parser.next_token()?;
@@ -819,7 +824,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
     }
 
     pub fn handle_extern(&mut self, ast: &mut AST) -> Result<(), Error> {
-        let (name, token) = self.parser.parse_identifier()?;
+        let (name, token) = self.parser.parse_identifier("extern name")?;
         self.parser.expect_token(lexer::Kind::CurlyOpen)?;
 
         let mut ext = Extern {
@@ -831,7 +836,8 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
         // parse functions
         loop {
             let (return_type, _) = self.parser.parse_type()?;
-            let (name, _) = self.parser.parse_identifier()?;
+            let (name, _) =
+                self.parser.parse_identifier("extern function name")?;
 
             let token = self.parser.next_token()?;
             let type_parameters = if token.kind == lexer::Kind::AngleOpen {
@@ -882,7 +888,9 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
                         parameter.type_parameters =
                             self.parser.parse_type_parameters()?;
                     }
-                    let (name, _) = self.parser.parse_identifier()?;
+                    let (name, _) = self
+                        .parser
+                        .parse_identifier("package parameter name")?;
                     parameter.name = name;
                     pkg.parameters.push(parameter);
                 }
@@ -912,7 +920,7 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
         self.parser.expect_token(lexer::Kind::ParenOpen)?;
         loop {
-            let (arg, _) = self.parser.parse_identifier()?;
+            let (arg, _) = self.parser.parse_identifier("package name")?;
             self.parser.expect_token(lexer::Kind::ParenOpen)?;
             self.parser.expect_token(lexer::Kind::ParenClose)?;
             inst.parameters.push(arg);
@@ -927,7 +935,8 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
             }
         }
 
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) =
+            self.parser.parse_identifier("package instance name")?;
         inst.name = name;
         self.parser.expect_token(lexer::Kind::Semicolon)?;
 
@@ -947,7 +956,7 @@ impl<'a, 'b> ControlParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Control, Error> {
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("control name")?;
         let mut control = Control::new(name);
 
         //
@@ -1065,7 +1074,7 @@ impl<'a, 'b> ActionParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Action, Error> {
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("action name")?;
         let mut action = Action::new(name);
 
         self.parse_parameters(&mut action)?;
@@ -1099,7 +1108,8 @@ impl<'a, 'b> ActionParser<'a, 'b> {
                 Err(_) => Direction::Unspecified,
             };
             let (ty, ty_token) = self.parser.parse_type()?;
-            let (name, name_token) = self.parser.parse_identifier()?;
+            let (name, name_token) =
+                self.parser.parse_identifier("action parameter name")?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
                 action.parameters.push(ActionParameter {
@@ -1144,7 +1154,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Table, Error> {
-        let (name, tk) = self.parser.parse_identifier()?;
+        let (name, tk) = self.parser.parse_identifier("table name")?;
         let mut table = Table::new(name, tk);
 
         self.parse_body(&mut table)?;
@@ -1235,7 +1245,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
             }
             self.parser.backlog.push(token);
 
-            let key = self.parser.parse_lvalue()?;
+            let key = self.parser.parse_lvalue("table key")?;
             self.parser.expect_token(lexer::Kind::Colon)?;
             let match_kind = self.parse_match_kind()?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
@@ -1278,7 +1288,8 @@ impl<'a, 'b> TableParser<'a, 'b> {
             }
             self.parser.backlog.push(token);
 
-            let (action_name, atk) = self.parser.parse_identifier()?;
+            let (action_name, atk) =
+                self.parser.parse_identifier("action name")?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
 
             table.actions.push(Lvalue {
@@ -1295,7 +1306,8 @@ impl<'a, 'b> TableParser<'a, 'b> {
         table: &mut Table,
     ) -> Result<(), Error> {
         self.parser.expect_token(lexer::Kind::Equals)?;
-        (table.default_action, _) = self.parser.parse_identifier()?;
+        (table.default_action, _) =
+            self.parser.parse_identifier("default action name")?;
         self.parser.expect_token(lexer::Kind::Semicolon)?;
         Ok(())
     }
@@ -1328,7 +1340,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
     }
 
     pub fn parse_actionref(&mut self) -> Result<ActionRef, Error> {
-        let (name, aref_tk) = self.parser.parse_identifier()?;
+        let (name, aref_tk) = self.parser.parse_identifier("action name")?;
         let token = self.parser.next_token()?;
         let mut actionref = ActionRef::new(name, aref_tk);
         match token.kind {
@@ -1417,7 +1429,7 @@ impl<'a, 'b> StatementParser<'a, 'b> {
 
         // wrap the identifier as an lvalue, consuming any dot
         // concatenated references
-        let lval = self.parser.parse_lvalue()?;
+        let lval = self.parser.parse_lvalue("identifier")?;
 
         let token = self.parser.next_token()?;
         let statement = match token.kind {
@@ -1552,7 +1564,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
             ),
             lexer::Kind::Identifier(_) => {
                 self.parser.backlog.push(token.clone());
-                let lval = self.parser.parse_lvalue()?;
+                let lval = self.parser.parse_lvalue("identifier")?;
 
                 let this_token = token.clone();
                 let token = self.parser.next_token()?;
@@ -1653,7 +1665,7 @@ impl<'a, 'b> ParserParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<ast::Parser, Error> {
-        let (name, _) = self.parser.parse_identifier()?;
+        let (name, _) = self.parser.parse_identifier("parser name")?;
         let mut parser = ast::Parser::new(name, self.start.clone());
 
         let token = self.parser.next_token()?;
@@ -1706,7 +1718,7 @@ impl<'a, 'b> ParserParser<'a, 'b> {
             // parse a parameter
             let (direction, dtk) = self.parser.parse_direction()?;
             let (ty, ttk) = self.parser.parse_type()?;
-            let (name, ntk) = self.parser.parse_identifier()?;
+            let (name, ntk) = self.parser.parse_identifier("parameter name")?;
             let token = self.parser.next_token()?;
             if token.kind == lexer::Kind::ParenClose {
                 parser.parameters.push(ControlParameter {
@@ -1787,7 +1799,7 @@ impl<'a, 'b> StateParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<State, Error> {
-        let (name, tk) = self.parser.parse_identifier()?;
+        let (name, tk) = self.parser.parse_identifier("state name")?;
         let mut state = State::new(name, tk);
 
         self.parse_body(&mut state)?;
@@ -1833,7 +1845,7 @@ impl<'a, 'b> SelectParser<'a, 'b> {
 
             let keyset = self.parser.parse_keyset()?;
             self.parser.expect_token(lexer::Kind::Colon)?;
-            let (name, _) = self.parser.parse_identifier()?;
+            let (name, _) = self.parser.parse_identifier("select parameter")?;
             self.parser.expect_token(lexer::Kind::Semicolon)?;
             select.elements.push(SelectElement { keyset, name });
         }

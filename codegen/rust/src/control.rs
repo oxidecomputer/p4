@@ -35,14 +35,20 @@ impl<'a> ControlGenerator<'a> {
             self.generate_control(control);
         }
 
-        let ingress = match self.ast.get_control("ingress") {
-            Some(i) => i,
-            None => return,
+        if let Some(ingress) = self.ast.get_control("ingress") {
+            self.generate_top_level_control(ingress);
         };
-        let tables = ingress.tables(self.ast);
+
+        if let Some(egress) = self.ast.get_control("egress") {
+            self.generate_top_level_control(egress);
+        };
+    }
+
+    fn generate_top_level_control(&mut self, control: &Control) {
+        let tables = control.tables(self.ast);
         for (cs, t) in tables {
-            let qtn = qualified_table_function_name(&cs, t);
-            let qtfn = qualified_table_function_name(&cs, t);
+            let qtn = qualified_table_function_name(Some(control), &cs, t);
+            let qtfn = qualified_table_function_name(Some(control), &cs, t);
             let control = cs.last().unwrap().1;
             let (_, mut param_types) = self.control_parameters(control);
             for var in &control.variables {
@@ -86,7 +92,7 @@ impl<'a> ControlGenerator<'a> {
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
             let c = cs.last().unwrap().1;
-            let qtn = qualified_table_function_name(&cs, table);
+            let qtn = qualified_table_function_name(None, &cs, table);
             let (_, mut param_types) = self.control_parameters(c);
             for var in &c.variables {
                 if let Type::UserDefined(typename) = &var.ty {

@@ -4,7 +4,8 @@
 
 SoftNPU(
     parse(),
-    ingress()
+    ingress(),
+    egress()
 ) main;
 
 struct headers_t {
@@ -53,7 +54,7 @@ control local(
         is_local = false;
     }
 
-    action local() {
+    action set_local() {
         is_local = true;
     }
 
@@ -62,7 +63,7 @@ control local(
             hdr.ipv6.dst: exact;
         }
         actions = {
-            local;
+            set_local;
             nonlocal;
         }
         default_action = nonlocal;
@@ -215,4 +216,12 @@ control ingress(
             router.apply(hdr, ingress, egress);
         }
     }
+}
+
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
 }

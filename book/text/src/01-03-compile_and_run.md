@@ -20,7 +20,7 @@ use tests::{expect_frames};
 p4_macro::use_p4!(p4 = "book/code/src/bin/hello-world.p4", pipeline_name = "hello");
 
 fn main() -> Result<(), anyhow::Error> {
-    let pipeline = main_pipeline::new();
+    let pipeline = main_pipeline::new(2);
     let mut npu = SoftNpu::new(2, pipeline, false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
@@ -61,7 +61,7 @@ The main artifact this produces is a Rust `struct` called `main_pipeline` which 
 in the code that comes next.
 
 ```rust
-let pipeline = main_pipeline::new();
+let pipeline = main_pipeline::new(2);
 let mut npu = SoftNpu::new(2, pipeline, false);
 let phy1 = npu.phy(0);
 let phy2 = npu.phy(1);

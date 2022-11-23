@@ -54,44 +54,75 @@ impl<'a> PipelineGenerator<'a> {
             panic!("Only the SoftNPU package is supported");
         }
 
-        if inst.parameters.len() != 2 {
+        if inst.parameters.len() != 3 {
             //TODO check this in the checker for a nicer failure mode.
-            panic!("SoftNPU instances take exactly 2 parameters");
+            panic!("SoftNPU instances take exactly 3 parameters");
         }
 
         let parser = match self.ast.get_parser(&inst.parameters[0]) {
             Some(p) => p,
             None => {
                 //TODO check this in the checker for a nicer failure mode.
-                panic!("First argument to SoftNPU must be a defined parser");
+                panic!("First argument to SoftNPU must be a parser");
             }
         };
 
-        let control = match self.ast.get_control(&inst.parameters[1]) {
+        let ingress = match self.ast.get_control(&inst.parameters[1]) {
             Some(c) => c,
             None => {
                 //TODO check this in the checker for a nicer failure mode.
-                panic!("Second argument to SoftNPU must be a defined parser");
+                panic!("Second argument to SoftNPU must be a control block");
             }
         };
 
-        let (table_members, table_initializers) = self.table_members(control);
+        let egress = match self.ast.get_control(&inst.parameters[2]) {
+            Some(c) => c,
+            None => {
+                //TODO check this in the checker for a nicer failure mode.
+                panic!("Third argument to SoftNPU must be a control block");
+            }
+        };
+
         let pipeline_name = format_ident!("{}_pipeline", inst.name);
 
+        //
+        // get table members and initializers from both the ingress and egress
+        // controllers.
+        //
+
+        let (mut table_members, mut table_initializers) =
+            self.table_members(ingress);
+
+        let (egress_table_members, egress_table_initializers) =
+            self.table_members(egress);
+
+        table_members.extend_from_slice(&egress_table_members);
+        table_initializers.extend_from_slice(&egress_table_initializers);
+
+        //
+        // parser, ingress and egress function members
+        //
+
         let (parse_member, parser_initializer) = self.parse_entrypoint(parser);
-        let (control_member, control_initializer) =
-            self.control_entrypoint(control);
+
+        let (ingress_member, ingress_initializer) =
+            self.control_entrypoint("ingress", ingress);
+
+        let (egress_member, egress_initializer) =
+            self.control_entrypoint("egress", egress);
 
         let pipeline_impl_process_packet =
-            self.pipeline_impl_process_packet(parser, control);
+            self.pipeline_impl_process_packet(parser, ingress, egress);
 
-        let add_table_entry_method = self.add_table_entry_method(control);
+        let add_table_entry_method =
+            self.add_table_entry_method(ingress, egress);
+        let remove_table_entry_method =
+            self.remove_table_entry_method(ingress, egress);
+        let get_table_entries_method =
+            self.get_table_entries_method(ingress, egress);
+        let get_table_ids_method = self.get_table_ids_method(ingress, egress);
 
-        let remove_table_entry_method = self.remove_table_entry_method(control);
-        let get_table_entries_method = self.get_table_entries_method(control);
-        let get_table_ids_method = self.get_table_ids_method(control);
-
-        let table_modifiers = self.table_modifiers(control);
+        let table_modifiers = self.table_modifiers(ingress, egress);
 
         let c_create_fn =
             format_ident!("_{}_pipeline_create", self.settings.pipeline_name);
@@ -100,17 +131,20 @@ impl<'a> PipelineGenerator<'a> {
             pub struct #pipeline_name {
                 #(#table_members),*,
                 #parse_member,
-                #control_member
+                #ingress_member,
+                #egress_member,
+                radix: u16,
             }
 
-
             impl #pipeline_name {
-                pub fn new() -> Self {
+                pub fn new(radix: u16) -> Self {
                     usdt::register_probes().unwrap();
                     Self {
                         #(#table_initializers),*,
                         #parser_initializer,
-                        #control_initializer,
+                        #ingress_initializer,
+                        #egress_initializer,
+                        radix,
                     }
                 }
                 #table_modifiers
@@ -127,8 +161,9 @@ impl<'a> PipelineGenerator<'a> {
             unsafe impl Send for #pipeline_name { }
 
             #[no_mangle]
-            pub extern "C" fn #c_create_fn() -> *mut dyn p4rs::Pipeline {
-                let pipeline = main_pipeline::new();
+            pub extern "C" fn #c_create_fn(radix: u16)
+            -> *mut dyn p4rs::Pipeline{
+                let pipeline = main_pipeline::new(radix);
                 let boxpipe: Box<dyn p4rs::Pipeline> = Box::new(pipeline);
                 Box::into_raw(boxpipe)
             }
@@ -140,17 +175,27 @@ impl<'a> PipelineGenerator<'a> {
     fn pipeline_impl_process_packet(
         &mut self,
         parser: &Parser,
-        control: &Control,
+        ingress: &Control,
+        egress: &Control,
     ) -> TokenStream {
         let parsed_type = rust_type(&parser.parameters[1].ty);
-
         // determine table arguments
-        let tables = control.tables(self.ast);
-        let mut tbl_args = Vec::new();
-        for (cs, t) in tables {
-            let qtfn = qualified_table_function_name(&cs, t);
+        let ingress_tables = ingress.tables(self.ast);
+        //TODO(dry)
+        let mut ingress_tbl_args = Vec::new();
+        for (cs, t) in ingress_tables {
+            let qtfn = qualified_table_function_name(Some(ingress), &cs, t);
             let name = format_ident!("{}", qtfn);
-            tbl_args.push(quote! {
+            ingress_tbl_args.push(quote! {
+                &self.#name
+            });
+        }
+        let egress_tables = egress.tables(self.ast);
+        let mut egress_tbl_args = Vec::new();
+        for (cs, t) in egress_tables {
+            let qtfn = qualified_table_function_name(Some(egress), &cs, t);
+            let name = format_ident!("{}", qtfn);
+            egress_tbl_args.push(quote! {
                 &self.#name
             });
         }
@@ -160,17 +205,17 @@ impl<'a> PipelineGenerator<'a> {
                 &mut self,
                 port: u16,
                 pkt: &mut packet_in<'a>,
-            ) -> Option<(packet_out<'a>, u16)> {
-
+            ) -> Vec<(packet_out<'a>, u16)> {
                 //
-                // 1. Instantiate the parser out type
+                // Instantiate the parser out type
                 //
 
                 let mut parsed = #parsed_type::default();
 
                 //
-                // 2. Instantiate ingress/egress metadata
+                // Instantiate ingress/egress metadata
                 //
+
                 let mut ingress_metadata = ingress_metadata_t{
                     port: {
                         let mut x = bitvec![mut u8, Msb0; 0; 16];
@@ -182,61 +227,110 @@ impl<'a> PipelineGenerator<'a> {
                 let mut egress_metadata = egress_metadata_t::default();
 
                 //
-                // 3. run the parser block
+                // Run the parser block
                 //
+
                 let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
                 if !accept {
                     // drop the packet
                     softnpu_provider::parser_dropped!(||());
-                    return None
+                    return Vec::new();
                 }
                 let dump = parsed.dump();
                 softnpu_provider::parser_accepted!(||(&dump));
 
                 //
-                // 4. Calculate parsed header size
+                // Calculate parsed header size
                 //
 
                 let parsed_size = parsed.valid_header_size() >> 3;
 
                 //
-                // 5. Run the control block
+                // Run the ingress block
                 //
 
-                (self.control)(
+                (self.ingress)(
                     &mut parsed,
                     &mut ingress_metadata,
                     &mut egress_metadata,
-                    #(#tbl_args),*
+                    #(#ingress_tbl_args),*
                 );
 
                 //
-                // 6. Determine egress port
+                // Determine egress ports
                 //
 
-                let port: u16 = if egress_metadata.port.is_empty()
-                    || egress_metadata.drop {
-                    softnpu_provider::control_dropped!(||(&dump));
-                    return None;
+                let ports = if egress_metadata.broadcast {
+                    let mut ports = Vec::new();
+                    for p in 0..self.radix {
+                        if p == port {
+                            continue;
+                        }
+                        ports.push(p);
+                    }
+                    ports
                 } else {
-                    egress_metadata.port.load_le()
+                    if egress_metadata.port.is_empty() || egress_metadata.drop {
+                        Vec::new()
+                    } else {
+                        vec![egress_metadata.port.load_le()]
+                    }
                 };
 
                 let dump = parsed.dump();
-                softnpu_provider::control_accepted!(||(&dump));
+
+                if ports.is_empty() {
+                    softnpu_provider::ingress_dropped!(||(&dump));
+                    return Vec::new();
+                }
+
+                softnpu_provider::ingress_accepted!(||(&dump));
 
                 //
-                // 7. Create the packet output.
+                // Run output of ingress block through egress block on each
+                // egress port.
+                //
+                let mut result = Vec::new();
+                for eport in ports {
 
-                let bv = parsed.to_bitvec();
-                let buf = bv.as_raw_slice();
-                let out = packet_out{
-                    header_data: buf.to_owned(),
-                    payload_data: &pkt.data[parsed_size..],
-                };
+                    let mut egm = egress_metadata.clone();
+                    let mut parsed_ = parsed.clone();
 
-                Some((out, port))
+                    //
+                    // Run the egress block
+                    //
 
+                    egm.port = {
+                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        x.store_le(eport);
+                        x
+                    };
+
+                    (self.egress)(
+                        &mut parsed_,
+                        &mut ingress_metadata,
+                        &mut egm,
+                        #(#egress_tbl_args),*
+                    );
+
+                    if egm.drop {
+                        continue;
+                    }
+
+                    //
+                    // Create the packet output.
+                    //
+
+                    let bv = parsed_.to_bitvec();
+                    let buf = bv.as_raw_slice();
+                    let out = packet_out{
+                        header_data: buf.to_owned(),
+                        payload_data: &pkt.data[parsed_size..],
+                    };
+                    result.push((out, eport))
+
+                }
+                result
             }
         }
     }
@@ -252,11 +346,12 @@ impl<'a> PipelineGenerator<'a> {
 
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let control = cs.last().unwrap().1;
-            let qtn = qualified_table_function_name(&cs, table);
-            let (_, mut param_types) = cg.control_parameters(control);
+            let table_control = cs.last().unwrap().1;
+            let qtn = qualified_table_function_name(Some(control), &cs, table);
+            let fqtn = qualified_table_function_name(Some(control), &cs, table);
+            let (_, mut param_types) = cg.control_parameters(table_control);
 
-            for var in &control.variables {
+            for var in &table_control.variables {
                 if let Type::UserDefined(typename) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
@@ -275,32 +370,40 @@ impl<'a> PipelineGenerator<'a> {
                     >
             };
             let qtn = format_ident!("{}", qtn);
+            let fqtn = format_ident!("{}", fqtn);
             members.push(quote! {
                 pub #qtn: #table_type
             });
             initializers.push(quote! {
-                #qtn: #qtn()
+                #qtn: #fqtn()
             })
         }
 
         (members, initializers)
     }
 
-    fn add_table_entry_method(&mut self, control: &Control) -> TokenStream {
+    fn add_table_entry_method(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
         let mut body = TokenStream::new();
 
-        let tables = control.tables(self.ast);
-        for (cs, table) in tables.iter() {
-            let qtn = qualified_table_name(cs, table);
-            let qtfn = qualified_table_function_name(cs, table);
-            let call = format_ident!("add_{}_entry", qtfn);
-            body.extend(quote! {
-                #qtn => self.#call(
-                    action_id,
-                    keyset_data,
-                    parameter_data,
-                ),
-            });
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qtfn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("add_{}_entry", qtfn);
+                body.extend(quote! {
+                    #qtn => self.#call(
+                        action_id,
+                        keyset_data,
+                        parameter_data,
+                    ),
+                });
+            }
         }
 
         body.extend(quote! {
@@ -322,17 +425,24 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
-    fn remove_table_entry_method(&mut self, control: &Control) -> TokenStream {
+    fn remove_table_entry_method(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
         let mut body = TokenStream::new();
 
-        let tables = control.tables(self.ast);
-        for (cs, table) in tables.iter() {
-            let qtn = qualified_table_name(cs, table);
-            let qftn = qualified_table_function_name(cs, table);
-            let call = format_ident!("remove_{}_entry", qftn);
-            body.extend(quote! {
-                #qtn => self.#call(keyset_data),
-            });
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qftn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("remove_{}_entry", qftn);
+                body.extend(quote! {
+                    #qtn => self.#call(keyset_data),
+                });
+            }
         }
 
         body.extend(quote!{
@@ -352,11 +462,18 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
-    fn get_table_ids_method(&mut self, control: &Control) -> TokenStream {
+    fn get_table_ids_method(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
         let mut names = Vec::new();
-        let tables = control.tables(self.ast);
-        for (cs, table) in &tables {
-            names.push(qualified_table_name(cs, table));
+
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in &tables {
+                names.push(qualified_table_name(Some(control), cs, table));
+            }
         }
         quote! {
             fn get_table_ids(&self) -> Vec<&str> {
@@ -365,17 +482,24 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
-    fn get_table_entries_method(&mut self, control: &Control) -> TokenStream {
+    fn get_table_entries_method(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
         let mut body = TokenStream::new();
 
-        let tables = control.tables(self.ast);
-        for (cs, table) in tables.iter() {
-            let qtn = qualified_table_name(cs, table);
-            let qtfn = qualified_table_function_name(cs, table);
-            let call = format_ident!("get_{}_entries", qtfn);
-            body.extend(quote! {
-                #qtn => Some(self.#call()),
-            });
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qtfn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("get_{}_entries", qtfn);
+                body.extend(quote! {
+                    #qtn => Some(self.#call()),
+                });
+            }
         }
 
         body.extend(quote! {
@@ -394,21 +518,42 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
-    fn table_modifiers(&mut self, control: &Control) -> TokenStream {
+    fn table_modifiers(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
         let mut tokens = TokenStream::new();
+        self.table_modifiers_for_control(&mut tokens, ingress);
+        self.table_modifiers_for_control(&mut tokens, egress);
+        tokens
+    }
+
+    fn table_modifiers_for_control(
+        &mut self,
+        tokens: &mut TokenStream,
+        control: &Control,
+    ) {
         let tables = control.tables(self.ast);
         for (cs, table) in tables {
-            let control = cs.last().unwrap().1;
-            let qtfn = qualified_table_function_name(&cs, table);
-            tokens.extend(self.add_table_entry_function(table, control, &qtfn));
-            tokens.extend(
-                self.remove_table_entry_function(table, control, &qtfn),
-            );
-            tokens
-                .extend(self.get_table_entries_function(table, control, &qtfn));
+            let table_control = cs.last().unwrap().1;
+            let qtfn = qualified_table_function_name(Some(control), &cs, table);
+            tokens.extend(self.add_table_entry_function(
+                table,
+                table_control,
+                &qtfn,
+            ));
+            tokens.extend(self.remove_table_entry_function(
+                table,
+                table_control,
+                &qtfn,
+            ));
+            tokens.extend(self.get_table_entries_function(
+                table,
+                table_control,
+                &qtfn,
+            ));
         }
-
-        tokens
     }
 
     fn table_entry_keys(&mut self, table: &Table) -> Vec<TokenStream> {
@@ -527,6 +672,9 @@ impl<'a> PipelineGenerator<'a> {
                         todo!();
                     }
                     Type::ExternFunction => {
+                        todo!();
+                    }
+                    Type::HeaderMethod => {
                         todo!();
                     }
                     Type::Table => {
@@ -780,17 +928,20 @@ impl<'a> PipelineGenerator<'a> {
 
     pub(crate) fn control_entrypoint(
         &mut self,
+        name: &str,
         control: &Control,
     ) -> (TokenStream, TokenStream) {
         let mut cg =
             crate::ControlGenerator::new(self.ast, self.hlir, self.ctx);
         let (sig, _) = cg.generate_control(control);
 
+        let name = format_ident!("{}", name);
+
         let member = quote! {
-            pub control: fn #sig
+            pub #name: fn #sig
         };
 
         let initializer = format_ident!("{}_apply", control.name);
-        (member, quote! { control: #initializer })
+        (member, quote! { #name: #initializer })
     }
 }

@@ -9,7 +9,7 @@
 //! interfaces for table manipulation and packet i/o.
 //!
 //! ```rust
-//! use p4rs::{packet_in, packet_out, Pipeline};
+//! use p4rs::{ packet_in, packet_out, Pipeline };
 //! use std::net::Ipv6Addr;
 //!
 //! struct Handler {
@@ -26,16 +26,16 @@
 //!     /// an output result, send the processed packet to the output port
 //!     /// returned by the pipeline.
 //!     fn handle_packet(&mut self, port: u16, pkt: &[u8]) {
-//!         let mut input = packet_in::new(pkt);
-//!         if let Some((mut out_pkt, out_port)) =
-//!             self.pipe.process_packet(port, &mut input) {
 //!
+//!         let mut input = packet_in::new(pkt);
+//!
+//!         let output =  self.pipe.process_packet(port, &mut input);
+//!         for (out_pkt, out_port) in &output {
 //!             let mut out = out_pkt.header_data.clone();
 //!             out.extend_from_slice(out_pkt.payload_data);
-//!
-//!             self.send_packet(out_port, &out);
-//!
+//!             self.send_packet(*out_port, &out);
 //!         }
+//!
 //!     }
 //!
 //!     /// Add a routing table entry. Packets for the provided destination will
@@ -155,13 +155,14 @@ pub struct TableEntry {
 }
 
 pub trait Pipeline: Send {
-    /// Process a packet for the specified port optionally producing an output
-    /// packet and output port number.
+    /// Process an input packet and produce a set of output packets. Normally
+    /// there will be a single output packet. However, if the pipeline sets
+    /// `egress_metadata_t.broadcast` there may be multiple output packets.
     fn process_packet<'a>(
         &mut self,
         port: u16,
         pkt: &mut packet_in<'a>,
-    ) -> Option<(packet_out<'a>, u16)>;
+    ) -> Vec<(packet_out<'a>, u16)>;
 
     //TODO use struct TableEntry?
     /// Add an entry to a table identified by table_id.
