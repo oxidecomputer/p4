@@ -104,7 +104,7 @@ impl<'a> ControlGenerator<'a> {
                     }
                 }
             }
-            let n = table.key.len() as usize;
+            let n = table.key.len();
             let table_type = quote! {
                 p4rs::table::Table::<
                     #n,
@@ -311,7 +311,7 @@ impl<'a> ControlGenerator<'a> {
         }
 
         let table_name = format_ident!("{}_table", table.name);
-        let n = table.key.len() as usize;
+        let n = table.key.len();
         let table_type = quote! {
             p4rs::table::Table::<
                 #n,
@@ -417,14 +417,14 @@ impl<'a> ControlGenerator<'a> {
                     ExpressionKind::BitLit(width, v) => {
                         match &action.parameters[i].ty {
                             Type::Bit(n) => {
-                                let n = *n as usize;
+                                let n = *n;
                                 if n != *width as usize {
                                     panic!(
                                         "{:?} not compatible with {:?}",
                                         expr.kind, action.parameters[i],
                                     );
                                 }
-                                let size = n as usize;
+                                let size = n;
                                 action_fn_args.push(quote! {{
                                     let mut x = bitvec![mut u8, Msb0; 0; #size];
                                     x.store_le(#v);

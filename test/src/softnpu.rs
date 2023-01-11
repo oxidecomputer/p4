@@ -385,12 +385,12 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
                 self.rx_p.write_at(fp, &[0u8], off);
                 off += 1;
                 // sc_ingress
-                let ingress = f.sc_egress as u16;
+                let ingress = f.sc_egress;
                 self.rx_p
                     .write_at(fp, ingress.to_be_bytes().as_slice(), off);
                 off += 2;
                 // sc_egress
-                let egress = f.sc_egress as u16;
+                let egress = f.sc_egress;
                 self.rx_p.write_at(fp, egress.to_be_bytes().as_slice(), off);
                 off += 2;
                 // sc_ether_type
