@@ -32,20 +32,43 @@ impl Default for Key {
 
 impl Key {
     pub fn to_bytes(&self) -> Vec<u8> {
-        let (mut buf, width) = match self {
-            Key::Exact(x) => (x.value.to_bytes_be(), x.width),
+        match self {
+            Key::Exact(x) => {
+                let mut buf = x.value.to_bytes_be();
+
+                // A value serialized from a BigUint may be less than the width of a
+                // field. For example a 16-bit field with with a value of 47 will come
+                // back in 8 bits from BigUint serialization.
+                buf.resize(x.width, 0);
+                buf
+            }
             Key::Range(a, z) => {
-                let mut v = a.value.to_bytes_be();
-                v.extend_from_slice(&z.value.to_bytes_be());
-                (v, a.width)
+                let mut buf_a = a.value.to_bytes_be();
+                let mut buf_z = z.value.to_bytes_be();
+
+                buf_a.resize(a.width, 0);
+                buf_z.resize(z.width, 0);
+                buf_a.extend_from_slice(&buf_z);
+                buf_a
             }
             Key::Ternary(t) => match t {
-                Ternary::DontCare => (Vec::new(), 0),
-                Ternary::Value(v) => (v.value.to_bytes_be(), v.width),
+                Ternary::DontCare => {
+                    let mut buf = Vec::new();
+                    buf.clear();
+                    buf
+                }
+                Ternary::Value(v) => {
+                    let mut buf = v.value.to_bytes_be();
+                    buf.resize(v.width, 0);
+                    buf
+                }
                 Ternary::Masked(v, m, w) => {
-                    let mut x = v.to_bytes_be();
-                    x.extend_from_slice(&m.to_bytes_be());
-                    (x, *w)
+                    let mut buf_a = v.to_bytes_be();
+                    let mut buf_b = m.to_bytes_be();
+                    buf_a.resize(*w, 0);
+                    buf_b.resize(*w, 0);
+                    buf_a.extend_from_slice(&buf_b);
+                    buf_a
                 }
             },
             Key::Lpm(p) => {
@@ -54,15 +77,9 @@ impl Key {
                     IpAddr::V6(a) => a.octets().into(),
                 };
                 v.push(p.len);
-                let w = v.len();
-                (v, w)
+                v
             }
-        };
-        // A value serialized from a BigUint may be less than the width of a
-        // field. For example a 16-bit field with with a value of 47 will come
-        // back in 8 bits from BigUint serialization.
-        buf.resize(width, 0);
-        buf
+        }
     }
 }
 

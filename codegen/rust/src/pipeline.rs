@@ -362,7 +362,7 @@ impl<'a> PipelineGenerator<'a> {
                 }
             }
 
-            let n = table.key.len() as usize;
+            let n = table.key.len();
             let table_type = quote! {
                 p4rs::table::Table::<
                     #n,

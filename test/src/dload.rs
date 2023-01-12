@@ -28,7 +28,7 @@ fn dynamic_load() -> Result<(), anyhow::Error> {
     // see .cargo/config.toml
     let ws = std::env::var("CARGO_WORKSPACE_DIR").unwrap();
     let path = format!("{}/target/debug/libsidecar_lite.so", ws);
-    let lib = match unsafe { libloading::Library::new(&path) } {
+    let lib = match unsafe { libloading::Library::new(path) } {
         Ok(l) => l,
         Err(e) => {
             panic!("failed to load p4 program: {}", e);

@@ -41,17 +41,17 @@ fn mac_rewrite2() -> Result<(), anyhow::Error> {
     let addr_e: Ipv6Addr = "fe80::aae1:deff:fe01:701e".parse().unwrap();
 
     pipeline.add_ingress_local_local_entry(
-        "set_local".into(),
+        "set_local",
         addr_c.octets().as_ref(),
         &Vec::new(),
     );
     pipeline.add_ingress_local_local_entry(
-        "set_local".into(),
+        "set_local",
         addr_d.octets().as_ref(),
         &Vec::new(),
     );
     pipeline.add_ingress_local_local_entry(
-        "set_local".into(),
+        "set_local",
         addr_e.octets().as_ref(),
         &Vec::new(),
     );
@@ -59,19 +59,19 @@ fn mac_rewrite2() -> Result<(), anyhow::Error> {
     // resolver table entries
 
     pipeline.add_ingress_router_resolver_resolver_entry(
-        "rewrite_dst".into(),
+        "rewrite_dst",
         addr_c.octets().as_ref(),
         &[0x44, 0x44, 0x44, 0x44, 0x44, 0x44],
     );
 
     pipeline.add_ingress_router_resolver_resolver_entry(
-        "rewrite_dst".into(),
+        "rewrite_dst",
         addr_d.octets().as_ref(),
         &[0x33, 0x33, 0x33, 0x33, 0x33, 0x33],
     );
 
     pipeline.add_ingress_router_resolver_resolver_entry(
-        "rewrite_dst".into(),
+        "rewrite_dst",
         addr_e.octets().as_ref(),
         &[0x22, 0x22, 0x22, 0x22, 0x22, 0x22],
     );
