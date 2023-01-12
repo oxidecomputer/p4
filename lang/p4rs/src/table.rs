@@ -77,7 +77,6 @@ impl Key {
                     IpAddr::V6(a) => a.octets().into(),
                 };
                 v.push(p.len);
-                v.resize(v.len(), 0);
                 v
             }
         }
