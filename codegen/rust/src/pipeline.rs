@@ -129,7 +129,7 @@ impl<'a> PipelineGenerator<'a> {
 
         let pipeline = quote! {
             pub struct #pipeline_name {
-                #(#table_members),*,
+                #(#table_members,)*
                 #parse_member,
                 #ingress_member,
                 #egress_member,
@@ -140,7 +140,7 @@ impl<'a> PipelineGenerator<'a> {
                 pub fn new(radix: u16) -> Self {
                     usdt::register_probes().unwrap();
                     Self {
-                        #(#table_initializers),*,
+                        #(#table_initializers,)*
                         #parser_initializer,
                         #ingress_initializer,
                         #egress_initializer,
