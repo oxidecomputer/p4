@@ -213,7 +213,7 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::Bool => quote! { bool },
         Type::Error => todo!("generate error type"),
         Type::Bit(_size) => {
-            quote! { BitVec<u8, Msb0> }
+            quote! { BitVec<u8, Lsb0> }
         }
         Type::Int(_size) => todo!("generate int type"),
         Type::Varbit(_size) => todo!("generate varbit type"),

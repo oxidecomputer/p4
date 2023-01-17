@@ -66,7 +66,7 @@ impl<'a> StructGenerator<'a> {
                     }
                 }
                 Type::Bit(size) => {
-                    members.push(quote! { pub #name: BitVec::<u8, Msb0> });
+                    members.push(quote! { pub #name: BitVec::<u8, Lsb0> });
                     dump_statements.push(quote! {
                         #name_s.blue(),
                         p4rs::dump_bv(&self.#name)
@@ -113,9 +113,9 @@ impl<'a> StructGenerator<'a> {
                         x
                     }
 
-                    fn to_bitvec(&self) -> BitVec<u8, Msb0> {
+                    fn to_bitvec(&self) -> BitVec<u8, Lsb0> {
                         let mut x =
-                            bitvec![u8, Msb0; 0; self.valid_header_size()];
+                            bitvec![u8, Lsb0; 0; self.valid_header_size()];
                         let mut off = 0;
                         #(#to_bitvec_stmts)*
                         x
@@ -131,8 +131,8 @@ impl<'a> StructGenerator<'a> {
                 impl #name {
                     fn valid_header_size(&self) -> usize { 0 }
 
-                    fn to_bitvec(&self) -> BitVec<u8, Msb0> {
-                        bitvec![u8, Msb0; 0; 0]
+                    fn to_bitvec(&self) -> BitVec<u8, Lsb0> {
+                        bitvec![u8, Lsb0; 0; 0]
                     }
 
                     fn dump(&self) -> String {

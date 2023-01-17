@@ -61,17 +61,17 @@ impl<'a> HeaderGenerator<'a> {
             let name_s = &member.name;
             let size = type_size(&member.ty, self.ast);
             member_values.push(quote! {
-                #name: BitVec::<u8, Msb0>::default()
+                #name: BitVec::<u8, Lsb0>::default()
             });
             let end = offset + size;
             set_statements.push(quote! {
                 self.#name = {
-                    let mut b = buf.view_bits::<Msb0>()[#offset..#end].to_owned();
+                    let mut b = buf.view_bits::<Lsb0>()[#offset..#end].to_owned();
                     // NOTE this barfing and then unbarfing a vec is to handle
                     // the p4 confused-endian data model.
                     let mut v = b.into_vec();
                     v.reverse();
-                    let b = BitVec::<u8, Msb0>::from_vec(v);
+                    let b = BitVec::<u8, Lsb0>::from_vec(v);
                     b
                 }
             });
@@ -80,7 +80,7 @@ impl<'a> HeaderGenerator<'a> {
                 // the p4 confused-endian data model.
                 let mut v = self.#name.clone().into_vec();
                 v.reverse();
-                let b = BitVec::<u8, Msb0>::from_vec(v);
+                let b = BitVec::<u8, Lsb0>::from_vec(v);
                 x[#offset..#end] |= &b;
 
             });
@@ -127,20 +127,15 @@ impl<'a> HeaderGenerator<'a> {
                 fn is_valid(&self) -> bool {
                     self.valid
                 }
-                fn to_bitvec(&self) -> BitVec<u8, Msb0> {
-                    let mut x = bitvec![u8, Msb0; 0u8; Self::size()];
+                fn to_bitvec(&self) -> BitVec<u8, Lsb0> {
+                    let mut x = bitvec![u8, Lsb0; 0u8; Self::size()];
                     #(#to_bitvec_statements);*;
-                    // NOTE handling P4s confused endian byte ordering
-                    //let mut v = x.into_vec();
-                    //v.reverse();
-                    //let x = BitVec::<u8, Msb0>::from_vec(v);
-                    //x.reverse();
                     x
                 }
             }
 
             impl Checksum for #name {
-                fn csum(&self) -> BitVec::<u8, Msb0> {
+                fn csum(&self) -> BitVec::<u8, Lsb0> {
                     let mut csum = BitVec::new();
                     #(#checksum_statements);*;
                     csum

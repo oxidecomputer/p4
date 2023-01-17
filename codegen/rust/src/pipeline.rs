@@ -218,7 +218,7 @@ impl<'a> PipelineGenerator<'a> {
 
                 let mut ingress_metadata = ingress_metadata_t{
                     port: {
-                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        let mut x = bitvec![mut u8, Lsb0; 0; 16];
                         x.store_le(port);
                         x
                     },
@@ -301,7 +301,7 @@ impl<'a> PipelineGenerator<'a> {
                     //
 
                     egm.port = {
-                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        let mut x = bitvec![mut u8, Lsb0; 0; 16];
                         x.store_le(eport);
                         x
                     };

@@ -121,11 +121,11 @@ mod tests {
 }
 
 pub trait Checksum {
-    fn csum(&self) -> BitVec<u8, Msb0>;
+    fn csum(&self) -> BitVec<u8, Lsb0>;
 }
 
-impl Checksum for BitVec<u8, Msb0> {
-    fn csum(&self) -> BitVec<u8, Msb0> {
+impl Checksum for BitVec<u8, Lsb0> {
+    fn csum(&self) -> BitVec<u8, Lsb0> {
         let x: u128 = self.load();
         let buf = x.to_be_bytes();
         let mut c: u16 = 0;
@@ -133,7 +133,7 @@ impl Checksum for BitVec<u8, Msb0> {
             c += u16::from_be_bytes([buf[i], buf[i + 1]])
         }
         let c = !c;
-        let mut result = bitvec![u8, Msb0; 0u8, 16];
+        let mut result = bitvec![u8, Lsb0; 0u8, 16];
         result.store(c);
         result
     }

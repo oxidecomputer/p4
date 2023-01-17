@@ -159,7 +159,7 @@ impl<'a> ExpressionGenerator<'a> {
 
         quote! {
             {
-                let mut x = bitvec![mut u8, Msb0; 0; #width];
+                let mut x = bitvec![mut u8, Lsb0; 0; #width];
                 x.store_le(#value);
                 x
             }
