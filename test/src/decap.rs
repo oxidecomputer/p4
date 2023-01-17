@@ -53,6 +53,7 @@ fn geneve_decap() -> Result<(), anyhow::Error> {
 
     let mut inner_ip = MutableIpv4Packet::new(&mut inner_ip_data).unwrap();
     inner_ip.set_source(inner_src);
+    inner_ip.set_header_length(5);
     inner_ip.set_destination(inner_dst);
     inner_ip.set_next_level_protocol(IpNextHeaderProtocol::new(17));
     inner_ip.set_total_length(20 + inner_udp_data.len() as u16);
