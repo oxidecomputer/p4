@@ -405,7 +405,7 @@ impl<'a> ControlGenerator<'a> {
                                 if *n <= 8 {
                                     let v = *v as u8;
                                     action_fn_args.push(quote! {
-                                        #v.view_bits::<Lsb0>().to_bitvec()
+                                        #v.view_bits::<Msb0>().to_bitvec()
                                     });
                                 }
                             }
@@ -426,7 +426,7 @@ impl<'a> ControlGenerator<'a> {
                                 }
                                 let size = n;
                                 action_fn_args.push(quote! {{
-                                    let mut x = bitvec![mut u8, Lsb0; 0; #size];
+                                    let mut x = bitvec![mut u8, Msb0; 0; #size];
                                     x.store_le(#v);
                                     x
                                 }});

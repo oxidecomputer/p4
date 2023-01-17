@@ -2,7 +2,7 @@
 
 use bitvec::prelude::*;
 
-pub fn add(a: BitVec<u8, Lsb0>, b: BitVec<u8, Lsb0>) -> BitVec<u8, Lsb0> {
+pub fn add(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     if a.len() != b.len() {
         panic!("bitvec add size mismatch");
     }
@@ -21,9 +21,9 @@ pub fn add(a: BitVec<u8, Lsb0>, b: BitVec<u8, Lsb0>) -> BitVec<u8, Lsb0> {
 // leaving here in case we have a need for a true arbitrary-width adder.
 #[allow(dead_code)]
 pub fn add_generic(
-    a: BitVec<u8, Lsb0>,
-    b: BitVec<u8, Lsb0>,
-) -> BitVec<u8, Lsb0> {
+    a: BitVec<u8, Msb0>,
+    b: BitVec<u8, Msb0>,
+) -> BitVec<u8, Msb0> {
     if a.len() != b.len() {
         panic!("bitvec add size mismatch");
     }
@@ -56,9 +56,9 @@ mod tests {
     #[test]
     fn bitmath_add() {
         use super::*;
-        let mut a = bitvec![mut u8, Lsb0; 0; 16];
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(47);
-        let mut b = bitvec![mut u8, Lsb0; 0; 16];
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
         b.store_be(74);
 
         println!("{:?}", a);
@@ -73,13 +73,13 @@ mod tests {
     #[test]
     fn bitmath_add_cascade() {
         use super::*;
-        let mut a = bitvec![mut u8, Lsb0; 0; 16];
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(47);
-        let mut b = bitvec![mut u8, Lsb0; 0; 16];
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
         b.store_be(74);
-        let mut c = bitvec![mut u8, Lsb0; 0; 16];
+        let mut c = bitvec![mut u8, Msb0; 0; 16];
         c.store_be(123);
-        let mut d = bitvec![mut u8, Lsb0; 0; 16];
+        let mut d = bitvec![mut u8, Msb0; 0; 16];
         d.store_be(9876);
 
         let e = add(a, add(b, add(c, d)));

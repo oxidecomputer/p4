@@ -192,7 +192,7 @@ pub trait Header {
     fn set_valid(&mut self);
     fn set_invalid(&mut self);
     fn is_valid(&self) -> bool;
-    fn to_bitvec(&self) -> BitVec<u8, Lsb0>;
+    fn to_bitvec(&self) -> BitVec<u8, Msb0>;
 }
 
 impl<'a> packet_in<'a> {
@@ -236,7 +236,7 @@ impl<'a> packet_in<'a> {
 }
 
 //XXX: remove once classifier defined in terms of bitvecs
-pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> table::BigUintKey {
+pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> table::BigUintKey {
     let s = bv.as_raw_slice();
     table::BigUintKey {
         value: num::BigUint::from_bytes_be(s),
@@ -244,7 +244,7 @@ pub fn bitvec_to_biguint(bv: &BitVec<u8, Lsb0>) -> table::BigUintKey {
     }
 }
 
-pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
+pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
     let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
     //arr.reverse();
     std::net::IpAddr::V6(std::net::Ipv6Addr::from(arr))
@@ -253,14 +253,14 @@ pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Lsb0>) -> std::net::IpAddr {
 #[repr(C, align(16))]
 pub struct AlignedU128(pub u128);
 
-pub fn int_to_bitvec(x: i128) -> BitVec<u8, Lsb0> {
-    //let mut bv = BitVec::<u8, Lsb0>::new();
-    let mut bv = bitvec![mut u8, Lsb0; 0; 128];
+pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
+    //let mut bv = BitVec::<u8, Msb0>::new();
+    let mut bv = bitvec![mut u8, Msb0; 0; 128];
     bv.store(x);
     bv
 }
 
-pub fn dump_bv(x: &BitVec<u8, Lsb0>) -> String {
+pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
     if x.is_empty() {
         "∅".into()
     } else {
@@ -348,17 +348,17 @@ pub fn extract_bit_action_parameter(
     parameter_data: &[u8],
     offset: usize,
     size: usize,
-) -> BitVec<u8, Lsb0> {
+) -> BitVec<u8, Msb0> {
     let mut byte_size = size >> 3;
     if size % 8 != 0 {
         byte_size += 1;
     }
-    let b: BitVec<u8, Lsb0> =
+    let b: BitVec<u8, Msb0> =
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
 
     // NOTE this barfing and then unbarfing a vec is to handle the p4
     // confused-endian data model.
     let mut v = b.into_vec();
     v.reverse();
-    BitVec::<u8, Lsb0>::from_vec(v)
+    BitVec::<u8, Msb0>::from_vec(v)
 }

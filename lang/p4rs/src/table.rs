@@ -14,8 +14,8 @@ pub struct BigUintKey {
     pub width: usize,
 }
 
-// TODO transition from BigUint to BitVec<u8, Lsb0>, this requires being able to
-// do a number of mathematical operations on BitVec<u8, Lsb0>.
+// TODO transition from BigUint to BitVec<u8, Msb0>, this requires being able to
+// do a number of mathematical operations on BitVec<u8, Msb0>.
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub enum Key {
     Exact(BigUintKey),

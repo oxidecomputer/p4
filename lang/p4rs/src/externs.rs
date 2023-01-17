@@ -12,13 +12,13 @@ impl Checksum {
     pub fn run(
         &self,
         elements: &[&dyn crate::checksum::Checksum],
-    ) -> BitVec<u8, Lsb0> {
+    ) -> BitVec<u8, Msb0> {
         let mut csum: u16 = 0;
         for e in elements {
             let c: u16 = e.csum().load();
             csum += c;
         }
-        let mut result = bitvec![u8, Lsb0; 0u8, 16];
+        let mut result = bitvec![u8, Msb0; 0u8, 16];
         result.store(csum);
         result
     }
