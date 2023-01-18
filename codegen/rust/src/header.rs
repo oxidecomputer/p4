@@ -82,7 +82,7 @@ impl<'a> HeaderGenerator<'a> {
                 // the p4 confused-endian data model.
                 let mut v = self.#name.clone().into_vec();
                 v.reverse();
-                let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                let b = BitVec::<u8, Msb0>::from_vec(v);
                 x[#offset..#end] |= &b;
 
             });
