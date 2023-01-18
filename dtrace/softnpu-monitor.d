@@ -18,17 +18,9 @@
     printf("ingress dropped\n");
 }
 
-/*::egress_dropped {
-    printf("egress dropped\n");
-}*/
-
 ::ingress_accepted {
     printf("ingress accepted\n");
 }
-
-/*::egress_accepted {
-    printf("egress accepted\n");
-}*/
 
 ::control_table_hit {
     printf("%s", copyinstr(arg0));
