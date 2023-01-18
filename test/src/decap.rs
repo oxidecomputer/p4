@@ -84,8 +84,8 @@ fn geneve_decap() -> Result<(), anyhow::Error> {
     n += 40;
     let mut ip_data: Vec<u8> = vec![0; n];
     let mut ip = MutableIpv6Packet::new(&mut ip_data).unwrap();
-    ip.set_source(src);
     ip.set_version(6);
+    ip.set_source(src);
     ip.set_destination(dst);
     ip.set_payload_length(udp_data.len() as u16);
     ip.set_payload(&udp_data);

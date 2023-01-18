@@ -83,7 +83,7 @@ impl<'a> HeaderGenerator<'a> {
                 let mut v = self.#name.clone().into_vec();
                 v.reverse();
                 let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                x[#offset..#end] |= &b[0..#end-#offset];
+                x[#offset..#end] |= &b;
 
             });
             checksum_statements.push(quote! {
