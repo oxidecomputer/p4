@@ -3,6 +3,8 @@ mod basic_router;
 #[cfg(test)]
 mod controller_multiple_instantiation;
 #[cfg(test)]
+mod decap;
+#[cfg(test)]
 mod disag_router;
 #[cfg(test)]
 mod dload;

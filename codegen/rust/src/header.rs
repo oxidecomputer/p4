@@ -71,7 +71,9 @@ impl<'a> HeaderGenerator<'a> {
                     // the p4 confused-endian data model.
                     let mut v = b.into_vec();
                     v.reverse();
-                    let b = BitVec::<u8, Msb0>::from_vec(v);
+                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                    b.shift_left(#offset % 8);
+                    b.resize(#end-#offset, false);
                     b
                 }
             });
@@ -130,11 +132,6 @@ impl<'a> HeaderGenerator<'a> {
                 fn to_bitvec(&self) -> BitVec<u8, Msb0> {
                     let mut x = bitvec![u8, Msb0; 0u8; Self::size()];
                     #(#to_bitvec_statements);*;
-                    // NOTE handling P4s confused endian byte ordering
-                    //let mut v = x.into_vec();
-                    //v.reverse();
-                    //let x = BitVec::<u8, Msb0>::from_vec(v);
-                    //x.reverse();
                     x
                 }
             }

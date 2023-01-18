@@ -14,12 +14,12 @@
     printf("%s", copyinstr(arg0));
 }
 
-::control_dropped {
-    printf("control dropped\n");
+::ingress_dropped {
+    printf("ingress dropped\n");
 }
 
-::control_accepted {
-    printf("control accepted\n");
+::ingress_accepted {
+    printf("ingress accepted\n");
 }
 
 ::control_table_hit {
