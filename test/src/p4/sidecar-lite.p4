@@ -611,7 +611,6 @@ control ingress(
                 hdr.inner_eth.setInvalid();
                 if (hdr.inner_ipv4.isValid()) {
                     hdr.ipv4 = hdr.inner_ipv4;
-                    hdr.ipv4.ihl = 4w5;
                     hdr.ipv4.setValid();
                     hdr.ipv6.setInvalid();
                     hdr.inner_ipv4.setInvalid();

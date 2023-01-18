@@ -1,5 +1,4 @@
-use crate::expect_frames;
-use crate::softnpu::{RxFrame, SoftNpu, TxFrame};
+use crate::softnpu::{SoftNpu, TxFrame};
 use pnet::packet::ethernet::EtherType;
 use pnet::packet::ethernet::MutableEthernetPacket;
 use pnet::packet::ip::IpNextHeaderProtocol;
@@ -98,22 +97,20 @@ fn geneve_decap() -> Result<(), anyhow::Error> {
     let fs = phy1.recv();
     let f = &fs[0];
 
-    let mut decapped_ip = Ipv4Packet::new(&f.payload).unwrap();
-    //let mut decapped_udp = UdpPacket::new(decapped_ip.payload()).unwrap();
+    let decapped_ip = Ipv4Packet::new(&f.payload).unwrap();
+    let decapped_udp = UdpPacket::new(decapped_ip.payload()).unwrap();
 
     println!("Decapped IP: {:#?}", decapped_ip);
-    //println!("Decapped UDP: {:#?}", decapped_udp);
+    println!("Decapped UDP: {:#?}", decapped_udp);
 
     assert_eq!(
         Ipv4Packet::new(&inner_ip_data.clone()).unwrap(),
         decapped_ip
     );
-    /*
     assert_eq!(
         UdpPacket::new(&inner_udp_data.clone()).unwrap(),
         decapped_udp
     );
-    */
 
     Ok(())
 }
