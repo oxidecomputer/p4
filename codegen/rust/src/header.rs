@@ -87,7 +87,7 @@ impl<'a> HeaderGenerator<'a> {
 
             });
             checksum_statements.push(quote! {
-                csum = p4rs::bitmath::add(csum.clone(), self.#name.csum())
+                csum = p4rs::bitmath::add_le(csum.clone(), self.#name.csum())
             });
             dump_statements.push(quote! {
                 #name_s.cyan(),
