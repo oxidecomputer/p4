@@ -37,7 +37,7 @@ impl<'a> ExpressionGenerator<'a> {
                 match op {
                     BinOp::Add => {
                         ts.extend(quote!{
-                            p4rs::bitmath::add(#lhs_tks.clone(), #rhs_tks.clone())
+                            p4rs::bitmath::add_le(#lhs_tks.clone(), #rhs_tks.clone())
                         });
                     }
                     BinOp::Eq | BinOp::NotEq => {

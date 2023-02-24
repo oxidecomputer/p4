@@ -369,7 +369,7 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
         }
     }
 
-    pub fn send<'a>(&self, frames: &[TxFrame<'a>]) -> Result<(), xfr::Error> {
+    pub fn send(&self, frames: &[TxFrame<'_>]) -> Result<(), xfr::Error> {
         let n = frames.len();
         let fps = self.rx_p.reserve(n)?;
         for (i, fp) in fps.enumerate() {
