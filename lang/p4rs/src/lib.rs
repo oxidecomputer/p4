@@ -45,7 +45,7 @@
 //!             "ingress.router.ipv6_routes", // qualified name of the table
 //!             "forward_out_port",           // action to invoke on a hit
 //!             &dest.octets(),
-//!             &port.to_be_bytes(),
+//!             &port.to_le_bytes(),
 //!         );
 //!     }
 //!
@@ -239,14 +239,14 @@ impl<'a> packet_in<'a> {
 pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> table::BigUintKey {
     let s = bv.as_raw_slice();
     table::BigUintKey {
-        value: num::BigUint::from_bytes_be(s),
+        value: num::BigUint::from_bytes_le(s),
         width: s.len(),
     }
 }
 
 pub fn bitvec_to_ip6addr(bv: &BitVec<u8, Msb0>) -> std::net::IpAddr {
-    let arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
-    //arr.reverse();
+    let mut arr: [u8; 16] = bv.as_raw_slice().try_into().unwrap();
+    arr.reverse();
     std::net::IpAddr::V6(std::net::Ipv6Addr::from(arr))
 }
 
@@ -317,16 +317,14 @@ pub fn extract_lpm_key(
     let (addr, len) = match keyset_data.len() {
         // IPv4
         5 => {
-            let mut data: [u8; 4] =
+            let data: [u8; 4] =
                 keyset_data[offset..offset + 4].try_into().unwrap();
-            data.reverse();
             (IpAddr::from(data), keyset_data[offset + 4])
         }
         // IPv6
         17 => {
-            let mut data: [u8; 16] =
+            let data: [u8; 16] =
                 keyset_data[offset..offset + 16].try_into().unwrap();
-            data.reverse();
             (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
@@ -355,10 +353,5 @@ pub fn extract_bit_action_parameter(
     }
     let b: BitVec<u8, Msb0> =
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
-
-    // NOTE this barfing and then unbarfing a vec is to handle the p4
-    // confused-endian data model.
-    let mut v = b.into_vec();
-    v.reverse();
-    BitVec::<u8, Msb0>::from_vec(v)
+    b
 }
