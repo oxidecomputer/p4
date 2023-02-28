@@ -34,7 +34,7 @@ impl Key {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Key::Exact(x) => {
-                let mut buf = x.value.to_bytes_be();
+                let mut buf = x.value.to_bytes_le();
 
                 // A value serialized from a BigUint may be less than the width of a
                 // field. For example a 16-bit field with with a value of 47 will come
@@ -43,8 +43,8 @@ impl Key {
                 buf
             }
             Key::Range(a, z) => {
-                let mut buf_a = a.value.to_bytes_be();
-                let mut buf_z = z.value.to_bytes_be();
+                let mut buf_a = a.value.to_bytes_le();
+                let mut buf_z = z.value.to_bytes_le();
 
                 buf_a.resize(a.width, 0);
                 buf_z.resize(z.width, 0);
@@ -58,13 +58,13 @@ impl Key {
                     buf
                 }
                 Ternary::Value(v) => {
-                    let mut buf = v.value.to_bytes_be();
+                    let mut buf = v.value.to_bytes_le();
                     buf.resize(v.width, 0);
                     buf
                 }
                 Ternary::Masked(v, m, w) => {
-                    let mut buf_a = v.to_bytes_be();
-                    let mut buf_b = m.to_bytes_be();
+                    let mut buf_a = v.to_bytes_le();
+                    let mut buf_b = m.to_bytes_le();
                     buf_a.resize(*w, 0);
                     buf_b.resize(*w, 0);
                     buf_a.extend_from_slice(&buf_b);
