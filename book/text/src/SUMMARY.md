@@ -7,3 +7,5 @@
     - [Compile and Run](./01-03-compile_and_run.md)
 - [By Example](./02-by-example.md)
     - [VLAN Switch](./02-01-vlan-switch.md)
+- [Guidelines](./03-guidelines.md)
+    - [Endianness](./03-01-endianness.md)

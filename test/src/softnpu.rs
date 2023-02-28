@@ -2,7 +2,7 @@ use crate::packet;
 use colored::Colorize;
 use p4rs::packet_in;
 use rand::Rng;
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::spawn;
@@ -34,9 +34,13 @@ pub fn do_expect_frames(
                 if et == 0x86dd {
                     payload = &payload[40..];
                 }
+                if et == 0x0800 {
+                    payload = &payload[20..];
+                }
                 payload
             }
             0x86dd => &frames[i].payload[40..],
+            0x0800 => &frames[i].payload[20..],
             _ => &frames[i].payload[..],
         };
         let m = String::from_utf8_lossy(payload).to_string();
@@ -242,6 +246,38 @@ impl<const R: usize, const N: usize, const F: usize> Interface6<R, N, F> {
         Ok(())
     }
 }
+
+pub struct Interface4<const R: usize, const N: usize, const F: usize> {
+    pub phy: Arc<OuterPhy<R, N, F>>,
+    pub addr: Ipv4Addr,
+    pub sc_egress: u16,
+}
+
+impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
+    pub fn new(phy: Arc<OuterPhy<R, N, F>>, addr: Ipv4Addr) -> Self {
+        Self {
+            phy,
+            addr,
+            sc_egress: 0,
+        }
+    }
+
+    pub fn send(
+        &self,
+        mac: [u8; 6],
+        ip: Ipv4Addr,
+        payload: &[u8],
+    ) -> Result<(), anyhow::Error> {
+        let n = 20 + payload.len();
+        let mut buf = [0u8; F];
+        packet::v4(self.addr, ip, payload, &mut buf);
+        let mut txf = TxFrame::new(mac, 0x0800, &buf[..n]);
+        txf.sc_egress = self.sc_egress;
+        self.phy.send(&[txf])?;
+        Ok(())
+    }
+}
+
 pub struct TxFrame<'a> {
     pub dst: [u8; 6],
     pub ethertype: u16,

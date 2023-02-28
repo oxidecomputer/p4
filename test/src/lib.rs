@@ -17,6 +17,8 @@ mod hub;
 #[cfg(test)]
 mod mac_rewrite;
 #[cfg(test)]
+mod range;
+#[cfg(test)]
 mod table_in_egress_and_ingress;
 
 pub mod data;
