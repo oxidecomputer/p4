@@ -435,6 +435,9 @@ impl<'a> Parser<'a> {
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
+            lexer::Kind::AngleClose => Ok(Some(BinOp::Gt)),
+            lexer::Kind::LessThanEquals => Ok(Some(BinOp::Leq)),
+            lexer::Kind::AngleOpen => Ok(Some(BinOp::Lt)),
             lexer::Kind::NotEquals => Ok(Some(BinOp::NotEq)),
             lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
             lexer::Kind::Plus => Ok(Some(BinOp::Add)),

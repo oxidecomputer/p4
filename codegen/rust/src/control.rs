@@ -181,8 +181,13 @@ impl<'a> ControlGenerator<'a> {
                             types.push(quote! { &mut #ty });
                         }
                         _ => {
-                            params.push(quote! { #name: &#ty });
-                            types.push(quote! { &#ty });
+                            if arg.ty == Type::Bool {
+                                params.push(quote! { #name: #ty });
+                                types.push(quote! { #ty });
+                            } else {
+                                params.push(quote! { #name: &#ty });
+                                types.push(quote! { &#ty });
+                            }
                         }
                     }
                 }

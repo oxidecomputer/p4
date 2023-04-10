@@ -433,7 +433,9 @@ impl<'a> StatementGenerator<'a> {
                             Type::Bit(_) | Type::Varbit(_) | Type::Int(_) => {
                                 args.push(quote! { &#arg_xpr });
                             }
-                            _ => {}
+                            _ => {
+                                args.push(arg_xpr);
+                            }
                         },
                         _ => {
                             args.push(arg_xpr);
