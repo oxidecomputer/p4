@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ast::{
     Call, Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
     NameInfo, Parser, State, Statement, StatementBlock, Struct, Table,
-    Transition, Type, AST,
+    Transition, Type, VisitorMut, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -197,120 +197,14 @@ impl ControlChecker {
         diags: &mut Diagnostics,
     ) {
         diags.extend(&check_statement_block_lvalues(&c.apply, ast, &c.names()));
-        for s in &c.apply.statements {
-            if let Statement::Call(call) = s {
-                Self::check_apply_call(c, call, ast, hlir, diags);
-            }
-        }
-    }
 
-    pub fn check_apply_call(
-        c: &Control,
-        call: &Call,
-        ast: &AST,
-        hlir: &Hlir,
-        diags: &mut Diagnostics,
-    ) {
-        let name = call.lval.root();
-        let names = c.names();
-        let name_info = match names.get(name) {
-            Some(info) => info,
-            None => {
-                diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!("{} is undefined", name),
-                    token: call.lval.token.clone(),
-                });
-                return;
-            }
+        let mut apc = ApplyCallChecker {
+            c,
+            ast,
+            hlir,
+            diags,
         };
-
-        match &name_info.ty {
-            Type::UserDefined(name) => {
-                if let Some(ctl) = ast.get_control(name) {
-                    Self::check_apply_ctl_apply(c, call, ctl, ast, hlir, diags)
-                }
-            }
-            Type::Table => {
-                if let Some(tbl) = c.get_table(name) {
-                    Self::check_apply_table_apply(
-                        c, call, tbl, ast, hlir, diags,
-                    )
-                }
-            }
-            _ => {
-                //TODO
-            }
-        }
-    }
-
-    pub fn check_apply_table_apply(
-        _c: &Control,
-        _call: &Call,
-        _tbl: &Table,
-        _ast: &AST,
-        _hlir: &Hlir,
-        _diags: &mut Diagnostics,
-    ) {
-        //TODO
-    }
-
-    pub fn check_apply_ctl_apply(
-        _c: &Control,
-        call: &Call,
-        ctl: &Control,
-        _ast: &AST,
-        hlir: &Hlir,
-        diags: &mut Diagnostics,
-    ) {
-        //todo!("check apply ctl");
-
-        if call.args.len() != ctl.parameters.len() {
-            let signature: Vec<String> = ctl
-                .parameters
-                .iter()
-                .map(|x| x.ty.to_string().bright_blue().to_string())
-                .collect();
-
-            let signature = format!("{}({})", ctl.name, signature.join(", "));
-
-            diags.push(Diagnostic {
-                level: Level::Error,
-                message: format!(
-                    "{} arguments provided to control {}, {} required\n    \
-                    expected signature: {}",
-                    call.args.len().to_string().yellow(),
-                    ctl.name.blue(),
-                    ctl.parameters.len().to_string().yellow(),
-                    signature,
-                ),
-                token: call.lval.token.clone(),
-            });
-            return;
-        }
-
-        for (i, arg) in call.args.iter().enumerate() {
-            let arg_t = match hlir.expression_types.get(arg) {
-                Some(typ) => typ,
-                None => panic!("bug: no type for expression {:?}", arg),
-            };
-            let param = &ctl.parameters[i];
-            if arg_t != &param.ty {
-                diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!(
-                        "wrong argument type for {} parameter {}\n    \
-                         argument provided:  {}\n    \
-                         parameter requires: {}",
-                        ctl.name.bright_blue(),
-                        param.name.bright_blue(),
-                        format!("{}", arg_t).bright_blue(),
-                        format!("{}", param.ty).bright_blue(),
-                    ),
-                    token: arg.token.clone(),
-                });
-            }
-        }
+        c.accept_mut(&mut apc);
     }
 }
 
@@ -365,6 +259,102 @@ fn check_statement_block(
             Statement::Empty => {}
             _ => {
                 // TODO
+            }
+        }
+    }
+}
+
+pub struct ApplyCallChecker<'a> {
+    c: &'a Control,
+    ast: &'a AST,
+    hlir: &'a Hlir,
+    diags: &'a mut Diagnostics,
+}
+
+impl<'a> VisitorMut for ApplyCallChecker<'a> {
+    fn call(&mut self, call: &Call) {
+        let name = call.lval.root();
+        let names = self.c.names();
+        let name_info = match names.get(name) {
+            Some(info) => info,
+            None => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!("{} is undefined", name),
+                    token: call.lval.token.clone(),
+                });
+                return;
+            }
+        };
+
+        match &name_info.ty {
+            Type::UserDefined(name) => {
+                if let Some(ctl) = self.ast.get_control(name) {
+                    self.check_apply_ctl_apply(call, ctl)
+                }
+            }
+            Type::Table => {
+                if let Some(tbl) = self.c.get_table(name) {
+                    self.check_apply_table_apply(call, tbl)
+                }
+            }
+            _ => {
+                //TODO
+            }
+        }
+    }
+}
+
+impl<'a> ApplyCallChecker<'a> {
+    pub fn check_apply_table_apply(&mut self, _call: &Call, _tbl: &Table) {
+        //TODO
+    }
+
+    pub fn check_apply_ctl_apply(&mut self, call: &Call, ctl: &Control) {
+        if call.args.len() != ctl.parameters.len() {
+            let signature: Vec<String> = ctl
+                .parameters
+                .iter()
+                .map(|x| x.ty.to_string().bright_blue().to_string())
+                .collect();
+
+            let signature = format!("{}({})", ctl.name, signature.join(", "));
+
+            self.diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "{} arguments provided to control {}, {} required\n    \
+                    expected signature: {}",
+                    call.args.len().to_string().yellow(),
+                    ctl.name.blue(),
+                    ctl.parameters.len().to_string().yellow(),
+                    signature,
+                ),
+                token: call.lval.token.clone(),
+            });
+            return;
+        }
+
+        for (i, arg) in call.args.iter().enumerate() {
+            let arg_t = match self.hlir.expression_types.get(arg) {
+                Some(typ) => typ,
+                None => panic!("bug: no type for expression {:?}", arg),
+            };
+            let param = &ctl.parameters[i];
+            if arg_t != &param.ty {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "wrong argument type for {} parameter {}\n    \
+                         argument provided:  {}\n    \
+                         parameter requires: {}",
+                        ctl.name.bright_blue(),
+                        param.name.bright_blue(),
+                        format!("{}", arg_t).bright_blue(),
+                        format!("{}", param.ty).bright_blue(),
+                    ),
+                    token: arg.token.clone(),
+                });
             }
         }
     }

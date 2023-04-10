@@ -81,7 +81,7 @@ impl MutVisitor for Sanitizer {
 
 pub fn sanitize(ast: &mut AST) {
     let s = Sanitizer {};
-    ast.accept_mut(&s);
+    ast.mut_accept(&s);
 }
 
 pub fn emit(
