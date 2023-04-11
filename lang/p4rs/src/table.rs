@@ -267,6 +267,8 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 let key: u32 = addr.into();
                 let mask = if p.len == 32 {
                     u32::MAX
+                } else if p.len == 0 {
+                    0
                 } else {
                     ((1u32 << p.len) - 1) << (32 - p.len)
                 };

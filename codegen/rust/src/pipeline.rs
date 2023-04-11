@@ -236,7 +236,7 @@ impl<'a> PipelineGenerator<'a> {
                     softnpu_provider::parser_dropped!(||());
                     return Vec::new();
                 }
-                let dump = parsed.dump();
+                let dump = format!("\n{}", parsed.dump());
                 softnpu_provider::parser_accepted!(||(&dump));
 
                 //
@@ -284,6 +284,7 @@ impl<'a> PipelineGenerator<'a> {
                     return Vec::new();
                 }
 
+                let dump = format!("\n{}", parsed.dump());
                 softnpu_provider::ingress_accepted!(||(&dump));
 
                 //
