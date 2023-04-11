@@ -220,13 +220,21 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
         Key::Exact(x) => {
             let hit = selector == &x.value;
             if !hit {
-                //println!("{:x} != {:x}", selector, x.value);
+                let dump = format!("{:x} != {:x}", selector, x.value);
+                crate::p4rs_provider::match_miss!(|| &dump);
             }
             hit
         }
         Key::Range(begin, end) => {
-            //println!("begin={} end={} sel={}", begin.value, end.value, selector);
-            selector >= &begin.value && selector <= &end.value
+            let hit = selector >= &begin.value && selector <= &end.value;
+            if !hit {
+                let dump = format!(
+                    "begin={} end={} sel={}",
+                    begin.value, end.value, selector
+                );
+                crate::p4rs_provider::match_miss!(|| &dump);
+            }
+            hit
         }
         Key::Ternary(t) => match t {
             Ternary::DontCare => true,
