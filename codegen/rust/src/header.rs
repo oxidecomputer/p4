@@ -72,7 +72,9 @@ impl<'a> HeaderGenerator<'a> {
                     let mut v = b.into_vec();
                     v.reverse();
                     let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                    b.shift_left(#offset % 8);
+                    if (#end-#offset) < 8 {
+                        b.shift_left(#offset % 8);
+                    }
                     b.resize(#end-#offset, false);
                     b
                 }
@@ -85,10 +87,15 @@ impl<'a> HeaderGenerator<'a> {
                 let n = (#end-#offset);
                 let m = n%8;
                 if (n > 8) && m != 0 {
-                    let b = BitVec::<u8, Msb0>::from_vec(v);
-                    x[#offset..#end] |= &b[m..];
+                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                    if b.len() > m {
+                        x[#offset..#end] |= &b[m..];
+                    } else {
+                        x[#offset..#end] |= &b;
+                    }
                 } else {
-                    let b = BitVec::<u8, Msb0>::from_vec(v);
+                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                    b.resize(#end-#offset, false);
                     x[#offset..#end] |= &b;
                 }
 

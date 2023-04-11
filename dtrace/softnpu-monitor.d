@@ -33,3 +33,7 @@
 ::match_miss {
     printf("%s", copyinstr(arg0));
 }
+
+::action {
+    printf("%s", copyinstr(arg0));
+}

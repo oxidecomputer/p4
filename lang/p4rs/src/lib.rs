@@ -351,7 +351,8 @@ pub fn extract_bit_action_parameter(
     if size % 8 != 0 {
         byte_size += 1;
     }
-    let b: BitVec<u8, Msb0> =
+    let mut b: BitVec<u8, Msb0> =
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
+    b.resize(size, false);
     b
 }
