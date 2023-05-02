@@ -46,6 +46,7 @@
 //!             "forward_out_port",           // action to invoke on a hit
 //!             &dest.octets(),
 //!             &port.to_le_bytes(),
+//!             0,
 //!         );
 //!     }
 //!
@@ -314,18 +315,13 @@ pub fn extract_ternary_key(
 ) -> table::Key {
     let care = keyset_data[offset];
     if care != 0 {
-        table::Key::Ternary(
-            table::Ternary::Value(
-                table::BigUintKey {
-                    value: num::BigUint::from_bytes_le(
-                           &keyset_data[offset + 1..offset + 1 + len]
-                    ),
-                    width: len,
-                }
-            )
-        )
-    }
-    else {
+        table::Key::Ternary(table::Ternary::Value(table::BigUintKey {
+            value: num::BigUint::from_bytes_le(
+                &keyset_data[offset + 1..offset + 1 + len],
+            ),
+            width: len,
+        }))
+    } else {
         table::Key::Ternary(table::Ternary::DontCare)
     }
 }
