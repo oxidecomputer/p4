@@ -26,6 +26,7 @@ fn range() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &0u16.to_le_bytes(),
+        0,
     );
 
     let begin = v4_range_key("6.0.0.0".parse().unwrap());
@@ -37,6 +38,7 @@ fn range() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &1u16.to_le_bytes(),
+        0,
     );
 
     let begin = v4_range_key("10.0.0.0".parse().unwrap());
@@ -48,6 +50,7 @@ fn range() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &2u16.to_le_bytes(),
+        0,
     );
 
     let begin = v4_range_key("14.0.0.0".parse().unwrap());
@@ -59,6 +62,7 @@ fn range() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &3u16.to_le_bytes(),
+        0,
     );
 
     //

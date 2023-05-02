@@ -141,6 +141,9 @@ impl<const D: usize, A: Clone> Table<D, A> {
     }
 }
 
+// Sort a vector of match result entries. Do not apply this sort function to
+// general vectors of entries, it only works for matching results. Specifically
+// the entries are pruned to longest prefix matches.
 pub fn sort_entries<const D: usize, A: Clone>(
     mut entries: Vec<TableEntry<D, A>>,
 ) -> Vec<TableEntry<D, A>> {

@@ -20,14 +20,15 @@ fn main() -> Result<(), anyhow::Error> {
 
 fn init_tables(pipeline: &mut main_pipeline, m1: [u8; 6], m2: [u8; 6]) {
     // add static forwarding entries
-    pipeline.add_ingress_fwd_fib_entry("forward", &m1, &0u16.to_be_bytes());
-    pipeline.add_ingress_fwd_fib_entry("forward", &m2, &1u16.to_be_bytes());
+    pipeline.add_ingress_fwd_fib_entry("forward", &m1, &0u16.to_be_bytes(), 0);
+    pipeline.add_ingress_fwd_fib_entry("forward", &m2, &1u16.to_be_bytes(), 0);
 
     // port 0 vlan 47
     pipeline.add_ingress_vlan_port_vlan_entry(
         "filter",
         0u16.to_be_bytes().as_ref(),
         47u16.to_be_bytes().as_ref(),
+        0,
     );
 
     // sanity check the table
@@ -39,6 +40,7 @@ fn init_tables(pipeline: &mut main_pipeline, m1: [u8; 6], m2: [u8; 6]) {
         "filter",
         1u16.to_be_bytes().as_ref(),
         47u16.to_be_bytes().as_ref(),
+        0,
     );
 }
 
