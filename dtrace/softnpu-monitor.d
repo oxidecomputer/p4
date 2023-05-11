@@ -19,7 +19,7 @@
 }
 
 ::ingress_accepted {
-    printf("ingress accepted\n");
+    printf("%s", copyinstr(arg0));
 }
 
 ::control_table_hit {
@@ -31,5 +31,9 @@
 }
 
 ::match_miss {
+    printf("%s", copyinstr(arg0));
+}
+
+::action {
     printf("%s", copyinstr(arg0));
 }

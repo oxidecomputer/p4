@@ -141,6 +141,9 @@ impl<const D: usize, A: Clone> Table<D, A> {
     }
 }
 
+// Sort a vector of match result entries. Do not apply this sort function to
+// general vectors of entries, it only works for matching results. Specifically
+// the entries are pruned to longest prefix matches.
 pub fn sort_entries<const D: usize, A: Clone>(
     mut entries: Vec<TableEntry<D, A>>,
 ) -> Vec<TableEntry<D, A>> {
@@ -220,13 +223,21 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
         Key::Exact(x) => {
             let hit = selector == &x.value;
             if !hit {
-                //println!("{:x} != {:x}", selector, x.value);
+                let dump = format!("{:x} != {:x}", selector, x.value);
+                crate::p4rs_provider::match_miss!(|| &dump);
             }
             hit
         }
         Key::Range(begin, end) => {
-            //println!("begin={} end={} sel={}", begin.value, end.value, selector);
-            selector >= &begin.value && selector <= &end.value
+            let hit = selector >= &begin.value && selector <= &end.value;
+            if !hit {
+                let dump = format!(
+                    "begin={} end={} sel={}",
+                    begin.value, end.value, selector
+                );
+                crate::p4rs_provider::match_miss!(|| &dump);
+            }
+            hit
         }
         Key::Ternary(t) => match t {
             Ternary::DontCare => true,
@@ -267,6 +278,8 @@ pub fn key_matches(selector: &BigUint, key: &Key) -> bool {
                 let key: u32 = addr.into();
                 let mask = if p.len == 32 {
                     u32::MAX
+                } else if p.len == 0 {
+                    0
                 } else {
                     ((1u32 << p.len) - 1) << (32 - p.len)
                 };

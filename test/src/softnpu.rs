@@ -348,6 +348,7 @@ impl<'a> TxFrame<'a> {
 pub struct OwnedFrame {
     pub dst: [u8; 6],
     pub src: [u8; 6],
+    pub vid: Option<u16>,
     pub ethertype: u16,
     pub payload: Vec<u8>,
 }
@@ -357,11 +358,13 @@ impl OwnedFrame {
         dst: [u8; 6],
         src: [u8; 6],
         ethertype: u16,
+        vid: Option<u16>,
         payload: Vec<u8>,
     ) -> Self {
         Self {
             dst,
             src,
+            vid,
             ethertype,
             payload,
         }
@@ -472,8 +475,12 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
         loop {
             for fp in self.tx_c.consumable() {
                 let b = self.tx_c.read(fp);
-                let et = u16::from_be_bytes([b[12], b[13]]);
+                let mut et = u16::from_be_bytes([b[12], b[13]]);
+                let mut vid: Option<u16> = None;
                 let payload = if et == 0x8100 {
+                    let v = u16::from_be_bytes([b[14], b[15]]);
+                    et = u16::from_be_bytes([b[16], b[17]]);
+                    vid = Some(v);
                     b[18..].to_vec()
                 } else {
                     b[14..].to_vec()
@@ -482,6 +489,7 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
                     b[0..6].try_into().unwrap(),
                     b[6..12].try_into().unwrap(),
                     et,
+                    vid,
                     payload,
                 );
                 buf.push(frame);
@@ -503,6 +511,7 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
     pub fn tx_count(&self) -> usize {
         self.tx_counter.load(Ordering::Relaxed)
     }
+
     pub fn rx_count(&self) -> usize {
         self.rx_counter.load(Ordering::Relaxed)
     }

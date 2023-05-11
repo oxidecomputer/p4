@@ -91,6 +91,7 @@ pub enum Kind {
     Pipe,
     Carat,
     GreaterThanEquals,
+    LessThanEquals,
 
     //
     // literals
@@ -217,6 +218,7 @@ impl fmt::Display for Kind {
             Kind::Pipe => write!(f, "operator |"),
             Kind::Carat => write!(f, "operator ^"),
             Kind::GreaterThanEquals => write!(f, "operator >="),
+            Kind::LessThanEquals => write!(f, "operator <="),
 
             //
             // literals
@@ -418,6 +420,10 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(t) = self.match_token(">=", Kind::GreaterThanEquals) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token(">=", Kind::LessThanEquals) {
             return Ok(t);
         }
 

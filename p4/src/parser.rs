@@ -10,9 +10,10 @@ use crate::ast::{
     Variable, AST,
 };
 use crate::error::{Error, ParserError};
-/// This is a recurisve descent parser for the P4 language.
 use crate::lexer::{self, Kind, Lexer, Token};
+use colored::Colorize;
 
+/// This is a recurisve descent parser for the P4 language.
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     backlog: Vec<Token>,
@@ -435,6 +436,9 @@ impl<'a> Parser<'a> {
         let token = self.next_token()?;
         match token.kind {
             lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
+            lexer::Kind::AngleClose => Ok(Some(BinOp::Gt)),
+            lexer::Kind::LessThanEquals => Ok(Some(BinOp::Leq)),
+            lexer::Kind::AngleOpen => Ok(Some(BinOp::Lt)),
             lexer::Kind::NotEquals => Ok(Some(BinOp::NotEq)),
             lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
             lexer::Kind::Plus => Ok(Some(BinOp::Add)),
@@ -1028,8 +1032,12 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                         at: token.clone(),
                         message: format!(
                             "Found {} expected: \
-                            action, table or end of control",
-                            token.kind,
+                            {}, {}, {}, or end of {}",
+                            token.kind.to_string().bright_blue(),
+                            "action".bright_blue(),
+                            "table".bright_blue(),
+                            "apply".bright_blue(),
+                            "control".bright_blue()
                         ),
                         source: self.parser.lexer.lines[token.line].into(),
                     }

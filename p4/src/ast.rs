@@ -644,6 +644,9 @@ pub enum BinOp {
     Add,
     Subtract,
     Geq,
+    Gt,
+    Leq,
+    Lt,
     Eq,
     Mask,
     NotEq,
@@ -654,7 +657,9 @@ impl BinOp {
         match self {
             BinOp::Add => "add",
             BinOp::Subtract => "subtract",
-            BinOp::Geq | BinOp::Eq => "compare",
+            BinOp::Geq | BinOp::Gt | BinOp::Leq | BinOp::Lt | BinOp::Eq => {
+                "compare"
+            }
             BinOp::Mask => "mask",
             BinOp::NotEq => "not equal",
         }

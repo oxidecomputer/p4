@@ -82,6 +82,7 @@ pub fn run(
             } else {
                 current_macro = Some(m);
             }
+            new_lines.push("");
             continue;
         }
 

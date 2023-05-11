@@ -16,15 +16,15 @@ p4_macro::use_p4!(
 ///   ~        ~                 |   |       |
 ///   ~~~~~~~~~~                 |---| phy 1 |
 ///       |                      |   |       |
-///       ▼                      |   *=======*
+///       |                      |   *=======*
 ///  *==========*                |   *=======*
 ///  |          | <-- ( rx ) --- |   |       |
 ///  | pipeline |                |---| phy 2 |
 ///  |          | --- ( tx ) --> |   |       |
 ///  *==========*                |   *=======*
-///   tx |  ▲                    |   *=======*
+///   tx |  |                    |   *=======*
 ///      |  |                    |   |       |
-///      ▼  | rx                 |---| phy 3 |
+///      |  | rx                 |---| phy 3 |
 ///   *========*                 |   |       |
 ///   |        |                 *   *=======*
 ///   |        |
@@ -48,6 +48,7 @@ fn dynamic_router2() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &1u16.to_le_bytes(),
+        0,
     );
 
     let prefix: Ipv6Addr = "fd00:2000::".parse().unwrap();
@@ -58,6 +59,7 @@ fn dynamic_router2() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &2u16.to_le_bytes(),
+        0,
     );
 
     let prefix: Ipv6Addr = "fd00:3000::".parse().unwrap();
@@ -68,6 +70,7 @@ fn dynamic_router2() -> Result<(), anyhow::Error> {
         "forward",
         &buf,
         &3u16.to_le_bytes(),
+        0,
     );
 
     //

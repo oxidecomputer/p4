@@ -46,6 +46,7 @@
 //!             "forward_out_port",           // action to invoke on a hit
 //!             &dest.octets(),
 //!             &port.to_le_bytes(),
+//!             0,
 //!         );
 //!     }
 //!
@@ -172,6 +173,7 @@ pub trait Pipeline: Send {
         action_id: &str,
         keyset_data: &[u8],
         parameter_data: &[u8],
+        priority: u32,
     );
 
     /// Remove an entry from a table identified by table_id.
@@ -301,12 +303,27 @@ pub fn extract_range_key(
     )
 }
 
+/// Extract a ternary key from the provided keyset data. Ternary keys come in
+/// two parts. The first part is a leading bit that indicates whether we care
+/// about the value. If that leading bit is non-zero, the trailing bits of the
+/// key are interpreted as a binary value. If the leading bit is zero, the
+/// trailing bits are ignored and a Ternary::DontCare key is returned.
 pub fn extract_ternary_key(
-    _keyset_data: &[u8],
-    _offset: usize,
-    _len: usize,
+    keyset_data: &[u8],
+    offset: usize,
+    len: usize,
 ) -> table::Key {
-    todo!();
+    let care = keyset_data[offset];
+    if care != 0 {
+        table::Key::Ternary(table::Ternary::Value(table::BigUintKey {
+            value: num::BigUint::from_bytes_le(
+                &keyset_data[offset + 1..offset + 1 + len],
+            ),
+            width: len,
+        }))
+    } else {
+        table::Key::Ternary(table::Ternary::DontCare)
+    }
 }
 
 pub fn extract_lpm_key(
@@ -351,7 +368,8 @@ pub fn extract_bit_action_parameter(
     if size % 8 != 0 {
         byte_size += 1;
     }
-    let b: BitVec<u8, Msb0> =
+    let mut b: BitVec<u8, Msb0> =
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
+    b.resize(size, false);
     b
 }
