@@ -13,3 +13,5 @@ members = [
     "book/code",
 ]
 
+[workspace.dependencies]
+usdt = "0.3.5"

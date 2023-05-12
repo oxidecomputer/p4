@@ -201,7 +201,8 @@ dependencies = [
 [[package]]
 name = "dof"
 version = "0.1.5"
-source = "git+https://github.com/oxidecomputer/usdt#eac0fe5f03c3fbf23468ead5cb140f62d51ac3f3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e6b21a1211455e82b1245d6e1b024f30606afbb734c114515d40d0e0b34ce81"
 dependencies = [
  "thiserror",
  "zerocopy",
@@ -209,8 +210,9 @@ dependencies = [
 
 [[package]]
 name = "dtrace-parser"
-version = "0.1.12"
-source = "git+https://github.com/oxidecomputer/usdt#eac0fe5f03c3fbf23468ead5cb140f62d51ac3f3"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bed110893a7f9f4ceb072e166354a09f6cb4cc416eec5b5e5e8ee367442d434b"
 dependencies = [
  "pest",
  "pest_derive",
@@ -953,6 +955,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "synstructure"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f36bdaa60a83aca3921b5259d5400cbf5e90fc51931376a9bd4a0eb79aa7210f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "unicode-xid",
+]
+
+[[package]]
 name = "take_mut"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1109,9 +1123,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ceab39d59e4c9499d4e5a8ee0e2735b891bb7308ac83dfb4e80cad195c9f6f3"
 
 [[package]]
+name = "unicode-xid"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
+
+[[package]]
 name = "usdt"
-version = "0.3.2"
-source = "git+https://github.com/oxidecomputer/usdt#eac0fe5f03c3fbf23468ead5cb140f62d51ac3f3"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b4c48f9e522b977bbe938a0d7c4d36633d267ba0155aaa253fb57d0531be0fb"
 dependencies = [
  "dtrace-parser",
  "serde",
@@ -1122,8 +1143,9 @@ dependencies = [
 
 [[package]]
 name = "usdt-attr-macro"
-version = "0.3.2"
-source = "git+https://github.com/oxidecomputer/usdt#eac0fe5f03c3fbf23468ead5cb140f62d51ac3f3"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "80e6ae4f982ae74dcbaa8eb17baf36ca0d464a3abc8a7172b3bd74c73e9505d6"
 dependencies = [
  "dtrace-parser",
  "proc-macro2",
@@ -1135,8 +1157,9 @@ dependencies = [
 
 [[package]]
 name = "usdt-impl"
-version = "0.3.2"
-source = "git+https://github.com/oxidecomputer/usdt#eac0fe5f03c3fbf23468ead5cb140f62d51ac3f3"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f53b4ca0b33aae466dc47b30b98adc4f88454928837af8010b6ed02d18474cb1"
 dependencies = [
  "byteorder",
  "dof",
@@ -1154,8 +1177,9 @@ dependencies = [
 
 [[package]]
 name = "usdt-macro"
-version = "0.3.2"
-source = "git+https://github.com/oxidecomputer/usdt#eac0fe5f03c3fbf23468ead5cb140f62d51ac3f3"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cb093f9653dc91632621c754f9ed4ee25d14e46e0239b6ccaf74a6c0c2788bd"
 dependencies = [
  "dtrace-parser",
  "proc-macro2",
@@ -1257,9 +1281,9 @@ source = "git+https://github.com/oxidecomputer/xfr#8a89ee73d039abf91fdddcdd66de6
 
 [[package]]
 name = "zerocopy"
-version = "0.6.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "332f188cc1bcf1fe1064b8c58d150f497e697f49774aa846f2dc949d9a25f236"
+checksum = "6580539ad917b7c026220c4b3f2c08d52ce54d6ce0dc491e66002e35388fab46"
 dependencies = [
  "byteorder",
  "zerocopy-derive",
@@ -1267,11 +1291,11 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.3.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6505e6815af7de1746a08f69c69606bb45695a17149517680f3b2149713b19a3"
+checksum = "d498dbd1fd7beb83c86709ae1c33ca50942889473473d287d56ce4770a18edfb"
 dependencies = [
  "proc-macro2",
- "quote",
  "syn",
+ "synstructure",
 ]
