@@ -13,4 +13,4 @@ p4-macro = { path = "../../p4-macro" }
 num = "0.4"
 bitvec = "1.0"
 colored = "2.0"
-usdt = { git = "https://github.com/oxidecomputer/usdt" }
+usdt.workspace = true
