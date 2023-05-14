@@ -17,6 +17,11 @@ set -o xtrace
 cargo --version
 rustc --version
 
+banner "check"
+cargo fmt -- --check
+cargo check
+cargo clippy --all-targets -- --deny warnings
+
 banner "build"
 ptime -m cargo build
 ptime -m cargo build --release
@@ -27,11 +32,6 @@ do
     cp target/$x/x4c /work/$x/
     cp target/$x/libsidecar_lite.so /work/$x/
 done
-
-banner "check"
-cargo fmt -- --check
-cargo clippy -- --deny warnings
-cargo check
 
 banner "test"
 

@@ -345,7 +345,7 @@ pub fn extract_lpm_key(
             (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
-            panic!("add router table entry: unknown action id {}, ignoring", x);
+            panic!("lpm: key must be len 5 (ipv4) or 17 (ipv6) found {}", x);
         }
     };
 

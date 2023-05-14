@@ -1,3 +1,3 @@
-control_dropped* {
+::ingress_dropped {
     printf("\n%s\n", copyinstr(arg0));
 }

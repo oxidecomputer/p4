@@ -114,8 +114,7 @@ mod tests {
                 let mut x = bitvec![mut u8, Msb0; 0; 16usize];
                 x.store_le(14u128);
                 x
-            }
-            .clone(),
+            },
             add_le(
                 orig_l3_len.clone(),
                 add_le(
@@ -123,20 +122,15 @@ mod tests {
                         let mut x = bitvec![mut u8, Msb0; 0; 16usize];
                         x.store_le(8u128);
                         x
-                    }
-                    .clone(),
+                    },
                     {
                         let mut x = bitvec![mut u8, Msb0; 0; 16usize];
                         x.store_le(8u128);
                         x
-                    }
-                    .clone(),
-                )
-                .clone(),
-            )
-            .clone(),
-        )
-        .clone();
+                    },
+                ),
+            ),
+        );
 
         let y: u128 = x.load_le();
         assert_eq!(y, 0xe9 + 14 + 8 + 8);
