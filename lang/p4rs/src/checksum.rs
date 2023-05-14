@@ -75,6 +75,7 @@ pub fn udp6_checksum(data: &[u8]) -> u16 {
 mod tests {
     use super::*;
     use pnet::packet::udp;
+    use std::f32::consts::PI;
     use std::net::Ipv6Addr;
 
     #[test]
@@ -105,8 +106,8 @@ mod tests {
         packet[41] = 47; // source port = 47
         packet[43] = 74; // dstination port = 74
         packet[45] = 160; // udp header + payload = 160 bytes
-        for i in 46..200 {
-            packet[i] = ((i as f32) * (3.14 / 32.0) * 10.0) as u8;
+        for (i, data_point) in packet.iter_mut().enumerate().skip(46) {
+            *data_point = ((i as f32) * (PI / 32.0) * 10.0) as u8;
         }
 
         let x = udp6_checksum(&packet);
