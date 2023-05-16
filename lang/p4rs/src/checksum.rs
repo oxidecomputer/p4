@@ -61,11 +61,17 @@ pub fn udp6_checksum(data: &[u8]) -> u16 {
     csum.add(dst_port[0], dst_port[1]);
     csum.add(payload_len[0], payload_len[1]);
 
-    for i in (0..payload.len()).step_by(2) {
+    let len = payload.len();
+    let (odd, len) = if len % 2 == 0 {
+        (false, len)
+    } else {
+        (true, len - 1)
+    };
+    for i in (0..len).step_by(2) {
         csum.add(payload[i], payload[i + 1]);
     }
-    if payload.len() % 2 == 1 {
-        csum.add(payload[payload.len() - 1], 0);
+    if odd {
+        csum.add(payload[len], 0);
     }
 
     csum.result()
