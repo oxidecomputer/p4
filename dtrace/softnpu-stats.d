@@ -14,11 +14,11 @@
     @stats["control apply", copyinstr(arg0)]= count();
 }
 
-::control_dropped {
+::ingress_dropped {
     @stats["control", "drop"] = count();
 }
 
-::control_accepted {
+::ingress_accepted {
     @stats["control", "accept"] = count();
 }
 
@@ -30,7 +30,7 @@
     @stats["table miss", copyinstr(arg0)] = count();
 }
 
-tick-10sec
+tick-5sec
 {
     printa(@stats);
     printf("==========================================================================================================================\n");
