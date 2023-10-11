@@ -2,7 +2,7 @@
 #:
 #: name = "build-and-test"
 #: variety = "basic"
-#: target = "helios-latest"
+#: target = "helios-2.0"
 #: rust_toolchain = "stable"
 #: output_rules = [
 #:   "/work/debug/*",

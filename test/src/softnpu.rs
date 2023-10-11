@@ -216,6 +216,16 @@ pub struct OuterPhy<const R: usize, const N: usize, const F: usize> {
     sidecar_encap: bool,
 }
 
+unsafe impl<const R: usize, const N: usize, const F: usize> Send
+    for OuterPhy<R, N, F>
+{
+}
+
+unsafe impl<const R: usize, const N: usize, const F: usize> Sync
+    for OuterPhy<R, N, F>
+{
+}
+
 pub struct Interface6<const R: usize, const N: usize, const F: usize> {
     pub phy: Arc<OuterPhy<R, N, F>>,
     pub addr: Ipv6Addr,

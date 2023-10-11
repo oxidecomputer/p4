@@ -177,6 +177,9 @@ impl<'a> ExpressionGenerator<'a> {
             BinOp::Eq => quote! { == },
             BinOp::NotEq => quote! { != },
             BinOp::Mask => quote! { & },
+            BinOp::BitAnd => quote! { & },
+            BinOp::BitOr => quote! { | },
+            BinOp::Xor => quote! { ^ },
         }
     }
 
