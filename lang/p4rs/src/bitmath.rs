@@ -3,9 +3,7 @@
 use bitvec::prelude::*;
 
 pub fn add_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
-    if a.len() != b.len() {
-        panic!("bitvec add size mismatch");
-    }
+    let len = usize::max(a.len(), b.len());
 
     // P4 spec says width limits are architecture defined, i here by define
     // softnpu to have an architectural bit-type width limit of 128.
@@ -13,15 +11,13 @@ pub fn add_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let y: u128 = b.load_be();
     let z = x + y;
     let mut c = BitVec::new();
-    c.resize(a.len(), false);
+    c.resize(len, false);
     c.store_be(z);
     c
 }
 
 pub fn add_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
-    if a.len() != b.len() {
-        panic!("bitvec add size mismatch");
-    }
+    let len = usize::max(a.len(), b.len());
 
     // P4 spec says width limits are architecture defined, i here by define
     // softnpu to have an architectural bit-type width limit of 128.
@@ -29,7 +25,7 @@ pub fn add_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let y: u128 = b.load_le();
     let z = x + y;
     let mut c = BitVec::new();
-    c.resize(a.len(), false);
+    c.resize(len, false);
     c.store_le(z);
     c
 }
@@ -84,6 +80,23 @@ mod tests {
 
         let cc: u128 = c.load_be();
         assert_eq!(cc, 47u128 + 74u128);
+    }
+
+    #[test]
+    fn bitmath_add_mixed_size() {
+        use super::*;
+        let mut a = bitvec![mut u8, Msb0; 0; 8];
+        a.store_be(0xAB);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_be(0xCDE);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = add_be(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_be();
+        assert_eq!(cc, 0xABu128 + 0xCDEu128);
     }
 
     #[test]
