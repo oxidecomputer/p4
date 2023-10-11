@@ -131,17 +131,27 @@ pub trait Checksum {
     fn csum(&self) -> BitVec<u8, Msb0>;
 }
 
+fn bvec_csum(bv: &BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let x: u128 = bv.load();
+    let buf = x.to_be_bytes();
+    let mut c: u16 = 0;
+    for i in (0..16).step_by(2) {
+        c += u16::from_be_bytes([buf[i], buf[i + 1]])
+    }
+    let c = !c;
+    let mut result = bitvec![u8, Msb0; 0u8, 16];
+    result.store(c);
+    result
+}
+
 impl Checksum for BitVec<u8, Msb0> {
     fn csum(&self) -> BitVec<u8, Msb0> {
-        let x: u128 = self.load();
-        let buf = x.to_be_bytes();
-        let mut c: u16 = 0;
-        for i in (0..16).step_by(2) {
-            c += u16::from_be_bytes([buf[i], buf[i + 1]])
-        }
-        let c = !c;
-        let mut result = bitvec![u8, Msb0; 0u8, 16];
-        result.store(c);
-        result
+        bvec_csum(self)
+    }
+}
+
+impl Checksum for &BitVec<u8, Msb0> {
+    fn csum(&self) -> BitVec<u8, Msb0> {
+        bvec_csum(self)
     }
 }
