@@ -444,6 +444,7 @@ impl<'a> Parser<'a> {
             lexer::Kind::Plus => Ok(Some(BinOp::Add)),
             lexer::Kind::Minus => Ok(Some(BinOp::Subtract)),
             lexer::Kind::Mask => Ok(Some(BinOp::Mask)),
+            lexer::Kind::And => Ok(Some(BinOp::And)),
             // TODO other binops
             _ => {
                 self.backlog.push(token);
