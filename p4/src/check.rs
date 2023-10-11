@@ -409,8 +409,8 @@ impl ParserChecker {
         //TODO the right thing to do here is to ensure all code paths end in a
         //     transition, for now just check that the last statement is a
         //     transition.
-        let last = &stmts[stmts.len() - 1];
-        if !matches!(last, Statement::Transition(_)) {
+        let last = stmts.last();
+        if !matches!(last, Some(Statement::Transition(_))) {
             diags.push(Diagnostic {
                 level: Level::Error,
                 message: "final parser state statement must be a transition"
