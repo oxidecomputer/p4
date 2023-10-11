@@ -650,7 +650,9 @@ pub enum BinOp {
     Eq,
     Mask,
     NotEq,
-    And,
+    BitAnd,
+    BitOr,
+    Xor,
 }
 
 impl BinOp {
@@ -663,7 +665,9 @@ impl BinOp {
             }
             BinOp::Mask => "mask",
             BinOp::NotEq => "not equal",
-            BinOp::And => "and",
+            BinOp::BitAnd => "bitwise and",
+            BinOp::BitOr => "bitwise or",
+            BinOp::Xor => "xor",
         }
     }
 
