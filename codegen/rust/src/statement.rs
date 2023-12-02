@@ -601,6 +601,9 @@ impl<'a> StatementGenerator<'a> {
             (Type::Int(_), Type::Bit(_)) => {
                 quote! { p4rs::int_to_bitvec }
             }
+            (Type::Bit(x), Type::Bit(16)) if *x <= 16 => {
+                quote! { p4rs::bitvec_to_bitvec16 }
+            }
             _ => todo!("type converter for {} to {}", from, to),
         }
     }

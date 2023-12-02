@@ -262,6 +262,11 @@ pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
     bv
 }
 
+pub fn bitvec_to_bitvec16(mut x: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    x.resize(16, false);
+    x
+}
+
 pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
     if x.is_empty() {
         "∅".into()
