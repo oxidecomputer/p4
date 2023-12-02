@@ -170,6 +170,7 @@ impl<'a> ExpressionGenerator<'a> {
         match op {
             BinOp::Add => quote! { + },
             BinOp::Subtract => quote! { - },
+            BinOp::Mod => quote! { % },
             BinOp::Geq => quote! { >= },
             BinOp::Gt => quote! { > },
             BinOp::Leq => quote! { <= },

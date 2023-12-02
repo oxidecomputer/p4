@@ -643,6 +643,7 @@ pub enum ExpressionKind {
 pub enum BinOp {
     Add,
     Subtract,
+    Mod,
     Geq,
     Gt,
     Leq,
@@ -660,6 +661,7 @@ impl BinOp {
         match self {
             BinOp::Add => "add",
             BinOp::Subtract => "subtract",
+            BinOp::Mod => "mod",
             BinOp::Geq | BinOp::Gt | BinOp::Leq | BinOp::Lt | BinOp::Eq => {
                 "compare"
             }
