@@ -40,6 +40,11 @@ impl<'a> ExpressionGenerator<'a> {
                             p4rs::bitmath::add_le(#lhs_tks.clone(), #rhs_tks.clone())
                         });
                     }
+                    BinOp::Mod => {
+                        ts.extend(quote!{
+                            p4rs::bitmath::mod_le(#lhs_tks.clone(), #rhs_tks.clone())
+                        });
+                    }
                     BinOp::Eq | BinOp::NotEq => {
                         let lhs_tks_ = match &lhs.as_ref().kind {
                             ExpressionKind::Lvalue(lval) => {
