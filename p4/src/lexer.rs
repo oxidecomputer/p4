@@ -81,6 +81,7 @@ pub enum Kind {
     Equals,
     Plus,
     Minus,
+    Mod,
     Dot,
     Mask,
     LogicalAnd,
@@ -208,6 +209,7 @@ impl fmt::Display for Kind {
             Kind::Equals => write!(f, "operator ="),
             Kind::Plus => write!(f, "operator +"),
             Kind::Minus => write!(f, "operator -"),
+            Kind::Mod => write!(f, "operator %"),
             Kind::Dot => write!(f, "operator ."),
             Kind::Mask => write!(f, "operator &&&"),
             Kind::LogicalAnd => write!(f, "operator &&"),
@@ -460,6 +462,10 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(t) = self.match_token("-", Kind::Minus) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token("%", Kind::Mod) {
             return Ok(t);
         }
 

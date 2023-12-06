@@ -443,6 +443,7 @@ impl<'a> Parser<'a> {
             lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
             lexer::Kind::Plus => Ok(Some(BinOp::Add)),
             lexer::Kind::Minus => Ok(Some(BinOp::Subtract)),
+            lexer::Kind::Mod => Ok(Some(BinOp::Mod)),
             lexer::Kind::Mask => Ok(Some(BinOp::Mask)),
             lexer::Kind::And => Ok(Some(BinOp::BitAnd)),
             lexer::Kind::Pipe => Ok(Some(BinOp::BitOr)),
