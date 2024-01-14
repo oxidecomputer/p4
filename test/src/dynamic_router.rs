@@ -1,6 +1,7 @@
 use crate::softnpu::{Interface6, RxFrame, SoftNpu};
 use crate::{expect_frames, muffins};
 use std::net::Ipv6Addr;
+use std::sync::{Arc, Mutex};
 
 p4_macro::use_p4!(
     p4 = "test/src/p4/dynamic_router.p4",
@@ -77,7 +78,7 @@ fn dynamic_router2() -> Result<(), anyhow::Error> {
     // run program
     //
 
-    let mut npu = SoftNpu::new(4, pipeline, true);
+    let mut npu = SoftNpu::new(4, Arc::new(Mutex::new(pipeline)), true);
     let cpu = npu.phy(0);
     let phy1 = npu.phy(1);
     let phy2 = npu.phy(2);

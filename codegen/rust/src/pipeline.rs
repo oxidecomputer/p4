@@ -116,10 +116,16 @@ impl<'a> PipelineGenerator<'a> {
 
         let add_table_entry_method =
             self.add_table_entry_method(ingress, egress);
+
         let remove_table_entry_method =
             self.remove_table_entry_method(ingress, egress);
+
         let get_table_entries_method =
             self.get_table_entries_method(ingress, egress);
+
+        let get_table_counters_method =
+            self.get_table_counters_method(ingress, egress);
+
         let get_table_ids_method = self.get_table_ids_method(ingress, egress);
 
         let table_modifiers = self.table_modifiers(ingress, egress);
@@ -156,6 +162,7 @@ impl<'a> PipelineGenerator<'a> {
                 #add_table_entry_method
                 #remove_table_entry_method
                 #get_table_entries_method
+                #get_table_counters_method
                 #get_table_ids_method
             }
 
@@ -654,6 +661,43 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
+    fn get_table_counters_method(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
+        let mut body = TokenStream::new();
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                if table.counter.is_none() {
+                    continue;
+                }
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qtfn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("get_{}_counters", qtfn);
+                body.extend(quote! {
+                    #qtn => Some(self.#call()),
+                });
+            }
+        }
+        body.extend(quote! {
+            x => None,
+        });
+
+        quote! {
+            fn get_table_counters(
+                &self,
+                table_id: &str,
+            ) -> Option<p4rs::externs::TableEntryCounter> {
+                match table_id {
+                    #body
+                }
+            }
+        }
+    }
+
     fn table_modifiers(
         &mut self,
         ingress: &Control,
@@ -689,6 +733,13 @@ impl<'a> PipelineGenerator<'a> {
                 table_control,
                 &qtfn,
             ));
+            if table.counter.is_some() {
+                tokens.extend(self.get_table_counters_function(
+                    table,
+                    table_control,
+                    &qtfn,
+                ));
+            }
         }
     }
 
@@ -1042,6 +1093,22 @@ impl<'a> PipelineGenerator<'a> {
                 }
 
                 result
+            }
+        }
+    }
+
+    fn get_table_counters_function(
+        &mut self,
+        _table: &Table,
+        _control: &Control,
+        qtfn: &str,
+    ) -> TokenStream {
+        let name = format_ident!("get_{}_counters", qtfn);
+        let tname = format_ident!("{}", qtfn);
+
+        quote! {
+            pub fn #name(&self) -> p4rs::externs::TableEntryCounter {
+                self.#tname.counter.clone().unwrap()
             }
         }
     }

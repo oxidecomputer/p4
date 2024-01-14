@@ -1,4 +1,5 @@
 #![allow(clippy::needless_update)]
+use std::sync::{Arc, Mutex};
 use tests::expect_frames;
 use tests::softnpu::{RxFrame, SoftNpu, TxFrame};
 
@@ -8,7 +9,8 @@ p4_macro::use_p4!(
 );
 
 fn main() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(2, main_pipeline::new(2), false);
+    let mut npu =
+        SoftNpu::new(2, Arc::new(Mutex::new(main_pipeline::new(2))), false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
 

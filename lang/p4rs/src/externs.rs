@@ -32,7 +32,7 @@ impl Default for Checksum {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TableEntryCounter {
     pub entries: Arc<Mutex<HashMap<Vec<u8>, u128>>>,
     pub key: Option<Vec<u8>>,
