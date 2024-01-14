@@ -1184,6 +1184,7 @@ impl<'a, 'b> TableParser<'a, 'b> {
                 lexer::Kind::CurlyClose => break,
                 lexer::Kind::Key => self.parse_key(table)?,
                 lexer::Kind::Actions => self.parse_actions(table)?,
+                lexer::Kind::Counters => self.parse_counter(table)?,
                 lexer::Kind::DefaultAction => {
                     self.parse_default_action(table)?
                 }
@@ -1311,6 +1312,14 @@ impl<'a, 'b> TableParser<'a, 'b> {
             });
         }
 
+        Ok(())
+    }
+
+    pub fn parse_counter(&mut self, table: &mut Table) -> Result<(), Error> {
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        let (name, token) = self.parser.parse_identifier("counter name")?;
+        self.parser.expect_token(lexer::Kind::Semicolon)?;
+        table.counter = Some(Lvalue { name, token });
         Ok(())
     }
 
