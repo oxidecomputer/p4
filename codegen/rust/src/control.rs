@@ -47,20 +47,6 @@ impl<'a> ControlGenerator<'a> {
     fn generate_top_level_control(&mut self, control: &Control) {
         let tables = control.tables(self.ast);
 
-        let mut externs = quote! {};
-
-        for var in &control.variables {
-            if let Type::UserDefined(typename) = &var.ty {
-                if self.ast.get_extern(typename).is_some() {
-                    let extern_name = format_ident!("{}", var.name);
-                    let extern_type = format_ident!("{}", typename);
-                    externs.extend(quote! {
-                        let #extern_name = p4rs::externs::#extern_type::new();
-                    })
-                }
-            }
-        }
-
         for (cs, t) in tables {
             let qtn = qualified_table_function_name(Some(control), &cs, t);
             let qtfn = qualified_table_function_name(Some(control), &cs, t);
@@ -84,7 +70,6 @@ impl<'a> ControlGenerator<'a> {
                 qtn.to_string(),
                 quote! {
                     pub fn #qtfn() -> #type_tokens {
-                        #externs
                         #table_tokens
                     }
                 },
@@ -340,7 +325,22 @@ impl<'a> ControlGenerator<'a> {
             >
         };
 
+        let mut externs = quote! {};
+
+        for var in &control.variables {
+            if let Type::UserDefined(typename) = &var.ty {
+                if self.ast.get_extern(typename).is_some() {
+                    let extern_name = format_ident!("{}", var.name);
+                    let extern_type = format_ident!("{}", typename);
+                    externs.extend(quote! {
+                        let #extern_name = p4rs::externs::#extern_type::new();
+                    })
+                }
+            }
+        }
+
         let mut tokens = quote! {
+            #externs
             let mut #table_name: #table_type = #table_type::new();
         };
 
