@@ -555,6 +555,15 @@ impl<'a> StatementGenerator<'a> {
             }
         });
         if table.default_action != "NoAction" {
+            if table.counter.is_some() {
+                action_args.pop();
+                action_args.push(quote! {
+                    &#table_name
+                        .counter
+                        .as_ref()
+                        .unwrap()
+                });
+            }
             tokens.extend(quote! {
                 else {
                     softnpu_provider::control_table_miss!(||#table_name_str);
