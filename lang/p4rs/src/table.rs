@@ -104,6 +104,7 @@ pub struct Prefix {
 
 pub struct Table<const D: usize, A: Clone> {
     pub entries: HashSet<TableEntry<D, A>>,
+    pub counter: Option<crate::externs::TableEntryCounter>,
 }
 
 impl<const D: usize, A: Clone> Default for Table<D, A> {
@@ -116,6 +117,7 @@ impl<const D: usize, A: Clone> Table<D, A> {
     pub fn new() -> Self {
         Self {
             entries: HashSet::new(),
+            counter: None,
         }
     }
 
@@ -328,6 +330,17 @@ pub struct TableEntry<const D: usize, A: Clone> {
     pub parameter_data: Vec<u8>,
 }
 
+impl<const D: usize, A: Clone> TableEntry<D, A> {
+    pub fn key_bytes(&self) -> Vec<u8> {
+        let mut result = Vec::new();
+        for k in &self.key {
+            let bytes = k.to_bytes();
+            result.extend_from_slice(&bytes);
+        }
+        result
+    }
+}
+
 // TODO: Cannot hash on just the key, this does not work for multipath.
 impl<const D: usize, A: Clone> std::hash::Hash for TableEntry<D, A> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -498,6 +511,7 @@ mod tests {
                     1,
                 ),
             ]),
+            counter: None,
         };
 
         //println!("M1 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
@@ -666,6 +680,7 @@ mod tests {
                     10,
                 ),
             ]),
+            counter: None,
         };
 
         let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
@@ -763,6 +778,7 @@ mod tests {
                     10,
                 ),
             ]),
+            counter: None,
         };
         let dst: Ipv6Addr = "fd00:1::1".parse().unwrap();
         let selector = [
@@ -835,6 +851,7 @@ mod tests {
                     parameter_data: Vec::new(),
                 },
             ]),
+            counter: None,
         };
 
         let selector = [BigUint::from(1u8)];

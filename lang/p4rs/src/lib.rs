@@ -182,6 +182,12 @@ pub trait Pipeline: Send {
     /// Get all the entries in a table.
     fn get_table_entries(&self, table_id: &str) -> Option<Vec<TableEntry>>;
 
+    /// Get the counters for a table.
+    fn get_table_counters(
+        &self,
+        table_id: &str,
+    ) -> Option<externs::TableEntryCounter>;
+
     /// Get a list of table ids
     fn get_table_ids(&self) -> Vec<&str>;
 }

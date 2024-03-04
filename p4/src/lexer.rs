@@ -24,6 +24,7 @@ pub enum Kind {
     Lpm,
     Range,
     Actions,
+    Counters,
     DefaultAction,
     Entries,
     In,
@@ -152,6 +153,7 @@ impl fmt::Display for Kind {
             Kind::Lpm => write!(f, "keyword lpm"),
             Kind::Range => write!(f, "keyword range"),
             Kind::Actions => write!(f, "keyword actions"),
+            Kind::Counters => write!(f, "keyword counters"),
             Kind::DefaultAction => write!(f, "keyword default_action"),
             Kind::Entries => write!(f, "keyword entries"),
             Kind::In => write!(f, "keyword in"),
@@ -550,6 +552,10 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(t) = self.match_token("actions", Kind::Actions) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token("counters", Kind::Counters) {
             return Ok(t);
         }
 

@@ -1371,6 +1371,7 @@ impl ActionParameter {
 pub struct Table {
     pub name: String,
     pub actions: Vec<Lvalue>,
+    pub counter: Option<Lvalue>,
     pub default_action: String,
     pub key: Vec<(Lvalue, MatchKind)>,
     pub const_entries: Vec<ConstTableEntry>,
@@ -1383,6 +1384,7 @@ impl Table {
         Self {
             name,
             actions: Vec::new(),
+            counter: None,
             default_action: String::new(),
             key: Vec::new(),
             const_entries: Vec::new(),

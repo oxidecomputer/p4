@@ -15,3 +15,23 @@ struct egress_metadata_t {
 extern Checksum {
     bit<16> run<T>(in T data);
 }
+
+/* TODO
+enum counter_type_t {
+    PACKETS,
+    BYTES,
+    PACKETS_AND_BYTES
+}
+*/
+
+extern TableEntryCounter {
+    /*TODO TableEntryCounter(counter_type_t type);*/
+    void count();
+}
+
+/*
+extern Counter<W, I> {
+    Counter(bit<32> size, TODO counter_type_t type);
+    void count(in bit<32> index);
+}
+*/

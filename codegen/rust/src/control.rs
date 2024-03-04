@@ -46,6 +46,7 @@ impl<'a> ControlGenerator<'a> {
 
     fn generate_top_level_control(&mut self, control: &Control) {
         let tables = control.tables(self.ast);
+
         for (cs, t) in tables {
             let qtn = qualified_table_function_name(Some(control), &cs, t);
             let qtfn = qualified_table_function_name(Some(control), &cs, t);
@@ -324,9 +325,31 @@ impl<'a> ControlGenerator<'a> {
             >
         };
 
+        let mut externs = quote! {};
+
+        for var in &control.variables {
+            if let Type::UserDefined(typename) = &var.ty {
+                if self.ast.get_extern(typename).is_some() {
+                    let extern_name = format_ident!("{}", var.name);
+                    let extern_type = format_ident!("{}", typename);
+                    externs.extend(quote! {
+                        let #extern_name = p4rs::externs::#extern_type::new();
+                    })
+                }
+            }
+        }
+
         let mut tokens = quote! {
+            #externs
             let mut #table_name: #table_type = #table_type::new();
         };
+
+        if let Some(lval) = &table.counter {
+            let counter_name = format_ident!("{}", lval.name);
+            tokens.extend(quote! {
+                #table_name.counter = Some(#counter_name);
+            });
+        }
 
         if table.const_entries.is_empty() {
             tokens.extend(quote! { #table_name });
@@ -400,6 +423,15 @@ impl<'a> ControlGenerator<'a> {
                 action_fn_args.push(quote! { #a });
             }
 
+            for var in &control.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let name = format_ident!("{}", var.name);
+                        action_fn_args.push(quote! { #name });
+                    }
+                }
+            }
+
             let action_fn_name =
                 format_ident!("{}_action_{}", control.name, entry.action.name);
             for (i, expr) in entry.action.parameters.iter().enumerate() {
@@ -451,6 +483,15 @@ impl<'a> ControlGenerator<'a> {
                 closure_params.push(quote! { #name });
             }
 
+            for var in &control.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let name = format_ident!("{}", var.name);
+                        closure_params.push(quote! { #name });
+                    }
+                }
+            }
+
             tokens.extend(quote! {
 
                 let action: std::sync::Arc<dyn Fn(#(#control_param_types),*)> =
@@ -494,9 +535,12 @@ impl<'a> ControlGenerator<'a> {
                 if self.ast.get_extern(typename).is_some() {
                     let name = format_ident!("{}", var.name);
                     let extern_type = format_ident!("{}", typename);
-                    tokens.extend(quote! {
-                        let #name = p4rs::externs::#extern_type::new();
-                    })
+                    //FIXME terrible hack
+                    if typename == "Checksum" {
+                        tokens.extend(quote! {
+                            let #name = p4rs::externs::#extern_type::new();
+                        })
+                    }
                 }
             }
         }

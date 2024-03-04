@@ -1,6 +1,8 @@
 // Copyright 2022 Oxide Computer Company
 
 use bitvec::prelude::*;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 pub struct Checksum {}
 
@@ -27,5 +29,46 @@ impl Checksum {
 impl Default for Checksum {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TableEntryCounter {
+    pub entries: Arc<Mutex<HashMap<Vec<u8>, u128>>>,
+    pub key: Option<Vec<u8>>,
+}
+
+impl Default for TableEntryCounter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TableEntryCounter {
+    pub fn new() -> Self {
+        Self {
+            entries: Arc::new(Mutex::new(HashMap::new())),
+            key: None,
+        }
+    }
+
+    pub fn set_key(&self, value: Vec<u8>) -> Self {
+        let mut ctr = self.clone();
+        ctr.key = Some(value);
+        ctr
+    }
+
+    pub fn count(&self) {
+        let key = match &self.key {
+            Some(k) => k,
+            None => return,
+        };
+        let mut entries = self.entries.lock().unwrap();
+        match entries.get_mut(key) {
+            Some(e) => *e += 1,
+            None => {
+                entries.insert(key.clone(), 1);
+            }
+        }
     }
 }

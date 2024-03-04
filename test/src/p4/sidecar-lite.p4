@@ -451,16 +451,22 @@ control router(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
+    //TODO counter support when control contains multiple tables.
+    //TableEntryCounter() v4_counter;
+    //TableEntryCounter() v6_counter;
+
     action drop() { }
 
     action forward_v6(bit<16> port, bit<128> nexthop) {
         egress.port = port;
         egress.nexthop_v6 = nexthop;
+        //v6_counter.count();
     }
 
     action forward_v4(bit<16> port, bit<32> nexthop) {
         egress.port = port;
         egress.nexthop_v4 = nexthop;
+        //v4_counter.count();
     }
 
     table router_v6 {
@@ -472,6 +478,7 @@ control router(
             forward_v6;
         }
         default_action = drop;
+        //counters = v6_counter;
     }
 
     table router_v4 {
@@ -483,6 +490,7 @@ control router(
             forward_v4;
         }
         default_action = drop;
+        //counters = v4_counter;
     }
 
     apply {

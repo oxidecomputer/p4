@@ -12,6 +12,12 @@ extern packet_out {
     void emit<T>(in T hdr);
 }
 
+
+// XXX import from softnpu.p4
+extern TableEntryCounter {
+    void count();
+}
+
 // XXX import from softnpu.p4
 struct ingress_metadata_t {
     bit<16> port;
@@ -74,10 +80,13 @@ control ingress(
     inout egress_metadata_t egress,
 ) {
 
+    TableEntryCounter() counter;
+
     action drop() { }
 
     action forward(bit<16> port) {
         egress.port = port;
+        counter.count();
     }
 
     table router {
@@ -102,6 +111,7 @@ control ingress(
             forward(16w1);
 
         }
+        counters = counter;
     }
 
     apply {
