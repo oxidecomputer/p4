@@ -1,6 +1,6 @@
 # Endianness
 
-The basic rules for endiannes follow. Generally speaking numeric fields are in
+The basic rules for endianness follow. Generally speaking numeric fields are in
 big endian when they come in off the wire, little endian while in the program,
 and transformed back to big endian on the way back out onto the wire. We refer
 to this as confused endian.
