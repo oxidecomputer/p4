@@ -840,7 +840,11 @@ impl<'a> PipelineGenerator<'a> {
                         control_param_types.push(quote! { &mut #ty });
                     }
                     _ => {
-                        control_param_types.push(quote! { &#ty });
+                        if p.ty == Type::Bool {
+                            control_param_types.push(quote! { #ty });
+                        } else {
+                            control_param_types.push(quote! { &#ty });
+                        }
                     }
                 }
             }
@@ -949,7 +953,11 @@ impl<'a> PipelineGenerator<'a> {
                     control_param_types.push(quote! { &mut #ty });
                 }
                 _ => {
-                    control_param_types.push(quote! { &#ty });
+                    if p.ty == Type::Bool {
+                        control_param_types.push(quote! { #ty });
+                    } else {
+                        control_param_types.push(quote! { &#ty });
+                    }
                 }
             }
         }
