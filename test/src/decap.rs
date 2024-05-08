@@ -8,12 +8,13 @@ use pnet::packet::udp::{MutableUdpPacket, UdpPacket};
 use pnet::packet::Packet;
 use pnet::util::MacAddr;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::sync::{Arc, Mutex};
 
 p4_macro::use_p4!(p4 = "test/src/p4/decap.p4", pipeline_name = "decap",);
 
 #[test]
 fn geneve_decap() -> Result<(), anyhow::Error> {
-    let pipeline = main_pipeline::new(2);
+    let pipeline = Arc::new(Mutex::new(main_pipeline::new(2)));
     let mut npu = SoftNpu::new(2, pipeline, false);
     let phy0 = npu.phy(0);
     let phy1 = npu.phy(1);

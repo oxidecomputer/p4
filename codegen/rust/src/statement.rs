@@ -495,9 +495,22 @@ impl<'a> StatementGenerator<'a> {
             let name = format_ident!("{}", var.name);
             if let Type::UserDefined(typename) = &var.ty {
                 if self.ast.get_extern(typename).is_some() {
-                    action_args.push(quote! { &#name });
+                    //FIXME terrible hack
+                    if typename == "Checksum" {
+                        action_args.push(quote! { &#name });
+                    }
                 }
             }
+        }
+
+        if table.counter.is_some() {
+            action_args.push(quote! {
+                &#table_name
+                    .counter
+                    .as_ref()
+                    .unwrap()
+                    .set_key(matches[0].key_bytes())
+            });
         }
 
         let mut selector_components = Vec::new();
@@ -542,6 +555,15 @@ impl<'a> StatementGenerator<'a> {
             }
         });
         if table.default_action != "NoAction" {
+            if table.counter.is_some() {
+                action_args.pop();
+                action_args.push(quote! {
+                    &#table_name
+                        .counter
+                        .as_ref()
+                        .unwrap()
+                });
+            }
             tokens.extend(quote! {
                 else {
                     softnpu_provider::control_table_miss!(||#table_name_str);

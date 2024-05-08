@@ -4,7 +4,7 @@ use p4rs::packet_in;
 use rand::Rng;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 use xfr::{ring, FrameBuffer, RingConsumer, RingProducer};
 
@@ -79,7 +79,7 @@ const FBUF: usize = 4096;
 const MTU: usize = 1500;
 
 pub struct SoftNpu<P: p4rs::Pipeline> {
-    pub pipeline: Option<P>,
+    pub pipeline: Arc<Mutex<P>>,
     inner_phys: Option<Vec<InnerPhy<RING, FBUF, MTU>>>,
     outer_phys: Vec<Arc<OuterPhy<RING, FBUF, MTU>>>,
     _fb: Arc<FrameBuffer<FBUF, MTU>>,
@@ -91,7 +91,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
     /// run. When `cpu_port` is set to true, sidecar data in `TxFrame` elements
     /// will be added to packets sent through port 0 (as a sidecar header) on
     /// the way to the ASIC.
-    pub fn new(radix: usize, pipeline: P, cpu_port: bool) -> Self {
+    pub fn new(radix: usize, pipeline: Arc<Mutex<P>>, cpu_port: bool) -> Self {
         let fb = Arc::new(FrameBuffer::<FBUF, MTU>::new());
         let mut inner_phys = Vec::new();
         let mut outer_phys = Vec::new();
@@ -111,7 +111,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
             inner_phys,
             outer_phys,
             _fb: fb,
-            pipeline: Some(pipeline),
+            pipeline,
         }
     }
 
@@ -120,16 +120,22 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
             Some(phys) => phys,
             None => panic!("phys already in use"),
         };
+        let pipe = self.pipeline.clone();
+        /*
         let pipe = match self.pipeline.take() {
             Some(pipe) => pipe,
             None => panic!("pipe already in use"),
         };
+        */
         spawn(move || {
             Self::do_run(inner_phys, pipe);
         });
     }
 
-    fn do_run(inner_phys: Vec<InnerPhy<RING, FBUF, MTU>>, mut pipeline: P) {
+    fn do_run(
+        inner_phys: Vec<InnerPhy<RING, FBUF, MTU>>,
+        pipeline: Arc<Mutex<P>>,
+    ) {
         loop {
             // TODO: yes this is a highly suboptimal linear gather-scatter across
             // each ingress. Will update to something more concurrent eventually.
@@ -147,7 +153,8 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                     let mut pkt = packet_in::new(content);
 
                     let port = i as u16;
-                    let output = pipeline.process_packet(port, &mut pkt);
+                    let output =
+                        pipeline.lock().unwrap().process_packet(port, &mut pkt);
                     for (out_pkt, out_port) in &output {
                         let out_port = *out_port as usize;
                         //

@@ -16,3 +16,7 @@ struct egress_metadata_t {
 extern Checksum {
     bit<16> run<T>(in T data);
 }
+
+extern TableEntryCounter {
+    void count();
+}

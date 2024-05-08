@@ -1,5 +1,6 @@
 use crate::softnpu::{RxFrame, SoftNpu, TxFrame};
 use crate::{expect_frames, muffins};
+use std::sync::{Arc, Mutex};
 
 p4_macro::use_p4!(p4 = "test/src/p4/hub.p4", pipeline_name = "hub2");
 
@@ -27,7 +28,8 @@ p4_macro::use_p4!(p4 = "test/src/p4/hub.p4", pipeline_name = "hub2");
 ///
 #[test]
 fn hub2() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(3, main_pipeline::new(3), false);
+    let mut npu =
+        SoftNpu::new(3, Arc::new(Mutex::new(main_pipeline::new(3))), false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
     let phy3 = npu.phy(2);

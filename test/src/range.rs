@@ -1,6 +1,7 @@
 use crate::expect_frames;
 use crate::softnpu::{Interface4, RxFrame, SoftNpu};
 use std::net::Ipv4Addr;
+use std::sync::{Arc, Mutex};
 
 p4_macro::use_p4!(p4 = "test/src/p4/range.p4", pipeline_name = "range",);
 
@@ -69,7 +70,7 @@ fn range() -> Result<(), anyhow::Error> {
     // run program
     //
 
-    let mut npu = SoftNpu::new(4, pipeline, false);
+    let mut npu = SoftNpu::new(4, Arc::new(Mutex::new(pipeline)), false);
     let phy0 = npu.phy(0);
     let phy1 = npu.phy(1);
     let phy2 = npu.phy(2);

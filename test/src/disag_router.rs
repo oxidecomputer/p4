@@ -1,6 +1,7 @@
 use crate::softnpu::{Interface6, RxFrame, SoftNpu};
 use crate::{expect_frames, muffins};
 use std::net::Ipv6Addr;
+use std::sync::{Arc, Mutex};
 
 p4_macro::use_p4!(p4 = "test/src/p4/router.p4", pipeline_name = "disag",);
 
@@ -29,7 +30,8 @@ p4_macro::use_p4!(p4 = "test/src/p4/router.p4", pipeline_name = "disag",);
 
 #[test]
 fn disag_router() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(4, main_pipeline::new(4), true);
+    let pipe = Arc::new(Mutex::new(main_pipeline::new(4)));
+    let mut npu = SoftNpu::new(4, pipe, true);
     let cpu = npu.phy(0);
     let phy1 = npu.phy(1);
     let phy2 = npu.phy(2);
