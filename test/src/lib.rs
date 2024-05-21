@@ -20,6 +20,8 @@ mod mac_rewrite;
 mod range;
 #[cfg(test)]
 mod table_in_egress_and_ingress;
+#[cfg(test)]
+mod vlan;
 
 pub mod data;
 pub mod packet;
