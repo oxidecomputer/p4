@@ -53,10 +53,10 @@ impl Sanitizer {
     pub fn sanitize_string(s: &mut String) {
         //TODO sanitize other problematic rust tokens
         if s == "type" {
-            *s = "typ".to_owned();
+            "typ".clone_into(s)
         }
         if s == "match" {
-            *s = "match_".to_owned();
+            "match_".clone_into(s)
         }
     }
 }
