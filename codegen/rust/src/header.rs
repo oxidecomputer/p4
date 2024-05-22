@@ -85,21 +85,16 @@ impl<'a> HeaderGenerator<'a> {
                 // NOTE this barfing and then unbarfing a vec is to handle
                 // the p4 confused-endian data model.
                 let mut v = self.#name.clone().into_vec();
+                if ((#end-#offset) % 8) != 0 {
+                    if let Some(x) = v.iter_mut().last() {
+                        *x >>= ((#end - #offset) % 8);
+                    }
+                }
                 v.reverse();
                 let n = (#end-#offset);
                 let m = n%8;
-                if (n > 8) && m != 0 {
-                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                    if b.len() > m {
-                        x[#offset..#end] |= &b[m..];
-                    } else {
-                        x[#offset..#end] |= &b;
-                    }
-                } else {
-                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                    b.resize(#end-#offset, false);
-                    x[#offset..#end] |= &b;
-                }
+                let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                x[#offset..#end] |= &b[m..];
 
             });
             checksum_statements.push(quote! {
