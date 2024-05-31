@@ -99,7 +99,11 @@ impl<'a> HeaderGenerator<'a> {
                     let n = (#end-#offset);
                     let m = n%8;
                     let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                    x[#offset..#end] |= &b[m..];
+                    // this field may be null so check that we at least have
+                    // enough space to offset
+                    if b.len() > m {
+                        x[#offset..#end] |= &b[m..];
+                    }
                 } else {
                     x[#offset..#end] |= self.#name.to_owned();
                 }
