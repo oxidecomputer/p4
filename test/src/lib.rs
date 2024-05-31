@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 #[cfg(test)]
 mod basic_router;
 #[cfg(test)]
@@ -14,6 +16,8 @@ mod dynamic_router;
 mod headers;
 #[cfg(test)]
 mod hub;
+#[cfg(test)]
+mod ipv6;
 #[cfg(test)]
 mod mac_rewrite;
 #[cfg(test)]
