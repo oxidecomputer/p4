@@ -67,14 +67,4 @@ fn test_ipv6_parse() -> anyhow::Result<()> {
     assert_eq!(data.to_vec(), readback);
 
     Ok(())
-
-    /*
-    let version: BigUint = v6.version.unwrap().to_owned().into();
-    println!("version = {}", version);
-    assert_eq!(version, BigUint::from(6u8));
-
-    let traffic_class: BigUint = v6.traffic_class.unwrap().to_owned().into();
-    println!("traffic class = {}", traffic_class);
-    assert_eq!(traffic_class, BigUint::from(127u8));
-    */
 }
