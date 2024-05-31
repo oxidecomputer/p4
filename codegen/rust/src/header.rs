@@ -69,32 +69,44 @@ impl<'a> HeaderGenerator<'a> {
                     let mut b = buf.view_bits::<Msb0>()[#offset..#end].to_owned();
                     // NOTE this barfing and then unbarfing a vec is to handle
                     // the p4 confused-endian data model.
-                    let mut v = b.into_vec();
-                    v.reverse();
-                    if ((#end-#offset) % 8) != 0 {
-                        if let Some(x) = v.iter_mut().last() {
-                            *x <<= (#offset % 8);
+                    if #end-#offset > 8 {
+                        let mut v = b.into_vec();
+                        v.reverse();
+                        if ((#end-#offset) % 8) != 0 {
+                            if let Some(x) = v.iter_mut().last() {
+                                *x <<= (#offset % 8);
+                            }
                         }
+                        let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                        b.resize(#end-#offset, false);
+                        b
+                    } else {
+                        b
                     }
-                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                    b.resize(#end-#offset, false);
-                    b
                 }
             });
             to_bitvec_statements.push(quote! {
                 // NOTE this barfing and then unbarfing a vec is to handle
                 // the p4 confused-endian data model.
-                let mut v = self.#name.clone().into_vec();
-                if ((#end-#offset) % 8) != 0 {
-                    if let Some(x) = v.iter_mut().last() {
-                        *x >>= ((#end - #offset) % 8);
+                if #end-#offset > 8 {
+                    let mut v = self.#name.clone().into_vec();
+                    if ((#end-#offset) % 8) != 0 {
+                        if let Some(x) = v.iter_mut().last() {
+                            *x >>= ((#end - #offset) % 8);
+                        }
                     }
+                    v.reverse();
+                    let n = (#end-#offset);
+                    let m = n%8;
+                    let mut b = BitVec::<u8, Msb0>::from_vec(v);
+                    // this field may be null so check that we at least have
+                    // enough space to offset
+                    if b.len() > m {
+                        x[#offset..#end] |= &b[m..];
+                    }
+                } else {
+                    x[#offset..#end] |= self.#name.to_owned();
                 }
-                v.reverse();
-                let n = (#end-#offset);
-                let m = n%8;
-                let mut b = BitVec::<u8, Msb0>::from_vec(v);
-                x[#offset..#end] |= &b[m..];
 
             });
             checksum_statements.push(quote! {
