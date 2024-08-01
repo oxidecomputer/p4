@@ -370,7 +370,10 @@ impl<'a> StatementGenerator<'a> {
                 })
             }
             Type::Table => control,
-            t => panic!("call references non-user-defined type {:#?}", t),
+            t => panic!(
+                "call {:#?} references non-user-defined type {:#?}",
+                c, t
+            ),
         };
 
         let root = c.lval.root();

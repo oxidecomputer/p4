@@ -58,7 +58,7 @@ control local(
         is_local = true;
     }
 
-    table local {
+    table tbl {
         key = {
             hdr.ipv6.dst: exact;
         }
@@ -80,7 +80,7 @@ control local(
     }
 
     apply {
-        local.apply();
+        tbl.apply();
 
         bit<16> ll = 16w0xff02;
 
