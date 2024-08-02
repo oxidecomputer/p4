@@ -288,16 +288,11 @@ impl<'a> StatementGenerator<'a> {
         c: &Call,
         tokens: &mut TokenStream,
     ) {
-        //
-        // get the lval reference to the thing being called
-        //
         if c.lval.name.split('.').count() < 2 {
-            panic!(
-                "codegen: bare calls not supported, \
-                only <ref>.apply() calls are: {:#?}",
-                c
-            );
+            self.generate_action_call(control, c, tokens);
+            return;
         }
+
         match c.lval.leaf() {
             "apply" => {
                 self.generate_control_apply_body_call(control, c, tokens);
@@ -320,6 +315,38 @@ impl<'a> StatementGenerator<'a> {
                 self.generate_control_extern_call(control, c, tokens);
             }
         }
+    }
+
+    fn generate_action_call(
+        &self,
+        control: &Control,
+        c: &Call,
+        tokens: &mut TokenStream,
+    ) {
+        let eg = ExpressionGenerator::new(self.hlir);
+        let mut args = Vec::new();
+
+        for a in &c.args {
+            let arg_xpr = eg.generate_expression(a.as_ref());
+            args.push(arg_xpr);
+        }
+
+        let lvref: Vec<TokenStream> = c
+            .lval
+            .name
+            .split('.')
+            .map(|x| format_ident!("{}_action_{}", control.name, x))
+            .map(|x| quote! { #x })
+            .collect();
+
+        for a in &control.parameters {
+            let arg = format_ident!("{}", a.name);
+            args.push(quote! { #arg });
+        }
+
+        tokens.extend(quote! {
+            #(#lvref).*(#(#args),*);
+        })
     }
 
     fn generate_control_extern_call(
