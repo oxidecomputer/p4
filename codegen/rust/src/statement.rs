@@ -137,7 +137,10 @@ impl<'a> StatementGenerator<'a> {
                 let initializer = match &v.initializer {
                     Some(xpr) => {
                         let eg = ExpressionGenerator::new(self.hlir);
-                        let ini = eg.generate_expression(xpr.as_ref());
+                        let mut ini = eg.generate_expression(xpr.as_ref());
+                        if let ExpressionKind::Lvalue(_) = xpr.kind {
+                            ini = quote! { #ini.clone() };
+                        }
                         let ini_ty =
                             self.hlir.expression_types.get(xpr).unwrap_or_else(
                                 || panic!("type for expression {:#?}", xpr),
