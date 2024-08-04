@@ -166,7 +166,7 @@ impl ControlChecker {
             Self::check_table_action_reference(c, t, ast, diags);
         }
         for a in &c.actions {
-            check_statement_block(&a.statement_block, hlir, diags);
+            check_statement_block(&a.statement_block, hlir, diags, ast, true);
         }
     }
 
@@ -212,6 +212,8 @@ fn check_statement_block(
     block: &StatementBlock,
     hlir: &Hlir,
     diags: &mut Diagnostics,
+    ast: &AST,
+    in_action: bool,
 ) {
     for s in &block.statements {
         match s {
@@ -257,6 +259,46 @@ fn check_statement_block(
                 }
             }
             Statement::Empty => {}
+            Statement::Call(c) if in_action => {
+                let lval = c.lval.pop_right();
+                let name_info = match hlir.lvalue_decls.get(&lval) {
+                    Some(info) => info,
+                    None => {
+                        diags.push(Diagnostic {
+                            level: Level::Error,
+                            message: format!(
+                                "Could not resolve lvalue {}",
+                                &c.lval.name,
+                            ),
+                            token: c.lval.token.clone(),
+                        });
+                        return;
+                    }
+                };
+                match &name_info.ty {
+                    Type::Table => {
+                        diags.push(Diagnostic {
+                            level: Level::Error,
+                            message: String::from(
+                                "Cannot apply table within action",
+                            ),
+                            token: c.lval.token.clone(),
+                        });
+                    }
+                    Type::UserDefined(name) => {
+                        if ast.get_control(name).is_some() {
+                            diags.push(Diagnostic {
+                                level: Level::Error,
+                                message: String::from(
+                                    "Cannot apply control within action",
+                                ),
+                                token: c.lval.token.clone(),
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
             _ => {
                 // TODO
             }
