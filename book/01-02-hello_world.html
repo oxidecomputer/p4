@@ -1,0 +1,539 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Hello World - The x4c Book</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = null;
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">The x4c Book</a></li><li class="chapter-item expanded "><a href="01-basics.html"><strong aria-hidden="true">1.</strong> The Basics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="01-01-installation.html"><strong aria-hidden="true">1.1.</strong> Installation</a></li><li class="chapter-item expanded "><a href="01-02-hello_world.html" class="active"><strong aria-hidden="true">1.2.</strong> Hello World</a></li><li class="chapter-item expanded "><a href="01-03-compile_and_run.html"><strong aria-hidden="true">1.3.</strong> Compile and Run</a></li></ol></li><li class="chapter-item expanded "><a href="02-by-example.html"><strong aria-hidden="true">2.</strong> By Example</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="02-01-vlan-switch.html"><strong aria-hidden="true">2.1.</strong> VLAN Switch</a></li></ol></li><li class="chapter-item expanded "><a href="03-guidelines.html"><strong aria-hidden="true">3.</strong> Guidelines</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="03-01-endianness.html"><strong aria-hidden="true">3.1.</strong> Endianness</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The x4c Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="hello-world"><a class="header" href="#hello-world">Hello World</a></h1>
+<p>Let's start out our introduction of P4 with the obligatory hello world program.</p>
+<h2 id="parsing"><a class="header" href="#parsing">Parsing</a></h2>
+<p>The first bit of programmable logic packets hit in a P4 program is a parser.
+Parsers do the following.</p>
+<ol>
+<li>Describe a state machine packet parsing.</li>
+<li>Extract raw data into headers with typed fields.</li>
+<li>Decide if a packet should be accepted or rejected based on parsed structure.</li>
+</ol>
+<p>In the code below, we can see that parsers are defined somewhat like functions
+in general-purpose programming languages. They take a set of parameters and have
+a curly-brace delimited block of code that acts over those parameters.</p>
+<p>Each of the parameters has an optional direction that we see here as <code>out</code> or
+<code>inout</code>, a type, and a name. We'll get to data types in the next section for now
+let's focus on what this parser code is doing.</p>
+<p>The parameters shown here are typical of what you will see for P4 parsers. The
+exact set of parameters varies depending on ASIC the P4 code is being compiled
+for. But in general, there will always need to be - a packet, set of headers to
+extract packet data into and a bit of metadata about the packet that the ASIC
+has collected.</p>
+<pre><code class="language-p4">parser parse (
+    packet_in pkt,
+    out headers_t headers,
+    inout ingress_metadata_t ingress,
+){
+    state start {
+        pkt.extract(headers.ethernet);
+        transition finish;
+    }
+
+    state finish {
+        transition accept;
+    }
+}
+</code></pre>
+<p>Parsers are made up of a set of states and transitions between those states.
+<strong><em>Parsers must always include a <code>start</code> state</em></strong>. Our start state extracts an
+Ethernet header from the incoming packet and places it in to the <code>headers_t</code>
+parameter passed to the parser. We then transition to the <code>finish</code> state where
+we simply transition to the implicit <code>accept</code> state. We could have just
+transitioned to <code>accept</code> from <code>start</code>, but wanted to show transitions between
+user-defined states in this example.</p>
+<p>Transitioning to the <code>accept</code> state means that the packet will be passed to a
+control block for further processing. Control blocks will be covered a few
+sections from now. Parsers can also transition to the implicit <code>reject</code> state.
+This means that the packet will be dropped and not go on to any further
+processing.</p>
+<h2 id="data-types"><a class="header" href="#data-types">Data Types</a></h2>
+<p>There are two primary data types in P4, <code>struct</code> and <code>header</code> types.</p>
+<h3 id="structs"><a class="header" href="#structs">Structs</a></h3>
+<p>Structs in P4 are similar to structs you'll find in general purpose programming
+languages such as C, Rust, and Go. They are containers for data with typed data
+fields. They can contain basic data types, headers as well as other structs.</p>
+<p>Let's take a look at the structs in use by our hello world program.</p>
+<p>The first is a structure containing headers for our program to extract packet
+data into. This <code>headers_t</code> structure is simple and only contains one header.
+However, there may be an arbitrary number of headers in the struct. We'll
+discuss headers in the next section.</p>
+<pre><code class="language-p4">struct headers_t {
+    ethernet_t ethernet;
+}
+</code></pre>
+<p>The next structure is a bit of metadata provided to our parser by the ASIC. In
+our simple example this just includes the port that the packet came from. So if
+our code is running on a four port switch, the <code>port</code> field would take on a
+value between <code>0</code> and <code>3</code> depending on which port the packet came in on.</p>
+<pre><code class="language-p4">struct ingress_metadata_t {
+    bit&lt;16&gt; port;
+}
+</code></pre>
+<p>As the name suggests <code>bit&lt;16&gt;</code> is a 16-bit value. In P4 the <code>bit&lt;N&gt;</code> type
+commonly represents unsigned integer values. We'll get more into the primitive
+data types of P4 later.</p>
+<h3 id="headers"><a class="header" href="#headers">Headers</a></h3>
+<p>Headers are the result of parsing packets. They are similar in nature to
+structures with the following differences.</p>
+<ol>
+<li>Headers may not contain headers.</li>
+<li>Headers have a set of methods <code>isValid()</code>, <code>setValid()</code>, and <code>setValid()</code>
+that provide a means for parsers and control blocks to coordinate on the
+parsed structure of packets as they move through pipelines.</li>
+</ol>
+<p>Let's take a look at the <code>ethernet_h</code> header in our hello world example.</p>
+<pre><code class="language-p4">header ethernet_h {
+    bit&lt;48&gt; dst;
+    bit&lt;48&gt; src;
+    bit&lt;16&gt; ether_type;
+}
+</code></pre>
+<p>This header represents a layer-2
+<a href="https://en.wikipedia.org/wiki/Ethernet_frame">Ethernet frame</a>.
+The leading octet is not present as this will be removed by most ASICs. What
+remains is the MAC source and destination fields which are each 6 octets / 48
+bits and the ethertype which is 2 octets.</p>
+<p>Note also that the payload is not included here. This is important. P4 programs
+typically operate on packet headers and not packet payloads. In upcoming
+examples we'll go over header stacks that include headers at higher layers like
+IP, ICMP and TCP.</p>
+<p>In the parsing code above, when <code>pkt.extract(headers.ethernet)</code> is called, the
+values <code>dst</code>, <code>src</code> and <code>ether_type</code> are populated from packet data and the
+method <code>setValid()</code> is implicitly called on the <code>headers.ethernet</code> header.</p>
+<h3 id="control-blocks"><a class="header" href="#control-blocks">Control Blocks</a></h3>
+<p>Control blocks are where logic goes that decides what will happen to packets
+that are parsed successfully. Similar to a parser block, control blocks look a
+lot like functions from general purpose programming languages. The signature
+(the number and type of arguments) for this control block is a bit different
+than the parser block above.</p>
+<p>The first argument <code>hdr</code>, is the output of the parser block. Note in the parser
+signature there is a <code>out headers_t headers</code> parameter, and in this control
+block there is a <code>inout headers_t hdr</code> parameter. The <code>out</code> direction in the
+parser means that the parser writes to this parameter. The <code>inout</code> direction
+in the control block means that the control both reads and writes to this
+parameter.</p>
+<p>The <code>ingress_metadata_t</code> parameter is the same parameter we saw in the parser
+block.  The <code>egress_metadata_t</code> is similar to <code>ingress_metadata_t</code>. However,
+our code uses this parameter to inform the ASIC about how it should treat packets
+on egress. This is in contrast to the <code>ingress_metdata_t</code> parameter that is used
+by the ASIC to inform our program about details of the packet's ingress.</p>
+<pre><code class="language-p4">control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+    action drop() { }
+
+    action forward(bit&lt;16&gt; port) {
+        egress.port = port;
+    }
+
+    table tbl {
+        key = {
+            ingress.port: exact;
+        }
+        actions = {
+            drop;
+            forward;
+        }
+        default_action = drop;
+        const entries = {
+            16w0 : forward(16w1);
+            16w1 : forward(16w0);
+        }
+    }
+
+    apply {
+        tbl.apply();
+    }
+
+}
+</code></pre>
+<p>Control blocks are made up of tables, actions and apply blocks. When packet
+headers enter a control block, the <code>apply</code> block decides what tables to run the
+parameter data through. Tables are described in terms if keys and actions. A
+<code>key</code> is an ordered sequence of fields that can be extracted from any of the
+control parameters. In the example above we are using the <code>port</code> field from the
+<code>ingress</code> parameter to decide what to do with a packet. We are not even
+investigating the packet headers at all! We can indeed use header fields in
+keys, and an example of doing so will come later.</p>
+<p>When a table is applied, and there is an entry in the table that matches the key
+data, the action corresponding to that key is executed. In our example we have
+pre-populated our table with two entries. The first entry says, if the ingress
+port is <code>0</code>, forward the packet to port <code>1</code>. The second entry says if the ingress
+port is <code>1</code>, forward the packet to port <code>0</code>. These odd looking prefixes on our
+numbers are width specifiers. So <code>16w0</code> reads: the value <code>0</code> with a width of 16
+bits.</p>
+<p>Every action that is specified in a table entry must be defined within the
+control. In our example, the <code>forward</code> action is defined above. All this action
+does is set the <code>port</code> field on the egress metadata to the provided value.</p>
+<p>The example table also has a default action of <code>drop</code>. This action fires for all
+invocations of the table over key data that has no matching entry. So for our
+program, any packet coming from a port that is not <code>0</code> or <code>1</code> will be dropped.</p>
+<p>The apply block is home to generic procedural code. In our example it's very
+simple and only has an <code>apply</code> invocation for our table. However, arbitrary
+logic can go in this block, we could even implement the logic of this control
+without a table!</p>
+<pre><code class="language-p4">apply {
+    if (ingress.port == 16w0) {
+        egress.port = 16w1;
+    }
+    if (ingress.port == 16w1) {
+        egress.port = 16w0;
+    }
+}
+</code></pre>
+<p>Which then begs the question, why have a special table construct at all. Why not
+just program everything using logical primitives? Or let programmers define
+their own data structures like general purpose programming languages do?</p>
+<p>Setting the performance arguments aside for the moment, there is something
+mechanically special about tables. They can be updated from outside the P4
+program. In the program above we have what are called constant entries defined
+directly in the P4 program. This makes presenting a simple program like this
+very straight forward, but it is not the way tables are typically populated. The
+focus of P4 is on data plane programming e.g., given a packet from the wire what
+do we do with it? I prime example of this is packet routing and forwarding.</p>
+<p>Both routing and forwarding are typically implemented in terms of lookup tables.
+Routing is commonly implemented by longest prefix matching on the destination
+address of an IP packet and forwarding is commonly implemented by exact table
+lookups on layer-2 MAC addresses. How are those lookup tables populated though.
+There are various different answers there. Some common ones include routing
+protocols like OSPF, or BGP. Address resolution protocols like ARP and NDP. Or
+even more simple answers like an administrator statically adding a route to the
+system.</p>
+<p>All of these activities involve either a stateful protocol of some sort or
+direct interaction with a user. Neither of those things is possible in the P4
+programming language. It's just about processing packets on the wire and the
+mechanisms for keeping state between packets is extremely limited.</p>
+<p>What P4 implementations <strong><em>do</em></strong> provide is a way for programs written in
+general purpose programming languages that <strong><em>are</em></strong> capable of stateful
+protocol implementation and user interaction - to modify the tables of a running
+P4 program through a runtime API. We'll come back to runtime APIs soon. For now
+the point is that the table abstraction allows P4 programs to remain focused on
+simple, mostly-stateless packet processing tasks that can be implemented at high
+packet rates and leave the problem of table management to the general purpose
+programming languages that interact with P4 programs through shared table
+manipulation.</p>
+<h2 id="package"><a class="header" href="#package">Package</a></h2>
+<p>The final bit to show for our hello world program is a package instantiation.
+A package is like a constructor function that takes a parser and a set of
+control blocks. Packages are typically tied to the ASIC your P4 code will be
+executing on. In the example below, we are passing our parser and single control
+block to the <code>SoftNPU</code> package. Packages for more complex ASICs may take many
+control blocks as arguments.</p>
+<pre><code class="language-p4">SoftNPU(
+    parse(),
+    ingress()
+) main;
+</code></pre>
+<h2 id="full-program"><a class="header" href="#full-program">Full Program</a></h2>
+<p>Putting it all together, we have a complete P4 hello world program as follows.</p>
+<pre><code class="language-p4">struct headers_t {
+    ethernet_h ethernet;
+}
+
+struct ingress_metadata_t {
+    bit&lt;16&gt; port;
+    bool drop;
+}
+
+struct egress_metadata_t {
+    bit&lt;16&gt; port;
+    bool drop;
+    bool broadcast;
+}
+
+header ethernet_h {
+    bit&lt;48&gt; dst;
+    bit&lt;48&gt; src;
+    bit&lt;16&gt; ether_type;
+}
+
+parser parse (
+    packet_in pkt,
+    out headers_t headers,
+    inout ingress_metadata_t ingress,
+){
+    state start {
+        pkt.extract(headers.ethernet);
+        transition finish;
+    }
+
+    state finish {
+        transition accept;
+    }
+}
+
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+    action drop() { }
+
+    action forward(bit&lt;16&gt; port) {
+        egress.port = port;
+    }
+
+    table tbl {
+        key = {
+            ingress.port: exact;
+        }
+        actions = {
+            drop;
+            forward;
+        }
+        default_action = drop;
+        const entries = {
+            16w0 : forward(16w1);
+            16w1 : forward(16w0);
+        }
+    }
+
+    apply {
+        tbl.apply();
+    }
+
+}
+
+// We do not use an egress controller in this example, but one is required for
+// SoftNPU so just use an empty controller here.
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+}
+
+SoftNPU(
+    parse(),
+    ingress(),
+    egress(),
+) main;
+</code></pre>
+<p>This program will take any packet that has an Ethernet header showing up on port
+<code>0</code>, send it out port <code>1</code>, and vice versa. All other packets will be dropped.</p>
+<p>In the next section we'll compile this program and run some packets through it!</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="01-01-installation.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="01-03-compile_and_run.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="01-01-installation.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="01-03-compile_and_run.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="https://storage.googleapis.com/goodwu-public/highlight.min.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
