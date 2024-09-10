@@ -825,6 +825,9 @@ impl<'a> PipelineGenerator<'a> {
                     Type::List(_) => {
                         todo!();
                     }
+                    Type::Sync(_) => {
+                        todo!();
+                    }
                 }
             }
             let mut control_params = Vec::new();

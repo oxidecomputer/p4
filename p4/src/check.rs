@@ -218,7 +218,7 @@ fn check_statement_block(
     for s in &block.statements {
         match s {
             Statement::Assignment(lval, xpr) => {
-                let name_info = match hlir.lvalue_decls.get(lval) {
+                let name_info = match hlir.lvalue_decls.get(&lval.pop_await()) {
                     Some(info) => info,
                     None => {
                         diags.push(Diagnostic {
@@ -261,7 +261,7 @@ fn check_statement_block(
             Statement::Empty => {}
             Statement::Call(c) if in_action => {
                 let lval = c.lval.pop_right();
-                let name_info = match hlir.lvalue_decls.get(&lval) {
+                let name_info = match hlir.lvalue_decls.get(&lval.pop_await()) {
                     Some(info) => info,
                     None => {
                         diags.push(Diagnostic {
@@ -943,6 +943,19 @@ fn check_lvalue(
                     message: format!(
                         "type {} is not defined",
                         name.bright_blue(),
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
+        Type::Sync(inner_type) => {
+            if parts.len() > 1 && parts[1] != "await" {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type {} does not have a member {}",
+                        format!("sync<{}>", inner_type).bright_blue(),
+                        parts[1].bright_blue(),
                     ),
                     token: lval.token.clone(),
                 });

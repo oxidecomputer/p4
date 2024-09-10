@@ -308,6 +308,7 @@ pub enum Type {
     State,
     Action,
     HeaderMethod,
+    Sync(String),
 }
 
 impl Type {
@@ -371,6 +372,7 @@ impl fmt::Display for Type {
                 }
                 write!(f, ">")
             }
+            Type::Sync(param) => write!(f, "sync<{param}>"),
         }
     }
 }
@@ -1376,10 +1378,11 @@ pub struct Table {
     pub const_entries: Vec<ConstTableEntry>,
     pub size: usize,
     pub token: Token,
+    pub is_async: bool,
 }
 
 impl Table {
-    pub fn new(name: String, token: Token) -> Self {
+    pub fn new(name: String, is_async: bool, token: Token) -> Self {
         Self {
             name,
             actions: Vec::new(),
@@ -1387,6 +1390,7 @@ impl Table {
             key: Vec::new(),
             const_entries: Vec::new(),
             size: 0,
+            is_async,
             token,
         }
     }
@@ -1886,6 +1890,7 @@ impl ElseIfBlock {
 pub struct Call {
     pub lval: Lvalue,
     pub args: Vec<Box<Expression>>,
+    pub with_await: bool,
 }
 
 impl Call {
@@ -1970,6 +1975,25 @@ impl Lvalue {
             },
         }
     }
+    pub fn pop_await(&self) -> Self {
+        let parts = self.parts();
+        Lvalue {
+            name: if parts.len() == 1 {
+                parts[0].to_owned()
+            } else if parts.last() == Some(&"await") {
+                parts[..parts.len() - 1].join(".")
+            } else {
+                parts.join(".")
+            },
+            token: Token {
+                kind: self.token.kind.clone(),
+                line: self.token.line,
+                col: self.token.col,
+                file: self.token.file.clone(),
+            },
+        }
+    }
+
     fn accept<V: Visitor>(&self, v: &V) {
         v.lvalue(self);
     }
