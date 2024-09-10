@@ -241,6 +241,7 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::Action => {
             todo!("rust type for action");
         }
+        Type::Sync(_) => todo!("rust codegen for sync<T>"),
     }
 }
 
@@ -293,6 +294,7 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         Type::Action => {
             todo!("type size for action");
         }
+        Type::Sync(_) => todo!("type size for sync<T>"),
     }
 }
 

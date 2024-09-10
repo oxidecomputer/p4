@@ -367,6 +367,14 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
+            Type::Sync(inner) => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!("cannot index a sync<{inner}>"),
+                    token: lval.token.clone(),
+                });
+                None
+            }
         }
     }
 
@@ -441,11 +449,11 @@ impl<'a> HlirGenerator<'a> {
         lval: &Lvalue,
         names: &mut HashMap<String, NameInfo>,
     ) -> Option<Type> {
-        match resolve_lvalue(lval, self.ast, names) {
+        match resolve_lvalue(&lval.pop_await(), self.ast, names) {
             Ok(name_info) => {
                 self.hlir
                     .lvalue_decls
-                    .insert(lval.clone(), name_info.clone());
+                    .insert(lval.pop_await(), name_info.clone());
                 Some(name_info.ty)
             }
             Err(e) => {
