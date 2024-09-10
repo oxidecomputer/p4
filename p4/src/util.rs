@@ -26,6 +26,7 @@ pub fn resolve_lvalue(
         Type::List(_) => root.clone(),
         Type::State => root.clone(),
         Type::Action => root.clone(),
+        Type::Sync(_) => root.clone(),
         Type::UserDefined(name) => {
             if lval.degree() == 1 {
                 root.clone()
