@@ -195,7 +195,7 @@ impl<'a> HlirGenerator<'a> {
                 }
                 // TODO check extern methods in checker before getting here
                 if let Some(name_info) = names.get(call.lval.root()) {
-                    if let Type::UserDefined(typename) = &name_info.ty {
+                    if let Type::UserDefined(typename, _) = &name_info.ty {
                         if let Some(ext) = self.ast.get_extern(typename) {
                             if let Some(m) = ext.get_method(call.lval.leaf()) {
                                 self.hlir
@@ -335,7 +335,7 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
-            Type::UserDefined(_) => {
+            Type::UserDefined(_, _) => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index a user defined type".into(),
