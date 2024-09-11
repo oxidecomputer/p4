@@ -169,7 +169,14 @@ impl<'a> Parser<'a> {
                 }
 
                 lexer::Kind::Identifier(name) => {
-                    Type::UserDefined(name.clone())
+                    let params = match self.parse_type_parameters() {
+                        Ok(params) => params,
+                        Err(_) => Vec::new(),
+                    };
+                    Type::UserDefined(
+                        name.clone(),
+                        params.into_iter().map(Box::new).collect(),
+                    )
                 }
                 lexer::Kind::Sync => {
                     let params = self.parse_type_parameters()?;
@@ -184,7 +191,7 @@ impl<'a> Parser<'a> {
                         }
                         .into());
                     }
-                    Type::Sync(params[0].clone())
+                    Type::Sync(Box::new(params[0].clone()))
                 }
                 _ => {
                     return Err(
@@ -655,14 +662,15 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    pub fn parse_type_parameters(&mut self) -> Result<Vec<String>, Error> {
+    pub fn parse_type_parameters(&mut self) -> Result<Vec<Type>, Error> {
         let mut result = Vec::new();
 
-        self.expect_token(lexer::Kind::AngleOpen)?;
+        self.try_token(lexer::Kind::AngleOpen)?;
 
         loop {
-            let (ident, _) = self.parse_identifier("type parameter name")?;
-            result.push(ident);
+            //let (ident, _) = self.parse_identifier("type parameter name")?;
+            let (ty, _) = self.parse_type()?;
+            result.push(ty);
 
             let token = self.next_token()?;
             match token.kind {

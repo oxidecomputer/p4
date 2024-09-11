@@ -217,7 +217,7 @@ impl PackageInstance {
 #[derive(Debug)]
 pub struct Package {
     pub name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<PackageParameter>,
 }
 
@@ -262,7 +262,7 @@ impl Package {
 #[derive(Debug)]
 pub struct PackageParameter {
     pub type_name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub name: String,
 }
 
@@ -300,7 +300,7 @@ pub enum Type {
     Varbit(usize),
     Int(usize),
     String,
-    UserDefined(String),
+    UserDefined(String, Vec<Box<Type>>),
     ExternFunction, //TODO actual signature
     Table,
     Void,
@@ -308,7 +308,7 @@ pub enum Type {
     State,
     Action,
     HeaderMethod,
-    Sync(String),
+    Sync(Box<Type>),
 }
 
 impl Type {
@@ -358,7 +358,22 @@ impl fmt::Display for Type {
             Type::Varbit(size) => write!(f, "varbit<{}>", size),
             Type::Int(size) => write!(f, "int<{}>", size),
             Type::String => write!(f, "string"),
-            Type::UserDefined(name) => write!(f, "{}", name),
+            Type::UserDefined(name, params) => {
+                if params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(
+                        f,
+                        "{}<{}>",
+                        name,
+                        params
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                }
+            }
             Type::ExternFunction => write!(f, "extern function"),
             Type::Table => write!(f, "table"),
             Type::Void => write!(f, "void"),
@@ -888,7 +903,7 @@ pub struct Control {
     pub name: String,
     pub variables: Vec<Variable>,
     pub constants: Vec<Constant>,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<ControlParameter>,
     pub actions: Vec<Action>,
     pub tables: Vec<Table>,
@@ -944,7 +959,7 @@ impl Control {
             result.push((chain.clone(), table));
         }
         for v in &self.variables {
-            if let Type::UserDefined(typename) = &v.ty {
+            if let Type::UserDefined(typename, _) = &v.ty {
                 if let Some(control_inst) = ast.get_control(typename) {
                     result.extend_from_slice(&control_inst.tables_rec(
                         ast,
@@ -959,7 +974,7 @@ impl Control {
 
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
-            if t == name {
+            if t.to_string() == name {
                 return true;
             }
         }
@@ -1114,7 +1129,7 @@ impl PartialEq for Control {
 #[derive(Debug, Clone)]
 pub struct Parser {
     pub name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<ControlParameter>,
     pub states: Vec<State>,
     pub decl_only: bool,
@@ -1137,7 +1152,7 @@ impl Parser {
 
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
-            if t == name {
+            if t.to_string() == name {
                 return true;
             }
         }
@@ -2239,7 +2254,7 @@ impl Extern {
 pub struct ExternMethod {
     pub return_type: Type,
     pub name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<ControlParameter>,
 }
 
