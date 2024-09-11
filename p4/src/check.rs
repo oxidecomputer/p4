@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::ast::{
     Call, Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
     NameInfo, Parser, State, Statement, StatementBlock, Struct, Table,
-    Transition, Type, VisitorMut, AST,
+    Transition, Type, Variable, VisitorMut, AST,
 };
 use crate::hlir::{Hlir, HlirGenerator};
 use crate::lexer::Token;
@@ -96,7 +96,7 @@ impl ControlChecker {
 
     pub fn check_params(c: &Control, ast: &AST, diags: &mut Diagnostics) {
         for p in &c.parameters {
-            if let Type::UserDefined(typename) = &p.ty {
+            if let Type::UserDefined(typename, _) = &p.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
@@ -140,7 +140,7 @@ impl ControlChecker {
 
     pub fn check_variables(c: &Control, ast: &AST, diags: &mut Diagnostics) {
         for v in &c.variables {
-            if let Type::UserDefined(typename) = &v.ty {
+            if let Type::UserDefined(typename, _) = &v.ty {
                 if ast.get_user_defined_type(typename).is_some() {
                     continue;
                 }
@@ -203,6 +203,7 @@ impl ControlChecker {
             ast,
             hlir,
             diags,
+            local_values: HashMap::new(),
         };
         c.accept_mut(&mut apc);
     }
@@ -285,7 +286,7 @@ fn check_statement_block(
                             token: c.lval.token.clone(),
                         });
                     }
-                    Type::UserDefined(name) => {
+                    Type::UserDefined(name, _) => {
                         if ast.get_control(name).is_some() {
                             diags.push(Diagnostic {
                                 level: Level::Error,
@@ -311,26 +312,40 @@ pub struct ApplyCallChecker<'a> {
     ast: &'a AST,
     hlir: &'a Hlir,
     diags: &'a mut Diagnostics,
+    local_values: HashMap<String, NameInfo>,
 }
 
 impl VisitorMut for ApplyCallChecker<'_> {
+    fn variable(&mut self, variable: &Variable) {
+        self.local_values.insert(
+            variable.name.clone(),
+            NameInfo {
+                ty: variable.ty.clone(),
+                decl: DeclarationInfo::Local,
+            },
+        );
+    }
+
     fn call(&mut self, call: &Call) {
         let name = call.lval.root();
         let names = self.c.names();
         let name_info = match names.get(name) {
             Some(info) => info,
-            None => {
-                self.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!("{} is undefined", name),
-                    token: call.lval.token.clone(),
-                });
-                return;
-            }
+            None => match self.local_values.get(name) {
+                Some(info) => info,
+                None => {
+                    self.diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!("{} is undefined", name),
+                        token: call.lval.token.clone(),
+                    });
+                    return;
+                }
+            },
         };
 
         match &name_info.ty {
-            Type::UserDefined(name) => {
+            Type::UserDefined(name, _) => {
                 if let Some(ctl) = self.ast.get_control(name) {
                     self.check_apply_ctl_apply(call, ctl)
                 }
@@ -484,7 +499,7 @@ impl StructChecker {
     pub fn check(s: &Struct, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
         for m in &s.members {
-            if let Type::UserDefined(typename) = &m.ty {
+            if let Type::UserDefined(typename, _) = &m.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
@@ -507,7 +522,7 @@ impl HeaderChecker {
     pub fn check(h: &Header, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
         for m in &h.members {
-            if let Type::UserDefined(typename) = &m.ty {
+            if let Type::UserDefined(typename, _) = &m.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
                         level: Level::Error,
@@ -868,7 +883,7 @@ fn check_lvalue(
                 });
             }
         }
-        Type::UserDefined(name) => {
+        Type::UserDefined(name, _) => {
             // get the parent type definition from the AST and check for the
             // referenced member
             if let Some(parent) = ast.get_struct(&name) {

@@ -218,7 +218,8 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::Int(_size) => todo!("generate int type"),
         Type::Varbit(_size) => todo!("generate varbit type"),
         Type::String => quote! { String },
-        Type::UserDefined(name) => {
+        //TODO generic types
+        Type::UserDefined(name, _) => {
             let typename = format_ident!("{}", name);
             quote! { #typename }
         }
@@ -253,7 +254,7 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         Type::Int(size) => *size,
         Type::Varbit(size) => *size,
         Type::String => todo!("generate string size"),
-        Type::UserDefined(name) => {
+        Type::UserDefined(name, _) => {
             let mut sz: usize = 0;
             let udt = ast.get_user_defined_type(name).unwrap_or_else(|| {
                 panic!("expect user defined type: {}", name)
@@ -334,7 +335,7 @@ fn is_header(
 ) -> bool {
     //TODO: get from hlir?
     let typename = match resolve_lvalue(lval, ast, names).unwrap().ty {
-        Type::UserDefined(name) => name,
+        Type::UserDefined(name, _) => name,
         _ => return false,
     };
     ast.get_header(&typename).is_some()
