@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::lexer::Token;
 
+/// An abstract syntax tree for the P4 language.
 #[derive(Debug, Default)]
 pub struct AST {
     pub constants: Vec<Constant>,
