@@ -3,23 +3,38 @@
 use std::io::Write;
 
 use error::CodegenError;
+use header::{p4_header_to_htq_header, p4_struct_to_htq_header};
 use htq::emit::Emit;
 use p4::hlir::Hlir;
+use parser::emit_parser_functions;
+use table::p4_table_to_htq_table;
 
 use crate::error::EmitError;
 
 mod error;
+mod expression;
+mod header;
+mod parser;
+mod statement;
+mod table;
 
 pub fn emit(
     ast: &p4::ast::AST,
     hlir: &Hlir,
     filename: &str,
 ) -> Result<(), EmitError> {
-    let headers: Vec<_> =
+    let mut headers: Vec<_> =
         ast.headers
             .iter()
             .map(p4_header_to_htq_header)
             .collect::<Result<Vec<htq::ast::Header>, CodegenError>>()?;
+
+    headers.extend(
+        ast.structs
+            .iter()
+            .map(p4_struct_to_htq_header)
+            .collect::<Result<Vec<htq::ast::Header>, CodegenError>>()?,
+    );
 
     let tables: Vec<_> = ast
         .controls
@@ -28,36 +43,27 @@ pub fn emit(
         .map(|(c, t)| p4_table_to_htq_table(c, t, hlir))
         .collect::<Result<Vec<htq::ast::Table>, CodegenError>>()?;
 
+    let parser_functions: Vec<_> = emit_parser_functions(ast, hlir)?;
+
     let mut f = std::fs::File::create(filename)?;
 
     for h in &headers {
         writeln!(f, "{}", h.emit())?;
     }
+    writeln!(f)?;
 
     for t in &tables {
         writeln!(f, "{}", t.emit())?;
     }
+    writeln!(f)?;
+
+    for func in &parser_functions {
+        //TODO htq function emit
+        writeln!(f, "{}", func.emit())?;
+    }
+    writeln!(f)?;
 
     Ok(())
-}
-
-fn p4_header_to_htq_header(
-    p4h: &p4::ast::Header,
-) -> Result<htq::ast::Header, CodegenError> {
-    Ok(htq::ast::Header {
-        name: p4h.name.clone(),
-        fields: p4h
-            .members
-            .iter()
-            .map(p4_header_member_to_htq_type)
-            .collect::<Result<Vec<htq::ast::Type>, CodegenError>>()?,
-    })
-}
-
-fn p4_header_member_to_htq_type(
-    p4f: &p4::ast::HeaderMember,
-) -> Result<htq::ast::Type, CodegenError> {
-    p4_type_to_htq_type(&p4f.ty)
 }
 
 fn p4_type_to_htq_type(
@@ -99,48 +105,5 @@ fn p4_type_to_htq_type(
             return Err(CodegenError::NoEquivalentType(t.clone()))
         }
         p4::ast::Type::String => todo!("string types not yet supported"),
-    })
-}
-
-fn p4_match_kind_to_htq_match_kind(
-    p4m: &p4::ast::MatchKind,
-) -> htq::ast::LookupType {
-    match p4m {
-        p4::ast::MatchKind::Exact => htq::ast::LookupType::Exact,
-        p4::ast::MatchKind::LongestPrefixMatch => htq::ast::LookupType::Lpm,
-        p4::ast::MatchKind::Range => htq::ast::LookupType::Range,
-        p4::ast::MatchKind::Ternary => htq::ast::LookupType::Ternary,
-    }
-}
-
-fn p4_table_to_htq_table(
-    p4c: &p4::ast::Control,
-    p4t: &p4::ast::Table,
-    hlir: &Hlir,
-) -> Result<htq::ast::Table, CodegenError> {
-    let mut action_args = Vec::new();
-    for a in &p4t.actions {
-        let act = p4c.get_action(&a.name).unwrap();
-        action_args.push(
-            act.parameters
-                .iter()
-                .map(|x| p4_type_to_htq_type(&x.ty))
-                .collect::<Result<Vec<htq::ast::Type>, CodegenError>>()?,
-        );
-    }
-    Ok(htq::ast::Table {
-        name: p4t.name.clone(),
-        keyset: p4t
-            .key
-            .iter()
-            .map(|(lval, match_kind)| htq::ast::TableKey {
-                typ: p4_type_to_htq_type(
-                    &hlir.lvalue_decls.get(lval).unwrap().ty,
-                )
-                .unwrap(),
-                lookup_typ: p4_match_kind_to_htq_match_kind(match_kind),
-            })
-            .collect(),
-        action_args,
     })
 }
