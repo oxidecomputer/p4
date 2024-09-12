@@ -10,3 +10,4 @@ anyhow.workspace = true
 regex.workspace = true
 p4.workspace = true
 p4-rust.workspace = true
+p4-htq.workspace = true

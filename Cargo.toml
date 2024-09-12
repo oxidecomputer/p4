@@ -6,6 +6,7 @@ members = [
     "x4c",
     "x4c_error_codes",
     "codegen/rust",
+    "codegen/htq",
     "lang/p4rs",
     "lang/p4-macro",
     "lang/p4-macro-test",
@@ -17,6 +18,7 @@ members = [
 [workspace.dependencies]
 p4-macro = { path = "lang/p4-macro" }
 p4-rust = { path = "codegen/rust" }
+p4-htq = { path = "codegen/htq" }
 p4rs = { path = "lang/p4rs" }
 tests = { path = "test" }
 

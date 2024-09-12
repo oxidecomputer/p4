@@ -31,11 +31,15 @@ fn run() -> Result<()> {
             p4_rust::emit(
                 &ast,
                 &hlir,
-                &opts.out,
+                &format!("{}.rs", opts.out),
                 p4_rust::Settings {
                     pipeline_name: "main".to_owned(),
                 },
             )?;
+        }
+        x4c::Target::Htq => {
+            let (hlir, _) = p4::check::all(&ast);
+            p4_htq::emit(&ast, &hlir, &format!("{}.htq", opts.out))?;
         }
         x4c::Target::RedHawk => {
             todo!("RedHawk code generator");

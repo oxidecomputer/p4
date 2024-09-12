@@ -33,7 +33,7 @@ pub struct Opts {
     pub filename: String,
 
     /// What target to generate code for.
-    #[clap(value_enum, default_value_t = Target::Rust)]
+    #[clap(long, value_enum, default_value_t = Target::Rust)]
     pub target: Target,
 
     /// Just check code, do not compile.
@@ -41,7 +41,7 @@ pub struct Opts {
     pub check: bool,
 
     /// Filename to write generated code to.
-    #[clap(short, long, default_value = "out.rs")]
+    #[clap(short, long, default_value = "out")]
     pub out: String,
 }
 
@@ -49,6 +49,7 @@ pub struct Opts {
 pub enum Target {
     Rust,
     RedHawk,
+    Htq,
     Docs,
 }
 
