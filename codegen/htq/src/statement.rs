@@ -17,3 +17,11 @@ pub(crate) fn emit_statement(
         S::Return(_r) => todo!(),
     }
 }
+
+fn emit_assignment(
+    target: &p4::ast::Lvalue,
+    source: &p4::ast::Expression,
+) -> Result<Vec<htq::ast::Statement>, CodegenError> {
+    // Things that can be assigned to are lvalues.
+    todo!();
+}
