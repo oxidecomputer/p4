@@ -1,16 +1,18 @@
 // Copyright 2024 Oxide Computer Company
 
-use std::io::Write;
+use std::{collections::HashMap, io::Write};
 
+use control::emit_control_functions;
 use error::CodegenError;
 use header::{p4_header_to_htq_header, p4_struct_to_htq_header};
-use htq::emit::Emit;
-use p4::hlir::Hlir;
+use htq::{ast::Register, emit::Emit};
+use p4::{ast::Expression, hlir::Hlir};
 use parser::emit_parser_functions;
 use table::p4_table_to_htq_table;
 
 use crate::error::EmitError;
 
+mod control;
 mod error;
 mod expression;
 mod header;
@@ -44,6 +46,9 @@ pub fn emit(
         .collect::<Result<Vec<htq::ast::Table>, CodegenError>>()?;
 
     let parser_functions: Vec<_> = emit_parser_functions(ast, hlir)?;
+    let control_functions: Vec<_> = emit_control_functions(ast, hlir)?;
+
+    // code generation done, now write out the htq AST to a file
 
     let mut f = std::fs::File::create(filename)?;
 
@@ -58,7 +63,11 @@ pub fn emit(
     writeln!(f)?;
 
     for func in &parser_functions {
-        //TODO htq function emit
+        writeln!(f, "{}", func.emit())?;
+    }
+    writeln!(f)?;
+
+    for func in &control_functions {
         writeln!(f, "{}", func.emit())?;
     }
     writeln!(f)?;
@@ -76,6 +85,10 @@ fn p4_type_to_htq_type(
         p4::ast::Type::Int(n) => htq::ast::Type::Unsigned(*n),
         p4::ast::Type::UserDefined(name, _) => {
             htq::ast::Type::User(name.clone())
+        }
+        p4::ast::Type::Sync(_) => {
+            htq::ast::Type::Signed(128)
+            //return Err(CodegenError::NoEquivalentType(t.clone()))
         }
         t @ p4::ast::Type::Table => {
             return Err(CodegenError::NoEquivalentType(t.clone()))
@@ -98,12 +111,59 @@ fn p4_type_to_htq_type(
         t @ p4::ast::Type::HeaderMethod => {
             return Err(CodegenError::NoEquivalentType(t.clone()))
         }
-        t @ p4::ast::Type::Sync(_) => {
-            return Err(CodegenError::NoEquivalentType(t.clone()))
-        }
         t @ p4::ast::Type::List(_) => {
             return Err(CodegenError::NoEquivalentType(t.clone()))
         }
         p4::ast::Type::String => todo!("string types not yet supported"),
     })
+}
+
+#[derive(Default)]
+pub(crate) struct RegisterAllocator {
+    data: HashMap<String, usize>,
+}
+
+impl RegisterAllocator {
+    pub(crate) fn alloc(&mut self, name: &str) -> htq::ast::Register {
+        match self.data.get_mut(name) {
+            Some(rev) => {
+                *rev += 1;
+                htq::ast::Register::new(&format!("{}.{}", name, *rev))
+            }
+            None => {
+                self.data.insert(name.to_owned(), 0);
+                htq::ast::Register::new(name)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct VersionedRegister {
+    pub(crate) reg: Register,
+    pub(crate) version: usize,
+}
+
+impl VersionedRegister {
+    pub(crate) fn for_expression(expr: &Expression) -> Self {
+        Self {
+            reg: Register::new(&format!(
+                "tmp{}_{}",
+                expr.token.line, expr.token.col
+            )),
+            version: 0,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn next(self) -> Self {
+        Self {
+            reg: self.reg,
+            version: self.version + 1,
+        }
+    }
+
+    pub(crate) fn to_reg(&self) -> Register {
+        Register::new(&format!("{}.{}", self.reg.0, self.version))
+    }
 }

@@ -2,6 +2,7 @@
 
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::emit_statement,
+    RegisterAllocator,
 };
 use p4::hlir::Hlir;
 
@@ -19,9 +20,9 @@ pub(crate) fn emit_parser_functions(
     Ok(result)
 }
 
-pub(crate) fn emit_parser(
-    _ast: &p4::ast::AST,
-    _hlir: &Hlir,
+fn emit_parser(
+    ast: &p4::ast::AST,
+    hlir: &Hlir,
     parser: &p4::ast::Parser,
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::new();
@@ -36,10 +37,16 @@ pub(crate) fn emit_parser(
         parameters.push(p);
     }
 
+    let mut names = parser.names();
+
     for state in &parser.states {
-        let mut statements = Vec::new();
+        // keeps track of register revisions for locals
+        let mut ra = RegisterAllocator::default();
+        let mut statements = Vec::default();
         for s in &state.statements.statements {
-            statements.extend(emit_statement(s)?.into_iter());
+            statements.extend(
+                emit_statement(s, ast, hlir, &mut names, &mut ra)?.into_iter(),
+            );
         }
         let f = htq::ast::Function {
             name: format!("{}_{}", parser.name, state.name),
