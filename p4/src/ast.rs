@@ -783,6 +783,26 @@ impl Header {
             m.mut_accept_mut(v);
         }
     }
+
+    pub fn index_of(&self, member_name: &str) -> Option<usize> {
+        for (i, m) in self.members.iter().enumerate() {
+            if m.name == member_name {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn offset_of(&self, ast: &AST, member_name: &str) -> Option<usize> {
+        let mut offset = 0;
+        for m in &self.members {
+            if m.name == member_name {
+                return Some(offset);
+            }
+            offset += type_size(&m.ty, ast);
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -867,6 +887,26 @@ impl Struct {
         for m in &mut self.members {
             m.mut_accept_mut(v);
         }
+    }
+
+    pub fn index_of(&self, member_name: &str) -> Option<usize> {
+        for (i, m) in self.members.iter().enumerate() {
+            if m.name == member_name {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn offset_of(&self, ast: &AST, member_name: &str) -> Option<usize> {
+        let mut offset = 0;
+        for m in &self.members {
+            if m.name == member_name {
+                return Some(offset);
+            }
+            offset += type_size(&m.ty, ast);
+        }
+        None
     }
 }
 
@@ -2467,4 +2507,66 @@ pub trait MutVisitorMut {
     fn state(&mut self, _: &mut State) {}
     fn package_parameter(&mut self, _: &mut PackageParameter) {}
     fn extern_method(&mut self, _: &mut ExternMethod) {}
+}
+
+pub fn type_size(ty: &Type, ast: &AST) -> usize {
+    match ty {
+        Type::Bool => 1,
+        Type::Error => todo!("generate error size"),
+        Type::Bit(size) => *size,
+        Type::Int(size) => *size,
+        Type::Varbit(size) => *size,
+        Type::String => todo!("generate string size"),
+        Type::UserDefined(name, _) => {
+            let mut sz: usize = 0;
+            let udt = ast.get_user_defined_type(name).unwrap_or_else(|| {
+                panic!("expect user defined type: {}", name)
+            });
+
+            match udt {
+                UserDefinedType::Struct(s) => {
+                    for m in &s.members {
+                        sz += type_size(&m.ty, ast);
+                    }
+                    sz
+                }
+                UserDefinedType::Header(h) => {
+                    for m in &h.members {
+                        sz += type_size(&m.ty, ast);
+                    }
+                    sz
+                }
+                UserDefinedType::Extern(_) => {
+                    todo!("size for extern?");
+                }
+            }
+        }
+        Type::ExternFunction => {
+            todo!("type size for extern function");
+        }
+        Type::HeaderMethod => {
+            todo!("type size for header method");
+        }
+        Type::Table => {
+            todo!("type size for table");
+        }
+        Type::Void => 0,
+        Type::List(_) => todo!("type size for list"),
+        Type::State => {
+            todo!("type size for state");
+        }
+        Type::Action => {
+            todo!("type size for action");
+        }
+        Type::Sync(_) => todo!("type size for sync<T>"),
+    }
+}
+
+pub fn type_size_bytes(ty: &Type, ast: &AST) -> usize {
+    let s = type_size(ty, ast);
+    let mut b = s >> 3;
+    if s % 8 != 0 {
+        b += 1
+    }
+    b
 }

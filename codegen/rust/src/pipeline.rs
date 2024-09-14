@@ -1,11 +1,12 @@
 // Copyright 2022 Oxide Computer Company
 
 use crate::{
-    qualified_table_function_name, qualified_table_name, rust_type,
-    type_size_bytes, Context, Settings,
+    qualified_table_function_name, qualified_table_name, rust_type, Context,
+    Settings,
 };
 use p4::ast::{
-    Control, Direction, MatchKind, PackageInstance, Parser, Table, Type, AST,
+    type_size_bytes, Control, Direction, MatchKind, PackageInstance, Parser,
+    Table, Type, AST,
 };
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
