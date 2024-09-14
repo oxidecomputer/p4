@@ -5,6 +5,7 @@ members = [
     "p4",
     "x4c",
     "x4c_error_codes",
+    "codegen/common",
     "codegen/rust",
     "codegen/htq",
     "lang/p4rs",

@@ -411,6 +411,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "p4-cg"
+version = "0.1.0"
+dependencies = [
+ "p4",
+ "thiserror",
+]
+
+[[package]]
 name = "p4-htq"
 version = "0.1.0"
 dependencies = [
@@ -447,6 +455,7 @@ name = "p4-rust"
 version = "0.1.0"
 dependencies = [
  "p4",
+ "p4-cg",
  "prettyplease",
  "proc-macro2",
  "quote",
