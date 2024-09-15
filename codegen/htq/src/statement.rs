@@ -83,12 +83,12 @@ fn emit_assignment(
     // - list
     //
 
-    let target_info = match hlir.lvalue_decls.get(target) {
-        Some(info) => info,
-        None => return Err(CodegenError::UndefinedLvalue(target.clone())),
-    };
+    let target_info = hlir
+        .lvalue_decls
+        .get(target)
+        .ok_or(CodegenError::UndefinedLvalue(target.clone()))?;
 
-    let (mut instrs, reg, typ) = emit_expression(source)?;
+    let (mut instrs, reg, typ) = emit_expression(source, hlir, ast, ra, names)?;
 
     match &target_info.decl {
         DeclarationInfo::Parameter(Direction::Out)
@@ -143,7 +143,7 @@ fn emit_assignment(
     Ok(instrs)
 }
 
-fn member_offsets(
+pub(crate) fn member_offsets(
     ast: &p4::ast::AST,
     names: &HashMap<String, NameInfo>,
     lval: &Lvalue,
