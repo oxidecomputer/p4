@@ -62,6 +62,11 @@ fn emit_control_apply(
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
     let mut statements = Vec::default();
+
+    for p in parameters {
+        ra.alloc(&p.reg.0);
+    }
+
     for s in &control.apply.statements {
         statements.extend(
             emit_statement(s, ast, hlir, &mut names, &mut ra)?.into_iter(),
@@ -93,6 +98,9 @@ fn emit_control_action(
             typ: p4_type_to_htq_type(&x.ty)?,
         };
         parameters.push(p);
+    }
+    for p in &parameters {
+        ra.alloc(&p.reg.0);
     }
     for s in &action.statement_block.statements {
         statements.extend(

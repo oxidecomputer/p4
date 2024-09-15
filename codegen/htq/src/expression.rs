@@ -1,15 +1,27 @@
-use htq::ast::{Register, Rset, Statement, Type, Value};
-use p4::ast::{Expression, ExpressionKind};
+use std::collections::HashMap;
+
+use htq::ast::{Fget, Load, Register, Rset, Statement, Type, Value};
+use p4::{
+    ast::{DeclarationInfo, Expression, ExpressionKind, Lvalue, NameInfo},
+    hlir::Hlir,
+};
 
 // Copyright 2024 Oxide Computer Company
-use crate::{error::CodegenError, VersionedRegister};
+use crate::{
+    error::CodegenError, p4_type_to_htq_type, statement::member_offsets,
+    RegisterAllocator, VersionedRegister,
+};
 
 // Builds a vector of statements that implement the expression. Returns the
 // statements and the register the result of the expression is held in.
 pub(crate) fn emit_expression(
     expr: &Expression,
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    ra: &mut RegisterAllocator,
+    names: &HashMap<String, NameInfo>,
 ) -> Result<(Vec<Statement>, Register, Type), CodegenError> {
-    let r = VersionedRegister::for_expression(expr);
+    let r = VersionedRegister::for_token(&expr.token);
     match &expr.kind {
         ExpressionKind::BoolLit(value) => emit_bool_lit(*value, r),
         ExpressionKind::BitLit(width, value) => {
@@ -19,6 +31,7 @@ pub(crate) fn emit_expression(
         ExpressionKind::SignedLit(width, value) => {
             emit_signed_lit(*width, *value, r)
         }
+        ExpressionKind::Lvalue(lval) => emit_lval(lval, hlir, ast, ra, names),
         ExpressionKind::Call(_) => {
             //TODO
             Ok((
@@ -27,15 +40,71 @@ pub(crate) fn emit_expression(
                 Type::User("badtype".to_owned()),
             ))
         }
-        ExpressionKind::Lvalue(_) => {
-            //TODO
-            Ok((
-                Vec::default(),
-                Register::new("badreg"),
-                Type::User("badtype".to_owned()),
-            ))
-        }
         xpr => todo!("expression: {xpr:?}"),
+    }
+}
+
+fn emit_lval(
+    lval: &Lvalue,
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    ra: &mut RegisterAllocator,
+    names: &HashMap<String, NameInfo>,
+) -> Result<(Vec<Statement>, Register, Type), CodegenError> {
+    let mut result: Vec<Statement> = Vec::default();
+
+    let info = hlir
+        .lvalue_decls
+        .get(lval)
+        .ok_or(CodegenError::UndefinedLvalue(lval.clone()))?;
+
+    let typ = p4_type_to_htq_type(&info.ty)?;
+
+    match &info.decl {
+        DeclarationInfo::Parameter(_) => {
+            let treg = VersionedRegister::for_token(&lval.token);
+            result.push(Statement::Load(Load {
+                target: treg.to_reg(),
+                typ: typ.clone(),
+                source: Register::new(lval.root()),
+                offset: Value::number(0),
+            }));
+            Ok((result, treg.to_reg(), typ))
+        }
+        DeclarationInfo::ActionParameter(_) => {
+            let treg = VersionedRegister::for_token(&lval.token);
+            result.push(Statement::Load(Load {
+                target: treg.to_reg(),
+                typ: typ.clone(),
+                source: Register::new(lval.root()),
+                offset: Value::number(0),
+            }));
+            Ok((result, treg.to_reg(), typ))
+        }
+        DeclarationInfo::StructMember | DeclarationInfo::HeaderMember => {
+            let offsets = member_offsets(ast, names, lval)?;
+            let treg = VersionedRegister::for_token(&lval.token);
+
+            let src_root = lval.root();
+            let source = ra
+                .get(src_root)
+                .ok_or(CodegenError::UndefinedLvalue(lval.clone()))?;
+
+            result.push(Statement::Fget(Fget {
+                target: treg.to_reg(),
+                typ: typ.clone(),
+                source,
+                offsets,
+            }));
+            Ok((result, treg.to_reg(), typ))
+        }
+        DeclarationInfo::Local => {
+            let reg = ra
+                .get(&lval.name)
+                .ok_or(CodegenError::UndefinedLvalue(lval.clone()))?;
+            Ok((result, reg, typ))
+        }
+        other => todo!("emit lval for \n{other:#?}"),
     }
 }
 

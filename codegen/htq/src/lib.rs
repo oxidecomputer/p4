@@ -6,7 +6,7 @@ use control::emit_control_functions;
 use error::CodegenError;
 use header::{p4_header_to_htq_header, p4_struct_to_htq_header};
 use htq::{ast::Register, emit::Emit};
-use p4::{ast::Expression, hlir::Hlir};
+use p4::{hlir::Hlir, lexer::Token};
 use parser::emit_parser_functions;
 use table::p4_table_to_htq_table;
 
@@ -136,6 +136,12 @@ impl RegisterAllocator {
             }
         }
     }
+
+    pub(crate) fn get(&self, name: &str) -> Option<htq::ast::Register> {
+        self.data
+            .get(name)
+            .map(|rev| htq::ast::Register::new(&format!("{}.{}", name, rev)))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -145,12 +151,9 @@ pub(crate) struct VersionedRegister {
 }
 
 impl VersionedRegister {
-    pub(crate) fn for_expression(expr: &Expression) -> Self {
+    pub(crate) fn for_token(tk: &Token) -> Self {
         Self {
-            reg: Register::new(&format!(
-                "tmp{}_{}",
-                expr.token.line, expr.token.col
-            )),
+            reg: Register::new(&format!("tmp{}_{}", tk.line, tk.col)),
             version: 0,
         }
     }
@@ -164,6 +167,10 @@ impl VersionedRegister {
     }
 
     pub(crate) fn to_reg(&self) -> Register {
-        Register::new(&format!("{}.{}", self.reg.0, self.version))
+        if self.version == 0 {
+            Register::new(&self.reg.0)
+        } else {
+            Register::new(&format!("{}.{}", self.reg.0, self.version))
+        }
     }
 }
