@@ -12,21 +12,24 @@ use p4::{
 };
 
 use crate::{
-    error::CodegenError, expression::emit_expression, RegisterAllocator,
+    error::CodegenError, expression::emit_expression, AsyncFlagAllocator,
+    CgContext, RegisterAllocator,
 };
 
 pub(crate) fn emit_statement(
     stmt: &p4::ast::Statement,
     ast: &p4::ast::AST,
+    context: CgContext<'_>,
     hlir: &Hlir,
     names: &mut HashMap<String, NameInfo>,
     ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<Vec<htq::ast::Statement>, CodegenError> {
     use p4::ast::Statement as S;
     match stmt {
         S::Empty => Ok(Vec::new()),
         S::Assignment(lval, expr) => {
-            emit_assignment(hlir, ast, names, lval, expr, ra)
+            emit_assignment(hlir, ast, context, names, lval, expr, ra, afa)
         }
         S::Call(_call) => Ok(Vec::default()), //TODO
         S::If(_if_block) => Ok(Vec::default()), //TODO,
@@ -37,13 +40,16 @@ pub(crate) fn emit_statement(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_assignment(
     hlir: &Hlir,
     ast: &p4::ast::AST,
+    context: CgContext<'_>,
     names: &mut HashMap<String, NameInfo>,
     target: &p4::ast::Lvalue,
     source: &p4::ast::Expression,
     ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<Vec<htq::ast::Statement>, CodegenError> {
     // Things that can be assigned to are lvalues with the following
     // declaration kinds. The table shows how each kind is referenced
@@ -88,7 +94,19 @@ fn emit_assignment(
         .get(target)
         .ok_or(CodegenError::UndefinedLvalue(target.clone()))?;
 
-    let (mut instrs, reg, typ) = emit_expression(source, hlir, ast, ra, names)?;
+    // reg typ
+    let (mut instrs, expr_value) =
+        emit_expression(source, hlir, ast, context, ra, afa, names)?;
+
+    let expr_value = expr_value.ok_or(
+        CodegenError::AssignmentExpressionRequiresValue(source.clone()),
+    )?;
+
+    if expr_value.registers.is_empty() {
+        return Err(CodegenError::AssignmentExpressionRequiresValue(
+            source.clone(),
+        ));
+    }
 
     match &target_info.decl {
         DeclarationInfo::Parameter(Direction::Out)
@@ -100,10 +118,10 @@ fn emit_assignment(
             let treg = Register::new(target.root());
             let offsets = member_offsets(ast, names, target)?;
             let instr = Fset {
-                typ,
                 offsets,
+                typ: expr_value.typ,
                 target: treg,
-                source: Value::Register(reg),
+                source: Value::Register(expr_value.registers[0].clone()),
             };
             instrs.push(htq::ast::Statement::Fset(instr));
         }
@@ -128,8 +146,8 @@ fn emit_assignment(
 
             let instr = Rset {
                 target,
-                typ,
-                source: Value::Register(reg),
+                typ: expr_value.typ,
+                source: Value::Register(expr_value.registers[0].clone()),
             };
             instrs.push(htq::ast::Statement::Rset(instr));
         }
