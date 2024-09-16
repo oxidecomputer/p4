@@ -3,7 +3,7 @@
 use std::{collections::HashMap, io::Write};
 
 use control::emit_control_functions;
-use error::CodegenError;
+use error::{CodegenError, FlagAllocationError};
 use header::{p4_header_to_htq_header, p4_struct_to_htq_header};
 use htq::{ast::Register, emit::Emit};
 use p4::{hlir::Hlir, lexer::Token};
@@ -25,6 +25,7 @@ pub fn emit(
     hlir: &Hlir,
     filename: &str,
 ) -> Result<(), EmitError> {
+    let mut afa = AsyncFlagAllocator::default();
     let mut headers: Vec<_> =
         ast.headers
             .iter()
@@ -45,8 +46,9 @@ pub fn emit(
         .map(|(c, t)| p4_table_to_htq_table(c, t, hlir))
         .collect::<Result<Vec<htq::ast::Table>, CodegenError>>()?;
 
-    let parser_functions: Vec<_> = emit_parser_functions(ast, hlir)?;
-    let control_functions: Vec<_> = emit_control_functions(ast, hlir)?;
+    let parser_functions: Vec<_> = emit_parser_functions(ast, hlir, &mut afa)?;
+    let control_functions: Vec<_> =
+        emit_control_functions(ast, hlir, &mut afa)?;
 
     // code generation done, now write out the htq AST to a file
 
@@ -87,7 +89,8 @@ fn p4_type_to_htq_type(
             htq::ast::Type::User(name.clone())
         }
         p4::ast::Type::Sync(_) => {
-            htq::ast::Type::Signed(128)
+            htq::ast::Type::User(String::from("lookup_result"))
+            //htq::ast::Type::Signed(128)
             //return Err(CodegenError::NoEquivalentType(t.clone()))
         }
         t @ p4::ast::Type::Table => {
@@ -144,6 +147,28 @@ impl RegisterAllocator {
     }
 }
 
+/// The async flag allocator allocates bitmap entries for asynchronous
+/// operations. HTQ supports up to 128 flags through an underlying u128 type.
+#[derive(Default)]
+pub(crate) struct AsyncFlagAllocator {
+    flag: u128,
+}
+
+impl AsyncFlagAllocator {
+    pub(crate) fn allocate(&mut self) -> Result<u128, FlagAllocationError> {
+        if self.flag == u128::MAX {
+            return Err(FlagAllocationError::Overflow);
+        }
+        // simple in-order allocation with no deallocation for now,
+        // can make this more sophisticated with deallocation and
+        // a back-filling allocator later ...
+        let pos = self.flag.leading_ones();
+        let value = 1 << pos;
+        self.flag |= value;
+        Ok(value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct VersionedRegister {
     pub(crate) reg: Register,
@@ -151,26 +176,42 @@ pub(crate) struct VersionedRegister {
 }
 
 impl VersionedRegister {
-    pub(crate) fn for_token(tk: &Token) -> Self {
+    pub(crate) fn tmp_for_token(tk: &Token) -> Self {
         Self {
             reg: Register::new(&format!("tmp{}_{}", tk.line, tk.col)),
             version: 0,
         }
     }
+    pub(crate) fn for_token(prefix: &str, tk: &Token) -> Self {
+        Self {
+            reg: Register::new(&format!("{}{}_{}", prefix, tk.line, tk.col)),
+            version: 0,
+        }
+    }
 
     #[allow(dead_code)]
-    pub(crate) fn next(self) -> Self {
-        Self {
-            reg: self.reg,
-            version: self.version + 1,
+    pub(crate) fn next(&mut self) -> &Self {
+        self.version += 1;
+        self
+    }
+
+    pub(crate) fn name(&self) -> String {
+        if self.version == 0 {
+            self.reg.0.clone()
+        } else {
+            format!("{}.{}", self.reg.0, self.version)
         }
     }
 
     pub(crate) fn to_reg(&self) -> Register {
-        if self.version == 0 {
-            Register::new(&self.reg.0)
-        } else {
-            Register::new(&format!("{}.{}", self.reg.0, self.version))
-        }
+        Register::new(&self.name())
     }
+}
+
+// Codegen context
+// TODO more comprehensive ....
+pub(crate) enum CgContext<'a> {
+    #[allow(dead_code)]
+    Parser(&'a p4::ast::Parser),
+    Control(&'a p4::ast::Control),
 }
