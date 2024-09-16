@@ -88,8 +88,6 @@ fn emit_call(
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    println!("CALL {call:#?}");
-
     match call.lval.leaf() {
         "apply" => emit_apply_call(call, control, hlir, ast, ra, afa, names),
         "setValid" => emit_set_valid_call(call, hlir, ast, ra, names, true),
@@ -179,12 +177,20 @@ fn emit_table_apply_call(
 
     let key_typ = Type::Bitfield(total_key_size);
 
+    instrs.push(Statement::Rset(Rset {
+        target: key.to_reg(),
+        typ: key_typ.clone(),
+        source: Value::number(0),
+    }));
+
     let mut offset = 0u128;
     for (k, _) in &table.key {
         let (key_extract_statements, extracted_value) =
             emit_lval(k, hlir, ast, ra, names)?;
         let extracted_value = extracted_value
             .ok_or(CodegenError::KeyExtractionProducedNoValue(k.clone()))?;
+        instrs.extend(key_extract_statements.into_iter());
+
         let tmp = VersionedRegister::for_token("key", &k.token);
         instrs.push(Statement::Shl(Shl {
             target: tmp.to_reg(),
@@ -192,6 +198,7 @@ fn emit_table_apply_call(
             source: Value::register(&extracted_value.registers[0].0),
             amount: Value::number(offset as i128),
         }));
+
         let curr_key = key.clone();
         instrs.push(Statement::Or(Or {
             target: key.next().to_reg(),
@@ -199,7 +206,6 @@ fn emit_table_apply_call(
             source_a: Value::reg(curr_key.to_reg()),
             source_b: Value::reg(tmp.to_reg()),
         }));
-        instrs.extend(key_extract_statements.into_iter());
         offset += extracted_value.typ.bit_size().unwrap() as u128;
     }
 

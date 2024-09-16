@@ -1,7 +1,10 @@
 // Copyright 2024 Oxide Computer Company
 
 use p4::{
-    ast::{Call, Control, DeclarationInfo, Expression, Lvalue, Type},
+    ast::{
+        Call, Control, ControlParameter, DeclarationInfo, Expression, Lvalue,
+        Type,
+    },
     lexer::Token,
 };
 use thiserror::Error;
@@ -78,6 +81,9 @@ pub enum CodegenError {
 
     #[error("key extraction produced no value for \n{0:#?}")]
     KeyExtractionProducedNoValue(Lvalue),
+
+    #[error("could not determine lookup result arg size for \n{0:#?}")]
+    LookupResultArgSize(ControlParameter),
 }
 
 #[derive(Error, Debug)]
