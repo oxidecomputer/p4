@@ -2,18 +2,19 @@
 
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::emit_statement,
-    RegisterAllocator,
+    AsyncFlagAllocator, CgContext, RegisterAllocator,
 };
 use p4::hlir::Hlir;
 
 pub(crate) fn emit_parser_functions(
     ast: &p4::ast::AST,
     hlir: &Hlir,
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::new();
 
     for parser in &ast.parsers {
-        let pf = emit_parser(ast, hlir, parser)?;
+        let pf = emit_parser(ast, hlir, parser, afa)?;
         result.extend(pf.into_iter());
     }
 
@@ -24,6 +25,7 @@ fn emit_parser(
     ast: &p4::ast::AST,
     hlir: &Hlir,
     parser: &p4::ast::Parser,
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::new();
     let mut parameters = Vec::new();
@@ -45,7 +47,16 @@ fn emit_parser(
         let mut statements = Vec::default();
         for s in &state.statements.statements {
             statements.extend(
-                emit_statement(s, ast, hlir, &mut names, &mut ra)?.into_iter(),
+                emit_statement(
+                    s,
+                    ast,
+                    CgContext::Parser(parser),
+                    hlir,
+                    &mut names,
+                    &mut ra,
+                    afa,
+                )?
+                .into_iter(),
             );
         }
         let f = htq::ast::Function {

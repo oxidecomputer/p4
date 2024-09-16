@@ -5,17 +5,18 @@ use p4::hlir::Hlir;
 
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::emit_statement,
-    RegisterAllocator,
+    AsyncFlagAllocator, CgContext, RegisterAllocator,
 };
 
 pub(crate) fn emit_control_functions(
     ast: &p4::ast::AST,
     hlir: &Hlir,
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::default();
 
     for control in &ast.controls {
-        let cf = emit_control(ast, hlir, control)?;
+        let cf = emit_control(ast, hlir, control, afa)?;
         result.extend(cf.into_iter());
     }
 
@@ -26,6 +27,7 @@ fn emit_control(
     ast: &p4::ast::AST,
     hlir: &Hlir,
     control: &p4::ast::Control,
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::default();
 
@@ -39,7 +41,7 @@ fn emit_control(
         parameters.push(p);
     }
 
-    result.push(emit_control_apply(ast, hlir, control, &parameters)?);
+    result.push(emit_control_apply(ast, hlir, control, &parameters, afa)?);
 
     for action in &control.actions {
         result.push(emit_control_action(
@@ -48,6 +50,7 @@ fn emit_control(
             control,
             action,
             &parameters,
+            afa,
         )?);
     }
     Ok(result)
@@ -58,6 +61,7 @@ fn emit_control_apply(
     hlir: &Hlir,
     control: &p4::ast::Control,
     parameters: &[Parameter],
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
@@ -69,7 +73,16 @@ fn emit_control_apply(
 
     for s in &control.apply.statements {
         statements.extend(
-            emit_statement(s, ast, hlir, &mut names, &mut ra)?.into_iter(),
+            emit_statement(
+                s,
+                ast,
+                CgContext::Control(control),
+                hlir,
+                &mut names,
+                &mut ra,
+                afa,
+            )?
+            .into_iter(),
         )
     }
     let f = htq::ast::Function {
@@ -86,6 +99,7 @@ fn emit_control_action(
     control: &p4::ast::Control,
     action: &p4::ast::Action,
     parameters: &[Parameter],
+    afa: &mut AsyncFlagAllocator,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
@@ -104,7 +118,16 @@ fn emit_control_action(
     }
     for s in &action.statement_block.statements {
         statements.extend(
-            emit_statement(s, ast, hlir, &mut names, &mut ra)?.into_iter(),
+            emit_statement(
+                s,
+                ast,
+                CgContext::Control(control),
+                hlir,
+                &mut names,
+                &mut ra,
+                afa,
+            )?
+            .into_iter(),
         )
     }
     let f = htq::ast::Function {
