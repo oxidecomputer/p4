@@ -348,6 +348,18 @@ impl Type {
             }
         }
     }
+
+    pub fn is_lookup_result(&self) -> bool {
+        match self {
+            Self::UserDefined(s, _) if s == "lookup_result" => true,
+            Self::Sync(typ) => typ.is_lookup_result(),
+            _ => false,
+        }
+    }
+
+    pub fn is_sync(&self) -> bool {
+        matches!(self, Self::Sync(_))
+    }
 }
 
 impl fmt::Display for Type {
@@ -1159,6 +1171,103 @@ impl Control {
             s.mut_accept_mut(v);
         }
     }
+
+    pub fn resolve_lookup_result_args_size(
+        &self,
+        parameter_name: &str,
+        ast: &AST,
+    ) -> Option<usize> {
+        self.resolve_lookup_result_args_size_rec(
+            parameter_name,
+            ast,
+            &self.apply,
+        )
+    }
+
+    //TODO this needs to consider the possibility of multiple assignments
+    pub fn resolve_lookup_result_args_size_rec(
+        &self,
+        parameter_name: &str,
+        ast: &AST,
+        block: &StatementBlock,
+    ) -> Option<usize> {
+        let mut size = 0;
+        let mut found = false;
+        for x in &block.statements {
+            match x {
+                Statement::Assignment(lval, expr) => {
+                    if lval.root() != parameter_name {
+                        continue;
+                    }
+                    match &expr.kind {
+                        ExpressionKind::Call(call) => {
+                            let mut lv = call.lval.clone();
+                            if lv.leaf() == "await" {
+                                lv = lv.pop_right();
+                            }
+                            if lv.leaf() != "apply" {
+                                continue;
+                            }
+                            if let Some(tbl) = self.get_table(call.lval.root())
+                            {
+                                for action in &tbl.actions {
+                                    let mut asize = 0;
+                                    let action =
+                                        self.get_action(&action.name).unwrap();
+                                    for p in &action.parameters {
+                                        let psize = type_size(&p.ty, ast);
+                                        asize += psize;
+                                    }
+                                    size = usize::max(size, asize);
+                                    found = true;
+                                }
+                            } else {
+                                continue;
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                Statement::If(if_block) => {
+                    if let Some(sz) = self.resolve_lookup_result_args_size_rec(
+                        parameter_name,
+                        ast,
+                        &if_block.block,
+                    ) {
+                        size = usize::max(size, sz);
+                    }
+                    for x in &if_block.else_ifs {
+                        if let Some(sz) = self
+                            .resolve_lookup_result_args_size_rec(
+                                parameter_name,
+                                ast,
+                                &x.block,
+                            )
+                        {
+                            size = usize::max(size, sz);
+                        }
+                    }
+                    if let Some(else_block) = &if_block.else_block {
+                        if let Some(sz) = self
+                            .resolve_lookup_result_args_size_rec(
+                                parameter_name,
+                                ast,
+                                else_block,
+                            )
+                        {
+                            size = usize::max(size, sz);
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+        if found {
+            Some(size)
+        } else {
+            None
+        }
+    }
 }
 
 impl PartialEq for Control {
@@ -1307,6 +1416,15 @@ pub enum Direction {
     Out,
     InOut,
     Unspecified,
+}
+
+impl Direction {
+    pub fn is_out(&self) -> bool {
+        *self == Self::Out || *self == Self::InOut
+    }
+    pub fn is_in(&self) -> bool {
+        *self == Self::In || *self == Self::InOut
+    }
 }
 
 #[derive(Debug, Clone, Default)]

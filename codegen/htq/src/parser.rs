@@ -30,11 +30,16 @@ fn emit_parser(
     let mut result = Vec::new();
     let mut parameters = Vec::new();
 
+    let mut return_signature = Vec::new();
+
     for x in &parser.parameters {
+        let typ = p4_type_to_htq_type(&x.ty)?;
+        if x.direction.is_out() {
+            return_signature.push(typ.clone());
+        }
         let p = htq::ast::Parameter {
             reg: htq::ast::Register::new(x.name.as_str()),
-            pointer: true,
-            typ: p4_type_to_htq_type(&x.ty)?,
+            typ,
         };
         parameters.push(p);
     }
@@ -63,6 +68,7 @@ fn emit_parser(
             name: format!("{}_{}", parser.name, state.name),
             parameters: parameters.clone(),
             statements,
+            return_signature: return_signature.clone(),
         };
         result.push(f);
     }
