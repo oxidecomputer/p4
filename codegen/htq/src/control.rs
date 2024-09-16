@@ -32,16 +32,44 @@ fn emit_control(
     let mut result = Vec::default();
 
     let mut parameters = Vec::new();
+    let mut return_signature = Vec::new();
     for x in &control.parameters {
+        let typ = p4_type_to_htq_type(&x.ty)?;
+        if x.direction.is_out() {
+            // TODO the special case nature of lookup results is quite
+            // unfortunate
+            if x.ty.is_lookup_result() {
+                return_signature.push(htq::ast::Type::Bool); //hit
+                return_signature.push(htq::ast::Type::Unsigned(16)); //variant
+
+                let args_size = control
+                    .resolve_lookup_result_args_size(&x.name, ast)
+                    .ok_or(CodegenError::LookupResultArgSize(x.clone()))?;
+
+                return_signature.push(htq::ast::Type::Unsigned(args_size));
+
+                if x.ty.is_sync() {
+                    return_signature.push(htq::ast::Type::Unsigned(128)); //async flag
+                }
+            } else {
+                return_signature.push(typ.clone());
+            }
+        }
         let p = htq::ast::Parameter {
             reg: htq::ast::Register::new(x.name.as_str()),
-            pointer: true,
-            typ: p4_type_to_htq_type(&x.ty)?,
+            typ,
         };
         parameters.push(p);
     }
 
-    result.push(emit_control_apply(ast, hlir, control, &parameters, afa)?);
+    result.push(emit_control_apply(
+        ast,
+        hlir,
+        control,
+        &parameters,
+        &return_signature,
+        afa,
+    )?);
 
     for action in &control.actions {
         result.push(emit_control_action(
@@ -50,6 +78,7 @@ fn emit_control(
             control,
             action,
             &parameters,
+            &return_signature,
             afa,
         )?);
     }
@@ -61,6 +90,7 @@ fn emit_control_apply(
     hlir: &Hlir,
     control: &p4::ast::Control,
     parameters: &[Parameter],
+    return_signature: &[htq::ast::Type],
     afa: &mut AsyncFlagAllocator,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
@@ -89,6 +119,7 @@ fn emit_control_apply(
         name: format!("{}_apply", control.name),
         parameters: parameters.to_owned(),
         statements,
+        return_signature: return_signature.to_vec(),
     };
     Ok(f)
 }
@@ -99,6 +130,7 @@ fn emit_control_action(
     control: &p4::ast::Control,
     action: &p4::ast::Action,
     parameters: &[Parameter],
+    return_signature: &[htq::ast::Type],
     afa: &mut AsyncFlagAllocator,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
@@ -108,7 +140,6 @@ fn emit_control_action(
     for x in &action.parameters {
         let p = htq::ast::Parameter {
             reg: htq::ast::Register::new(x.name.as_str()),
-            pointer: true,
             typ: p4_type_to_htq_type(&x.ty)?,
         };
         parameters.push(p);
@@ -134,6 +165,7 @@ fn emit_control_action(
         name: format!("{}_{}", control.name, action.name),
         parameters,
         statements,
+        return_signature: return_signature.to_vec(),
     };
     Ok(f)
 }
