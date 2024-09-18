@@ -1,10 +1,13 @@
 // Copyright 2024 Oxide Computer Company
 
+use std::collections::HashMap;
+
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::emit_statement,
-    AsyncFlagAllocator, CgContext, RegisterAllocator,
+    AsyncFlagAllocator, P4Context, RegisterAllocator,
 };
-use p4::hlir::Hlir;
+use htq::ast::Register;
+use p4::{ast::ControlParameter, hlir::Hlir};
 
 pub(crate) fn emit_parser_functions(
     ast: &p4::ast::AST,
@@ -29,6 +32,7 @@ fn emit_parser(
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::new();
     let mut parameters = Vec::new();
+    let mut psub = HashMap::<ControlParameter, Vec<Register>>::default();
 
     let mut return_signature = Vec::new();
 
@@ -55,11 +59,12 @@ fn emit_parser(
                 emit_statement(
                     s,
                     ast,
-                    CgContext::Parser(parser),
+                    P4Context::Parser(parser),
                     hlir,
                     &mut names,
                     &mut ra,
                     afa,
+                    &mut psub,
                 )?
                 .into_iter(),
             );

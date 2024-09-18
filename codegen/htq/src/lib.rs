@@ -188,6 +188,12 @@ impl VersionedRegister {
             version: 0,
         }
     }
+    pub(crate) fn for_name(name: &str) -> Self {
+        Self {
+            reg: Register::new(name),
+            version: 0,
+        }
+    }
 
     #[allow(dead_code)]
     pub(crate) fn next(&mut self) -> &Self {
@@ -210,7 +216,7 @@ impl VersionedRegister {
 
 // Codegen context
 // TODO more comprehensive ....
-pub(crate) enum CgContext<'a> {
+pub(crate) enum P4Context<'a> {
     #[allow(dead_code)]
     Parser(&'a p4::ast::Parser),
     Control(&'a p4::ast::Control),

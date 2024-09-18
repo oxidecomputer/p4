@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use htq::ast::{
-    Alloc, Fget, Load, Lookup, Or, Register, Rset, Shl, Statement, Type, Value,
+    Fget, Load, Lookup, Or, Register, Rset, Shl, Statement, Type, Value,
 };
 use p4::{
     ast::{
@@ -14,14 +14,12 @@ use p4::{
 // Copyright 2024 Oxide Computer Company
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::member_offsets,
-    AsyncFlagAllocator, CgContext, RegisterAllocator, VersionedRegister,
+    AsyncFlagAllocator, P4Context, RegisterAllocator, VersionedRegister,
 };
 
 pub(crate) struct ExpressionValue {
-    // register the value of the expression is held in
-    pub(crate) registers: Vec<Register>,
-    // overall type of the expression
-    pub(crate) typ: Type,
+    // register the value of the expression is held in along with their types
+    pub(crate) registers: Vec<(Register, Type)>,
     // sync flag associated with the expression
     #[allow(dead_code)]
     pub(crate) sync_flag: Option<u128>,
@@ -30,16 +28,15 @@ pub(crate) struct ExpressionValue {
 impl ExpressionValue {
     fn new(register: Register, typ: Type) -> Self {
         Self {
-            registers: vec![register],
-            typ,
+            registers: vec![(register, typ)],
             sync_flag: None,
         }
     }
 
+    #[allow(dead_code)]
     fn new_async(register: Register, typ: Type, sync_flag: u128) -> Self {
         Self {
-            registers: vec![register],
-            typ,
+            registers: vec![(register, typ)],
             sync_flag: Some(sync_flag),
         }
     }
@@ -51,7 +48,7 @@ pub(crate) fn emit_expression(
     expr: &Expression,
     hlir: &Hlir,
     ast: &p4::ast::AST,
-    context: CgContext<'_>,
+    context: &P4Context<'_>,
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
@@ -68,10 +65,10 @@ pub(crate) fn emit_expression(
         }
         ExpressionKind::Lvalue(lval) => emit_lval(lval, hlir, ast, ra, names),
         ExpressionKind::Call(call) => match context {
-            CgContext::Control(c) => {
+            P4Context::Control(c) => {
                 emit_call(call, c, hlir, ast, ra, afa, names)
             }
-            CgContext::Parser(_) => {
+            P4Context::Parser(_) => {
                 Err(CodegenError::CallInParser(expr.clone()))
             }
         },
@@ -155,16 +152,10 @@ fn emit_table_apply_call(
     let hit = VersionedRegister::for_token("hit", &call.lval.token);
     let variant = VersionedRegister::for_token("variant", &call.lval.token);
     let args = VersionedRegister::for_token("args", &call.lval.token);
-    let result = VersionedRegister::for_token("result", &call.lval.token);
+    let sync_flag_reg =
+        VersionedRegister::for_token("sync_flag", &call.lval.token);
     let mut key = VersionedRegister::for_token("key", &call.lval.token);
     let mut instrs = Vec::new();
-
-    let result_typ = Type::User(String::from("lookup_result"));
-    let result_alloc_instr = Statement::Alloc(Alloc {
-        target: result.to_reg(),
-        typ: result_typ.clone(),
-    });
-    instrs.push(result_alloc_instr);
 
     let mut total_key_size = 0;
     for (k, _) in &table.key {
@@ -183,6 +174,12 @@ fn emit_table_apply_call(
         source: Value::number(0),
     }));
 
+    instrs.push(Statement::Rset(Rset {
+        target: sync_flag_reg.to_reg(),
+        typ: Type::Bitfield(128),
+        source: Value::number(sync_flag as i128),
+    }));
+
     let mut offset = 0u128;
     for (k, _) in &table.key {
         let (key_extract_statements, extracted_value) =
@@ -195,7 +192,7 @@ fn emit_table_apply_call(
         instrs.push(Statement::Shl(Shl {
             target: tmp.to_reg(),
             typ: key_typ.clone(),
-            source: Value::register(&extracted_value.registers[0].0),
+            source: Value::register(&extracted_value.registers[0].0 .0),
             amount: Value::number(offset as i128),
         }));
 
@@ -206,7 +203,7 @@ fn emit_table_apply_call(
             source_a: Value::reg(curr_key.to_reg()),
             source_b: Value::reg(tmp.to_reg()),
         }));
-        offset += extracted_value.typ.bit_size().unwrap() as u128;
+        offset += extracted_value.registers[0].1.bit_size().unwrap() as u128;
     }
 
     let lookup_instr = Statement::Lookup(Lookup {
@@ -225,13 +222,19 @@ fn emit_table_apply_call(
     });
     instrs.push(lookup_instr);
 
+    let args_size = control.maximum_action_arg_length_for_table(ast, table);
+
     Ok((
         instrs,
-        Some(ExpressionValue::new_async(
-            result.to_reg(),
-            result_typ,
-            sync_flag,
-        )),
+        Some(ExpressionValue {
+            registers: vec![
+                (hit.to_reg(), Type::Bool),
+                (variant.to_reg(), Type::Unsigned(16)),
+                (args.to_reg(), Type::Unsigned(args_size)),
+                (sync_flag_reg.to_reg(), Type::Bitfield(128)),
+            ],
+            sync_flag: Some(sync_flag),
+        }),
     ))
 }
 
