@@ -5,32 +5,33 @@ use std::collections::HashMap;
 use htq::ast::{Fset, Register, Rset, Value};
 use p4::{
     ast::{
-        DeclarationInfo, Direction, Expression, ExpressionKind, Lvalue,
-        NameInfo, UserDefinedType,
+        ControlParameter, DeclarationInfo, Direction, Expression,
+        ExpressionKind, Lvalue, NameInfo, UserDefinedType,
     },
     hlir::Hlir,
 };
 
 use crate::{
     error::CodegenError, expression::emit_expression, AsyncFlagAllocator,
-    CgContext, RegisterAllocator,
+    P4Context, RegisterAllocator, VersionedRegister,
 };
 
 pub(crate) fn emit_statement(
     stmt: &p4::ast::Statement,
     ast: &p4::ast::AST,
-    context: CgContext<'_>,
+    context: P4Context<'_>,
     hlir: &Hlir,
     names: &mut HashMap<String, NameInfo>,
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
+    psub: &mut HashMap<ControlParameter, Vec<Register>>,
 ) -> Result<Vec<htq::ast::Statement>, CodegenError> {
     use p4::ast::Statement as S;
     match stmt {
         S::Empty => Ok(Vec::new()),
-        S::Assignment(lval, expr) => {
-            emit_assignment(hlir, ast, context, names, lval, expr, ra, afa)
-        }
+        S::Assignment(lval, expr) => emit_assignment(
+            hlir, ast, context, names, lval, expr, ra, afa, psub,
+        ),
         S::Call(_call) => Ok(Vec::default()), //TODO
         S::If(_if_block) => Ok(Vec::default()), //TODO,
         S::Variable(_v) => Ok(Vec::default()), //TODO
@@ -44,12 +45,13 @@ pub(crate) fn emit_statement(
 fn emit_assignment(
     hlir: &Hlir,
     ast: &p4::ast::AST,
-    context: CgContext<'_>,
+    context: P4Context<'_>,
     names: &mut HashMap<String, NameInfo>,
     target: &p4::ast::Lvalue,
     source: &p4::ast::Expression,
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
+    psub: &mut HashMap<ControlParameter, Vec<Register>>,
 ) -> Result<Vec<htq::ast::Statement>, CodegenError> {
     // Things that can be assigned to are lvalues with the following
     // declaration kinds. The table shows how each kind is referenced
@@ -96,7 +98,7 @@ fn emit_assignment(
 
     // reg typ
     let (mut instrs, expr_value) =
-        emit_expression(source, hlir, ast, context, ra, afa, names)?;
+        emit_expression(source, hlir, ast, &context, ra, afa, names)?;
 
     let expr_value = expr_value.ok_or(
         CodegenError::AssignmentExpressionRequiresValue(source.clone()),
@@ -111,17 +113,33 @@ fn emit_assignment(
     match &target_info.decl {
         DeclarationInfo::Parameter(Direction::Out)
         | DeclarationInfo::Parameter(Direction::InOut) => {
-            let _treg = Register::new(&target.name);
+            if target_info.ty.is_lookup_result() {
+                if let P4Context::Control(control) = &context {
+                    if let Some(param) = control.get_parameter(target.root()) {
+                        psub.insert(
+                            param.clone(),
+                            expr_value
+                                .registers
+                                .iter()
+                                .map(|x| x.0.clone())
+                                .collect(),
+                        );
+                    }
+                }
+            }
             // TODO store instr
         }
         DeclarationInfo::StructMember | DeclarationInfo::HeaderMember => {
-            let treg = Register::new(target.root());
+            let treg = VersionedRegister::for_name(target.root());
+            let mut output = treg.clone();
+            output.next();
             let offsets = member_offsets(ast, names, target)?;
             let instr = Fset {
+                output: output.to_reg(),
                 offsets,
-                typ: expr_value.typ,
-                target: treg,
-                source: Value::Register(expr_value.registers[0].clone()),
+                typ: expr_value.registers[0].1.clone(),
+                target: treg.to_reg(),
+                source: Value::Register(expr_value.registers[0].0.clone()),
             };
             instrs.push(htq::ast::Statement::Fset(instr));
         }
@@ -131,7 +149,7 @@ fn emit_assignment(
                 .get(source)
                 .ok_or(CodegenError::UntypedExpression(source.clone()))?;
 
-            //TODO(ry) it's unfortunate that a code generate manually has to
+            //TODO(ry) it's unfortunate that a codegen module has to
             // manually maintain scope information. Perhaps we should be using
             // the AST visitor ... although I'm not sure if the AST visitor
             // maintains a scope either, if not it probably should ....
@@ -146,8 +164,8 @@ fn emit_assignment(
 
             let instr = Rset {
                 target,
-                typ: expr_value.typ,
-                source: Value::Register(expr_value.registers[0].clone()),
+                typ: expr_value.registers[0].1.clone(),
+                source: Value::Register(expr_value.registers[0].0.clone()),
             };
             instrs.push(htq::ast::Statement::Rset(instr));
         }
