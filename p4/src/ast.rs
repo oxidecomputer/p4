@@ -293,7 +293,7 @@ impl PackageParameter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bool,
     Error,
@@ -1210,17 +1210,13 @@ impl Control {
                             }
                             if let Some(tbl) = self.get_table(call.lval.root())
                             {
-                                for action in &tbl.actions {
-                                    let mut asize = 0;
-                                    let action =
-                                        self.get_action(&action.name).unwrap();
-                                    for p in &action.parameters {
-                                        let psize = type_size(&p.ty, ast);
-                                        asize += psize;
-                                    }
-                                    size = usize::max(size, asize);
-                                    found = true;
-                                }
+                                size = usize::max(
+                                    self.maximum_action_arg_length_for_table(
+                                        ast, tbl,
+                                    ),
+                                    size,
+                                );
+                                found = true;
                             } else {
                                 continue;
                             }
@@ -1234,6 +1230,7 @@ impl Control {
                         ast,
                         &if_block.block,
                     ) {
+                        found = true;
                         size = usize::max(size, sz);
                     }
                     for x in &if_block.else_ifs {
@@ -1244,6 +1241,7 @@ impl Control {
                                 &x.block,
                             )
                         {
+                            found = true;
                             size = usize::max(size, sz);
                         }
                     }
@@ -1255,6 +1253,7 @@ impl Control {
                                 else_block,
                             )
                         {
+                            found = true;
                             size = usize::max(size, sz);
                         }
                     }
@@ -1267,6 +1266,24 @@ impl Control {
         } else {
             None
         }
+    }
+
+    pub fn maximum_action_arg_length_for_table(
+        &self,
+        ast: &AST,
+        table: &Table,
+    ) -> usize {
+        let mut size = 0;
+        for action in &table.actions {
+            let mut asize = 0;
+            let action = self.get_action(&action.name).unwrap();
+            for p in &action.parameters {
+                let psize = type_size(&p.ty, ast);
+                asize += psize;
+            }
+            size = usize::max(size, asize);
+        }
+        size
     }
 }
 
@@ -1377,7 +1394,7 @@ impl Parser {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ControlParameter {
     pub direction: Direction,
     pub ty: Type,
@@ -1410,7 +1427,7 @@ impl ControlParameter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     In,
     Out,

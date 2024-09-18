@@ -1,11 +1,13 @@
 // Copyright 2024 Oxide Computer Company
 
-use htq::ast::Parameter;
-use p4::hlir::Hlir;
+use std::collections::HashMap;
+
+use htq::ast::{Parameter, Register};
+use p4::{ast::ControlParameter, hlir::Hlir};
 
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::emit_statement,
-    AsyncFlagAllocator, CgContext, RegisterAllocator,
+    AsyncFlagAllocator, P4Context, RegisterAllocator,
 };
 
 pub(crate) fn emit_control_functions(
@@ -59,7 +61,7 @@ fn emit_control(
             reg: htq::ast::Register::new(x.name.as_str()),
             typ,
         };
-        parameters.push(p);
+        parameters.push((p, x.clone()));
     }
 
     result.push(emit_control_apply(
@@ -89,15 +91,19 @@ fn emit_control_apply(
     ast: &p4::ast::AST,
     hlir: &Hlir,
     control: &p4::ast::Control,
-    parameters: &[Parameter],
+    parameters: &[(Parameter, p4::ast::ControlParameter)],
     return_signature: &[htq::ast::Type],
     afa: &mut AsyncFlagAllocator,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
     let mut statements = Vec::default();
+    let mut psub = HashMap::<ControlParameter, Vec<Register>>::default();
 
-    for p in parameters {
+    for (p, p4p) in parameters {
+        if psub.get(p4p).is_some() {
+            continue;
+        }
         ra.alloc(&p.reg.0);
     }
 
@@ -106,18 +112,38 @@ fn emit_control_apply(
             emit_statement(
                 s,
                 ast,
-                CgContext::Control(control),
+                P4Context::Control(control),
                 hlir,
                 &mut names,
                 &mut ra,
                 afa,
+                &mut psub,
             )?
             .into_iter(),
         )
     }
+
+    let mut signature = Vec::new();
+    let mut return_registers = Vec::new();
+
+    for (p, p4p) in parameters {
+        if p4p.direction.is_out() {
+            if let Some(substituted) = psub.get(p4p) {
+                return_registers.extend(substituted.clone().into_iter());
+            } else {
+                signature.push(p.clone());
+                return_registers.push(p.reg.clone());
+            }
+        }
+    }
+
+    statements.push(htq::ast::Statement::Return(htq::ast::Return {
+        registers: return_registers,
+    }));
+
     let f = htq::ast::Function {
         name: format!("{}_apply", control.name),
-        parameters: parameters.to_owned(),
+        parameters: signature,
         statements,
         return_signature: return_signature.to_vec(),
     };
@@ -129,14 +155,17 @@ fn emit_control_action(
     hlir: &Hlir,
     control: &p4::ast::Control,
     action: &p4::ast::Action,
-    parameters: &[Parameter],
+    parameters: &[(Parameter, p4::ast::ControlParameter)],
     return_signature: &[htq::ast::Type],
     afa: &mut AsyncFlagAllocator,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
     let mut statements = Vec::default();
-    let mut parameters = parameters.to_owned();
+    let mut parameters: Vec<Parameter> =
+        parameters.to_owned().into_iter().map(|x| x.0).collect();
+    let mut psub = HashMap::<ControlParameter, Vec<Register>>::default();
+
     for x in &action.parameters {
         let p = htq::ast::Parameter {
             reg: htq::ast::Register::new(x.name.as_str()),
@@ -144,23 +173,27 @@ fn emit_control_action(
         };
         parameters.push(p);
     }
+
     for p in &parameters {
         ra.alloc(&p.reg.0);
     }
+
     for s in &action.statement_block.statements {
         statements.extend(
             emit_statement(
                 s,
                 ast,
-                CgContext::Control(control),
+                P4Context::Control(control),
                 hlir,
                 &mut names,
                 &mut ra,
                 afa,
+                &mut psub,
             )?
             .into_iter(),
         )
     }
+
     let f = htq::ast::Function {
         name: format!("{}_{}", control.name, action.name),
         parameters,
