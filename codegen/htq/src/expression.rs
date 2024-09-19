@@ -53,7 +53,7 @@ pub(crate) fn emit_expression(
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    let r = VersionedRegister::tmp_for_token(&expr.token);
+    let r = ra.alloc_tmp_for_token(&expr.token);
     match &expr.kind {
         ExpressionKind::BoolLit(value) => emit_bool_lit(*value, r),
         ExpressionKind::BitLit(width, value) => {
@@ -76,7 +76,7 @@ pub(crate) fn emit_expression(
     }
 }
 
-fn emit_call(
+pub(crate) fn emit_call(
     call: &p4::ast::Call,
     control: &p4::ast::Control,
     hlir: &Hlir,
@@ -239,13 +239,108 @@ fn emit_table_apply_call(
 }
 
 fn emit_control_apply_call(
-    _call: &p4::ast::Call,
+    call: &p4::ast::Call,
     _hlir: &Hlir,
-    _ast: &p4::ast::AST,
-    _ra: &mut RegisterAllocator,
-    _names: &HashMap<String, NameInfo>,
+    ast: &p4::ast::AST,
+    ra: &mut RegisterAllocator,
+    names: &HashMap<String, NameInfo>,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    todo!("control apply call");
+    // get the control being called
+    let info = names
+        .get(call.lval.root())
+        .ok_or(CodegenError::CallParentNotFound(call.clone()))?;
+
+    let control_type_name = match &info.ty {
+        p4::ast::Type::UserDefined(name, _) => name.to_owned(),
+        _x => {
+            return Err(CodegenError::ExpectedControl(
+                call.lval.clone(),
+                info.ty.clone(),
+            ))
+        }
+    };
+
+    let control = ast
+        .get_control(&control_type_name)
+        .ok_or(CodegenError::CallParentNotFound(call.clone()))?;
+
+    // determine argument registers
+    let mut arg_values = Vec::default();
+    for a in &call.args {
+        match &a.kind {
+            ExpressionKind::Lvalue(lval) => {
+                let info = names
+                    .get(lval.root())
+                    .ok_or(CodegenError::UndefinedLvalue(lval.clone()))?;
+                if info.ty.is_lookup_result() {
+                    continue;
+                }
+                let reg = ra.get(&lval.name).ok_or(
+                    CodegenError::RegisterDoesNotExistForLval(lval.clone()),
+                )?;
+                arg_values.push(Value::Register(reg));
+            }
+            ExpressionKind::BitLit(_width, value) => {
+                arg_values.push(Value::number(*value as i128));
+            }
+            ExpressionKind::SignedLit(_width, value) => {
+                arg_values.push(Value::number(*value));
+            }
+            ExpressionKind::IntegerLit(value) => {
+                arg_values.push(Value::number(*value));
+            }
+            ExpressionKind::BoolLit(value) => {
+                arg_values.push(Value::number(*value as i128));
+            }
+            _ => todo!("call argument type {:#?}", a.kind),
+        };
+    }
+
+    // determine return registers
+    let mut returned_registers = Vec::default();
+    for (i, p) in control.parameters.iter().enumerate() {
+        if p.direction.is_out() {
+            if p.ty.is_lookup_result() {
+                let arg = match &call.args[i].kind {
+                    ExpressionKind::Lvalue(lval) => lval.root().to_owned(),
+                    _x => panic!("expected lvalue for out parameter"),
+                };
+                let hit = ra.alloc(&format!("{}_hit", arg));
+                returned_registers.push((hit, htq::ast::Type::Bool));
+
+                let variant = ra.alloc(&format!("{}_variant", arg));
+                returned_registers
+                    .push((variant, htq::ast::Type::Unsigned(16)));
+
+                let args = ra.alloc(&format!("{}_args", arg));
+                let args_size = control
+                    .resolve_lookup_result_args_size(&p.name, ast)
+                    .ok_or(CodegenError::LookupResultArgSize(p.clone()))?;
+                returned_registers
+                    .push((args, htq::ast::Type::Bitfield(args_size)));
+
+                let sync = ra.alloc(&format!("{}_sync", arg));
+                returned_registers.push((sync, htq::ast::Type::Bitfield(128)));
+            } else {
+                returned_registers
+                    .push((ra.alloc(&p.name), p4_type_to_htq_type(&p.ty)?))
+            }
+        }
+    }
+
+    let call_stmt = Statement::Call(htq::ast::Call {
+        fname: format!("{}_{}", call.lval.root(), call.lval.leaf()),
+        args: arg_values,
+        targets: returned_registers.iter().map(|x| x.0.clone()).collect(),
+    });
+
+    Ok((
+        vec![call_stmt],
+        Some(ExpressionValue {
+            registers: returned_registers,
+            sync_flag: None,
+        }),
+    ))
 }
 
 fn emit_set_valid_call(
@@ -256,7 +351,9 @@ fn emit_set_valid_call(
     _names: &HashMap<String, NameInfo>,
     _valid: bool,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    todo!("set valid call")
+    //TODO
+    Ok((Vec::default(), None))
+    //todo!("set valid call")
 }
 
 fn emit_is_valid_call(
@@ -266,7 +363,8 @@ fn emit_is_valid_call(
     _ra: &mut RegisterAllocator,
     _names: &HashMap<String, NameInfo>,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    todo!("is valid call")
+    //TODO
+    Ok((Vec::default(), None))
 }
 
 fn emit_extern_call(
@@ -356,20 +454,20 @@ fn emit_lval(
 
 pub(crate) fn emit_bool_lit(
     value: bool,
-    ra: VersionedRegister,
+    ra: Register,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
     let instrs = vec![Statement::Rset(Rset {
-        target: ra.clone().to_reg(),
+        target: ra.clone(),
         typ: Type::Bool,
         source: Value::bool(value),
     })];
-    Ok((instrs, Some(ExpressionValue::new(ra.to_reg(), Type::Bool))))
+    Ok((instrs, Some(ExpressionValue::new(ra, Type::Bool))))
 }
 
 pub(crate) fn emit_bit_lit(
     width: u16,
     value: u128,
-    ra: VersionedRegister,
+    ra: Register,
     expr: &Expression,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
     let value = i128::try_from(value)
@@ -377,35 +475,35 @@ pub(crate) fn emit_bit_lit(
     let typ = Type::Bitfield(usize::from(width));
     let instrs = vec![Statement::Rset(Rset {
         typ: typ.clone(),
-        target: ra.clone().to_reg(),
+        target: ra.clone(),
         source: Value::number(value),
     })];
-    Ok((instrs, Some(ExpressionValue::new(ra.to_reg(), typ))))
+    Ok((instrs, Some(ExpressionValue::new(ra, typ))))
 }
 
 pub(crate) fn emit_int_lit(
     value: i128,
-    ra: VersionedRegister,
+    ra: Register,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
     let typ = Type::Signed(128);
     let instrs = vec![Statement::Rset(Rset {
         typ: typ.clone(),
-        target: ra.clone().to_reg(),
+        target: ra.clone(),
         source: Value::number(value),
     })];
-    Ok((instrs, Some(ExpressionValue::new(ra.to_reg(), typ))))
+    Ok((instrs, Some(ExpressionValue::new(ra, typ))))
 }
 
 pub(crate) fn emit_signed_lit(
     width: u16,
     value: i128,
-    ra: VersionedRegister,
+    ra: Register,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
     let typ = Type::Signed(usize::from(width));
     let instrs = vec![Statement::Rset(Rset {
         typ: typ.clone(),
-        target: ra.clone().to_reg(),
+        target: ra.clone(),
         source: Value::number(value),
     })];
-    Ok((instrs, Some(ExpressionValue::new(ra.to_reg(), typ))))
+    Ok((instrs, Some(ExpressionValue::new(ra, typ))))
 }

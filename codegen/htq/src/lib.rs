@@ -1,5 +1,7 @@
 // Copyright 2024 Oxide Computer Company
 
+#![allow(clippy::too_many_arguments)]
+
 use std::{collections::HashMap, io::Write};
 
 use control::emit_control_functions;
@@ -140,10 +142,30 @@ impl RegisterAllocator {
         }
     }
 
+    pub(crate) fn alloc_next(&mut self, reg: &Register) -> htq::ast::Register {
+        self.alloc(&reg.0)
+    }
+
+    pub(crate) fn alloc_tmp_for_token(
+        &mut self,
+        tk: &Token,
+    ) -> htq::ast::Register {
+        let name = format!("tmp{}_{}", tk.line, tk.col);
+        self.alloc(&name)
+    }
+
     pub(crate) fn get(&self, name: &str) -> Option<htq::ast::Register> {
-        self.data
-            .get(name)
-            .map(|rev| htq::ast::Register::new(&format!("{}.{}", name, rev)))
+        self.data.get(name).map(|rev| {
+            if *rev > 0 {
+                htq::ast::Register::new(&format!("{}.{}", name, rev))
+            } else {
+                htq::ast::Register::new(name)
+            }
+        })
+    }
+
+    pub(crate) fn get_reg(&self, reg: &Register) -> Option<htq::ast::Register> {
+        self.get(&reg.0)
     }
 }
 
@@ -188,6 +210,7 @@ impl VersionedRegister {
             version: 0,
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn for_name(name: &str) -> Self {
         Self {
             reg: Register::new(name),
