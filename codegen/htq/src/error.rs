@@ -84,6 +84,12 @@ pub enum CodegenError {
 
     #[error("could not determine lookup result arg size for \n{0:#?}")]
     LookupResultArgSize(ControlParameter),
+
+    #[error("register does not exist for lvalue \n{0:#?}")]
+    RegisterDoesNotExistForLval(Lvalue),
+
+    #[error("expected control type for \n{0:#?}\nfound \n{1:#?}")]
+    ExpectedControl(Lvalue, Type),
 }
 
 #[derive(Error, Debug)]

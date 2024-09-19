@@ -13,7 +13,7 @@ use p4::{
 
 use crate::{
     error::CodegenError, expression::emit_expression, AsyncFlagAllocator,
-    P4Context, RegisterAllocator, VersionedRegister,
+    P4Context, RegisterAllocator,
 };
 
 pub(crate) fn emit_statement(
@@ -32,13 +32,50 @@ pub(crate) fn emit_statement(
         S::Assignment(lval, expr) => emit_assignment(
             hlir, ast, context, names, lval, expr, ra, afa, psub,
         ),
-        S::Call(_call) => Ok(Vec::default()), //TODO
+        S::Call(call) => {
+            emit_call(hlir, ast, context, names, call, ra, afa, psub)
+        }
         S::If(_if_block) => Ok(Vec::default()), //TODO,
-        S::Variable(_v) => Ok(Vec::default()), //TODO
+        S::Variable(v) => {
+            //TODO(ry) it's unfortunate that a codegen module has to
+            // manually maintain scope information. Perhaps we should be using
+            // the AST visitor ... although I'm not sure if the AST visitor
+            // maintains a scope either, if not it probably should ....
+            names.insert(
+                v.name.clone(),
+                NameInfo {
+                    ty: v.ty.clone(),
+                    decl: DeclarationInfo::Local,
+                },
+            );
+            Ok(Vec::default())
+        }
         S::Constant(_c) => Ok(Vec::default()), //TODO
         S::Transition(_t) => Ok(Vec::default()), //TODO
-        S::Return(_r) => Ok(Vec::default()),  //TODO
+        S::Return(_r) => Ok(Vec::default()),   //TODO
     }
+}
+
+fn emit_call(
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    context: P4Context<'_>,
+    names: &mut HashMap<String, NameInfo>,
+    call: &p4::ast::Call,
+    ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
+    _psub: &mut HashMap<ControlParameter, Vec<Register>>,
+) -> Result<Vec<htq::ast::Statement>, CodegenError> {
+    let (instrs, _result) = match &context {
+        P4Context::Control(c) => {
+            crate::expression::emit_call(call, c, hlir, ast, ra, afa, names)?
+        }
+        P4Context::Parser(_) => {
+            //TODO
+            (Vec::default(), None)
+        }
+    };
+    Ok(instrs)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -121,7 +158,7 @@ fn emit_assignment(
                             expr_value
                                 .registers
                                 .iter()
-                                .map(|x| x.0.clone())
+                                .map(|x| ra.alloc_next(&x.0))
                                 .collect(),
                         );
                     }
@@ -130,15 +167,14 @@ fn emit_assignment(
             // TODO store instr
         }
         DeclarationInfo::StructMember | DeclarationInfo::HeaderMember => {
-            let treg = VersionedRegister::for_name(target.root());
-            let mut output = treg.clone();
-            output.next();
+            let treg = ra.alloc(target.root());
+            let output = ra.alloc(target.root());
             let offsets = member_offsets(ast, names, target)?;
             let instr = Fset {
-                output: output.to_reg(),
+                output,
                 offsets,
                 typ: expr_value.registers[0].1.clone(),
-                target: treg.to_reg(),
+                target: treg,
                 source: Value::Register(expr_value.registers[0].0.clone()),
             };
             instrs.push(htq::ast::Statement::Fset(instr));
