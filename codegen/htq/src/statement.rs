@@ -37,23 +37,53 @@ pub(crate) fn emit_statement(
         }
         S::If(_if_block) => Ok(Vec::default()), //TODO,
         S::Variable(v) => {
-            //TODO(ry) it's unfortunate that a codegen module has to
-            // manually maintain scope information. Perhaps we should be using
-            // the AST visitor ... although I'm not sure if the AST visitor
-            // maintains a scope either, if not it probably should ....
-            names.insert(
-                v.name.clone(),
-                NameInfo {
-                    ty: v.ty.clone(),
-                    decl: DeclarationInfo::Local,
-                },
-            );
-            Ok(Vec::default())
+            emit_variable(hlir, ast, context, names, v, ra, afa, psub)
         }
         S::Constant(_c) => Ok(Vec::default()), //TODO
         S::Transition(_t) => Ok(Vec::default()), //TODO
         S::Return(_r) => Ok(Vec::default()),   //TODO
     }
+}
+
+fn emit_variable(
+    _hlir: &Hlir,
+    _ast: &p4::ast::AST,
+    _context: P4Context<'_>,
+    names: &mut HashMap<String, NameInfo>,
+    var: &p4::ast::Variable,
+    ra: &mut RegisterAllocator,
+    _afa: &mut AsyncFlagAllocator,
+    _psub: &mut HashMap<ControlParameter, Vec<Register>>,
+) -> Result<Vec<htq::ast::Statement>, CodegenError> {
+    //TODO(ry) it's unfortunate that a codegen module has to
+    // manually maintain scope information. Perhaps we should be using
+    // the AST visitor ... although I'm not sure if the AST visitor
+    // maintains a scope either, if not it probably should ....
+    names.insert(
+        var.name.clone(),
+        NameInfo {
+            ty: var.ty.clone(),
+            decl: DeclarationInfo::Local,
+        },
+    );
+
+    if let Some(init) = &var.initializer {
+        if let ExpressionKind::Lvalue(lval) = &init.kind {
+            // TODO this could be modeled better (more explicitly) in the
+            // AST
+            if lval.leaf() == "await" {
+                return Ok(vec![htq::ast::Statement::Await(htq::ast::Await {
+                    source: Value::reg(
+                        // TODO this is extermely fragile relying on a
+                        // register naming convention.
+                        ra.get(&format!("{}_sync", lval.root())).unwrap(),
+                    ),
+                })]);
+            }
+        }
+    }
+
+    Ok(Vec::default())
 }
 
 fn emit_call(
