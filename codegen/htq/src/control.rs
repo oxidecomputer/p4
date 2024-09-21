@@ -43,8 +43,10 @@ fn emit_control(
             // TODO the special case nature of lookup results is quite
             // unfortunate
             if x.ty.is_lookup_result() {
-                apply_return_signature.push(htq::ast::Type::Bool); //hit
-                apply_return_signature.push(htq::ast::Type::Unsigned(16)); //variant
+                //hit
+                apply_return_signature.push(htq::ast::Type::Bool);
+                //variant
+                apply_return_signature.push(htq::ast::Type::Unsigned(16));
 
                 let args_size = control
                     .resolve_lookup_result_args_size(&x.name, ast)
@@ -54,7 +56,8 @@ fn emit_control(
                     .push(htq::ast::Type::Unsigned(args_size));
 
                 if x.ty.is_sync() {
-                    apply_return_signature.push(htq::ast::Type::Unsigned(128)); //async flag
+                    //async flag
+                    apply_return_signature.push(htq::ast::Type::Unsigned(128));
                 }
             } else {
                 apply_return_signature.push(typ.clone());
@@ -151,6 +154,12 @@ fn emit_control_apply(
     statements.push(htq::ast::Statement::Return(htq::ast::Return {
         registers: return_registers,
     }));
+
+    statements.sort_by(|a, b| {
+        matches!(a, htq::ast::Statement::Label(_, _))
+            .partial_cmp(&matches!(b, htq::ast::Statement::Label(_, _)))
+            .unwrap()
+    });
 
     let f = htq::ast::Function {
         name: format!("{}_apply", control.name),
