@@ -129,20 +129,20 @@ pub(crate) struct RegisterAllocator {
 }
 
 impl RegisterAllocator {
-    pub(crate) fn alloc(&mut self, name: &str) -> htq::ast::Register {
+    pub(crate) fn alloc(&mut self, name: &str) -> Register {
         match self.data.get_mut(name) {
             Some(rev) => {
                 *rev += 1;
-                htq::ast::Register::new(&format!("{}.{}", name, *rev))
+                Register::new(&format!("{}.{}", name, *rev))
             }
             None => {
                 self.data.insert(name.to_owned(), 0);
-                htq::ast::Register::new(name)
+                Register::new(name)
             }
         }
     }
 
-    pub(crate) fn alloc_next(&mut self, reg: &Register) -> htq::ast::Register {
+    pub(crate) fn alloc_next(&mut self, reg: &Register) -> Register {
         self.alloc(&reg.0)
     }
 
@@ -154,18 +154,29 @@ impl RegisterAllocator {
         self.alloc(&name)
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<htq::ast::Register> {
-        self.data.get(name).map(|rev| {
-            if *rev > 0 {
-                htq::ast::Register::new(&format!("{}.{}", name, rev))
-            } else {
-                htq::ast::Register::new(name)
-            }
-        })
+    pub(crate) fn get(&self, name: &str) -> Option<Register> {
+        self.data
+            .get(name)
+            .map(|rev| Self::register_name(name, *rev))
     }
 
-    pub(crate) fn get_reg(&self, reg: &Register) -> Option<htq::ast::Register> {
+    pub(crate) fn get_reg(&self, reg: &Register) -> Option<Register> {
         self.get(&reg.0)
+    }
+
+    pub(crate) fn all_registers(&self) -> Vec<Register> {
+        self.data
+            .iter()
+            .map(|(name, rev)| Self::register_name(name, *rev))
+            .collect()
+    }
+
+    fn register_name(name: &str, rev: usize) -> Register {
+        if rev > 0 {
+            Register::new(&format!("{}.{}", name, rev))
+        } else {
+            Register::new(name)
+        }
     }
 }
 

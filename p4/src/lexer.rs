@@ -322,8 +322,8 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        while self.skip_whitespace() {}
-        while self.skip_comment() {}
+        while self.skip_whitespace_or_comment() {}
+        //while self.skip_comment() {}
         if self.line >= self.lines.len() {
             return Ok(Token {
                 kind: Kind::Eof,
@@ -332,8 +332,7 @@ impl<'a> Lexer<'a> {
                 file: self.file.clone(),
             });
         }
-        self.skip_whitespace();
-        //self.skip_comment();
+        self.skip_whitespace_or_comment();
 
         if let Some(t) = self.match_token("#include", Kind::PoundInclude) {
             return Ok(t);
@@ -868,6 +867,10 @@ impl<'a> Lexer<'a> {
             return true;
         }
         false
+    }
+
+    fn skip_whitespace_or_comment(&mut self) -> bool {
+        self.skip_whitespace() || self.skip_comment()
     }
 
     fn skip_block_comment(&mut self) {
