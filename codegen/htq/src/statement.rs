@@ -2,18 +2,19 @@
 
 use std::collections::HashMap;
 
-use htq::ast::{Fset, Register, Rset, Value};
+use htq::ast::{Beq, Fset, Register, Rset, Value};
 use p4::{
     ast::{
-        ControlParameter, DeclarationInfo, Direction, Expression,
+        BinOp, ControlParameter, DeclarationInfo, Direction, Expression,
         ExpressionKind, Lvalue, NameInfo, UserDefinedType,
     },
     hlir::Hlir,
 };
 
 use crate::{
-    error::CodegenError, expression::emit_expression, AsyncFlagAllocator,
-    P4Context, RegisterAllocator,
+    error::CodegenError,
+    expression::{emit_expression, emit_single_valued_expression},
+    AsyncFlagAllocator, P4Context, RegisterAllocator,
 };
 
 pub(crate) fn emit_statement(
@@ -35,7 +36,9 @@ pub(crate) fn emit_statement(
         S::Call(call) => {
             emit_call(hlir, ast, context, names, call, ra, afa, psub)
         }
-        S::If(_if_block) => Ok(Vec::default()), //TODO,
+        S::If(if_block) => {
+            emit_if_block(hlir, ast, context, names, if_block, ra, afa, psub)
+        }
         S::Variable(v) => {
             emit_variable(hlir, ast, context, names, v, ra, afa, psub)
         }
@@ -43,6 +46,75 @@ pub(crate) fn emit_statement(
         S::Transition(_t) => Ok(Vec::default()), //TODO
         S::Return(_r) => Ok(Vec::default()),   //TODO
     }
+}
+
+fn emit_if_block(
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    context: P4Context<'_>,
+    names: &mut HashMap<String, NameInfo>,
+    iblk: &p4::ast::IfBlock,
+    ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
+    _psub: &mut HashMap<ControlParameter, Vec<Register>>,
+) -> Result<Vec<htq::ast::Statement>, CodegenError> {
+    let mut result = Vec::default();
+
+    let (source, predicate) =
+        if let ExpressionKind::Binary(lhs, BinOp::Eq, rhs) =
+            &iblk.predicate.kind
+        {
+            let (source_statements, source) = emit_single_valued_expression(
+                lhs.as_ref(),
+                hlir,
+                ast,
+                &context,
+                ra,
+                afa,
+                names,
+            )?;
+            result.extend(source_statements.clone());
+
+            let (predicate_statements, predicate) =
+                emit_single_valued_expression(
+                    rhs.as_ref(),
+                    hlir,
+                    ast,
+                    &context,
+                    ra,
+                    afa,
+                    names,
+                )?;
+            result.extend(predicate_statements.clone());
+
+            (source, Value::reg(predicate))
+        } else {
+            let (predicate_statements, source) = emit_single_valued_expression(
+                iblk.predicate.as_ref(),
+                hlir,
+                ast,
+                &context,
+                ra,
+                afa,
+                names,
+            )?;
+            result.extend(predicate_statements.clone());
+            (source, htq::ast::Value::bool(true))
+        };
+
+    let params = ra.all_registers();
+    let args = params.clone().into_iter().map(Value::reg).collect();
+    let label = format!("{}_hit", source.0);
+    result.push(htq::ast::Statement::Beq(Beq {
+        source,
+        predicate,
+        label: label.clone(),
+        args,
+    }));
+
+    result.push(htq::ast::Statement::Label(label, params));
+
+    Ok(result)
 }
 
 fn emit_variable(

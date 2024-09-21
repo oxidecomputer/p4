@@ -1,5 +1,6 @@
 // Copyright 2024 Oxide Computer Company
 
+use htq::ast::Register;
 use p4::{
     ast::{
         Call, Control, ControlParameter, DeclarationInfo, Expression, Lvalue,
@@ -90,6 +91,15 @@ pub enum CodegenError {
 
     #[error("expected control type for \n{0:#?}\nfound \n{1:#?}")]
     ExpectedControl(Lvalue, Type),
+
+    #[error("a value is required for expression \n{0:#?}")]
+    ExpressionValueNeeded(Expression),
+
+    #[error("a singular value is required for expression \n{0:#?}")]
+    SingularExpressionValueNeeded(Expression),
+
+    #[error("missing register for lvalue, this is a compiler bug \n{0:#?}\ncurrent registers: \n{1:#?}")]
+    MissingRegisterForLvalue(Lvalue, Vec<Register>),
 }
 
 #[derive(Error, Debug)]

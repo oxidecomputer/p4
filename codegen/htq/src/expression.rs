@@ -5,7 +5,7 @@ use htq::ast::{
 };
 use p4::{
     ast::{
-        type_size, DeclarationInfo, Expression, ExpressionKind, Lvalue,
+        type_size, BinOp, DeclarationInfo, Expression, ExpressionKind, Lvalue,
         NameInfo,
     },
     hlir::Hlir,
@@ -72,8 +72,77 @@ pub(crate) fn emit_expression(
                 Err(CodegenError::CallInParser(expr.clone()))
             }
         },
+        ExpressionKind::Binary(lhs, op, rhs) => emit_binary_expr(
+            lhs.as_ref(),
+            op,
+            rhs.as_ref(),
+            hlir,
+            ast,
+            ra,
+            afa,
+            names,
+        ),
         xpr => todo!("expression: {xpr:?}"),
     }
+}
+
+pub(crate) fn emit_single_valued_expression(
+    expr: &Expression,
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    context: &P4Context<'_>,
+    ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
+    names: &HashMap<String, NameInfo>,
+) -> Result<(Vec<Statement>, Register), CodegenError> {
+    let (stmts, val) =
+        emit_expression(expr, hlir, ast, context, ra, afa, names)?;
+
+    let val = val.ok_or(CodegenError::ExpressionValueNeeded(expr.clone()))?;
+    if val.registers.len() != 1 {
+        return Err(CodegenError::SingularExpressionValueNeeded(expr.clone()));
+    }
+
+    Ok((stmts, val.registers[0].0.clone()))
+}
+
+pub(crate) fn emit_binary_expr(
+    lhs: &Expression,
+    op: &BinOp,
+    rhs: &Expression,
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
+    names: &HashMap<String, NameInfo>,
+) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
+    match op {
+        BinOp::Add => todo!("bin op add"),
+        BinOp::Subtract => todo!("bin op subtract"),
+        BinOp::Mod => todo!("bin op mod"),
+        BinOp::Geq => todo!("bin op geq"),
+        BinOp::Gt => todo!("bin op gt"),
+        BinOp::Leq => todo!("bin op leq"),
+        BinOp::Lt => todo!("bin op lt"),
+        BinOp::Eq => emit_binary_expr_eq(lhs, rhs, hlir, ast, ra, afa, names),
+        BinOp::Mask => todo!("bin op mask"),
+        BinOp::NotEq => todo!("bin op not eq"),
+        BinOp::BitAnd => todo!("bin op bit and"),
+        BinOp::BitOr => todo!("bin op bit or"),
+        BinOp::Xor => todo!("bin op xor"),
+    }
+}
+
+pub(crate) fn emit_binary_expr_eq(
+    _lhs: &Expression,
+    _rhs: &Expression,
+    _hlir: &Hlir,
+    _ast: &p4::ast::AST,
+    _ra: &mut RegisterAllocator,
+    _afa: &mut AsyncFlagAllocator,
+    _names: &HashMap<String, NameInfo>,
+) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
+    todo!()
 }
 
 pub(crate) fn emit_call(
@@ -429,10 +498,22 @@ fn emit_lval(
             let offsets = member_offsets(ast, names, lval)?;
             let treg = VersionedRegister::tmp_for_token(&lval.token);
 
-            let src_root = lval.root();
-            let source = ra
-                .get(src_root)
-                .ok_or(CodegenError::UndefinedLvalue(lval.clone()))?;
+            // TODO this is terrible, we should have one way to lookup the
+            // register
+            let name = lval.root();
+            let source = if let Ok(source) =
+                ra.get(name).ok_or(CodegenError::MissingRegisterForLvalue(
+                    lval.clone(),
+                    ra.all_registers(),
+                )) {
+                source
+            } else {
+                let name = reg_name_for_lval(lval);
+                ra.get(&name).ok_or(CodegenError::MissingRegisterForLvalue(
+                    lval.clone(),
+                    ra.all_registers(),
+                ))?
+            };
 
             result.push(Statement::Fget(Fget {
                 target: treg.to_reg(),
@@ -443,13 +524,20 @@ fn emit_lval(
             Ok((result, Some(ExpressionValue::new(treg.to_reg(), typ))))
         }
         DeclarationInfo::Local => {
-            let reg = ra
-                .get(&lval.name)
-                .ok_or(CodegenError::UndefinedLvalue(lval.clone()))?;
+            let name = reg_name_for_lval(lval);
+            let reg =
+                ra.get(&name).ok_or(CodegenError::MissingRegisterForLvalue(
+                    lval.clone(),
+                    ra.all_registers(),
+                ))?;
             Ok((result, Some(ExpressionValue::new(reg, typ))))
         }
         other => todo!("emit lval for \n{other:#?}"),
     }
+}
+
+fn reg_name_for_lval(lval: &Lvalue) -> String {
+    lval.name.replace('.', "_")
 }
 
 pub(crate) fn emit_bool_lit(

@@ -33,6 +33,7 @@ fn emit_parser(
     let mut result = Vec::new();
     let mut parameters = Vec::new();
     let mut psub = HashMap::<ControlParameter, Vec<Register>>::default();
+    let mut ra = RegisterAllocator::default();
 
     let mut return_signature = Vec::new();
 
@@ -45,6 +46,7 @@ fn emit_parser(
             reg: htq::ast::Register::new(x.name.as_str()),
             typ,
         };
+        ra.alloc(&p.reg.0);
         parameters.push(p);
     }
 
@@ -52,7 +54,6 @@ fn emit_parser(
 
     for state in &parser.states {
         // keeps track of register revisions for locals
-        let mut ra = RegisterAllocator::default();
         let mut statements = Vec::default();
         for s in &state.statements.statements {
             statements.extend(
