@@ -14,7 +14,7 @@ use p4::{
 use crate::{
     error::CodegenError,
     expression::{emit_expression, emit_single_valued_expression},
-    AsyncFlagAllocator, P4Context, RegisterAllocator,
+    AsyncFlagAllocator, P4Context, RegisterAllocator, TableContext,
 };
 
 pub(crate) fn emit_statement(
@@ -26,6 +26,7 @@ pub(crate) fn emit_statement(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    table_context: &mut TableContext,
 ) -> Result<
     (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
     CodegenError,
@@ -35,18 +36,41 @@ pub(crate) fn emit_statement(
         S::Empty => Ok((Vec::default(), Vec::default())),
         S::Assignment(lval, expr) => {
             let stmts = emit_assignment(
-                hlir, ast, context, names, lval, expr, ra, afa, psub,
+                hlir,
+                ast,
+                context,
+                names,
+                lval,
+                expr,
+                ra,
+                afa,
+                psub,
+                table_context,
             )?;
             Ok((stmts, Vec::default()))
         }
-        S::Call(call) => {
-            let stmts =
-                emit_call(hlir, ast, context, names, call, ra, afa, psub)?;
-            Ok((stmts, Vec::default()))
-        }
-        S::If(if_block) => {
-            emit_if_block(hlir, ast, context, names, if_block, ra, afa, psub)
-        }
+        S::Call(call) => emit_call(
+            hlir,
+            ast,
+            context,
+            names,
+            call,
+            ra,
+            afa,
+            psub,
+            table_context,
+        ),
+        S::If(if_block) => emit_if_block(
+            hlir,
+            ast,
+            context,
+            names,
+            if_block,
+            ra,
+            afa,
+            psub,
+            table_context,
+        ),
         S::Variable(v) => {
             let stmts =
                 emit_variable(hlir, ast, context, names, v, ra, afa, psub)?;
@@ -67,6 +91,7 @@ fn emit_if_block(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    table_context: &mut TableContext,
 ) -> Result<
     (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
     CodegenError,
@@ -78,18 +103,21 @@ fn emit_if_block(
         if let ExpressionKind::Binary(lhs, BinOp::Eq, rhs) =
             &iblk.predicate.kind
         {
-            let (source_statements, source) = emit_single_valued_expression(
-                lhs.as_ref(),
-                hlir,
-                ast,
-                context,
-                ra,
-                afa,
-                names,
-            )?;
+            let (source_statements, blks, source) =
+                emit_single_valued_expression(
+                    lhs.as_ref(),
+                    hlir,
+                    ast,
+                    context,
+                    ra,
+                    afa,
+                    names,
+                    table_context,
+                )?;
+            blocks.extend(blks);
             result.extend(source_statements.clone());
 
-            let (predicate_statements, predicate) =
+            let (predicate_statements, blks, predicate) =
                 emit_single_valued_expression(
                     rhs.as_ref(),
                     hlir,
@@ -98,20 +126,25 @@ fn emit_if_block(
                     ra,
                     afa,
                     names,
+                    table_context,
                 )?;
+            blocks.extend(blks);
             result.extend(predicate_statements.clone());
 
             (source, Value::reg(predicate))
         } else {
-            let (predicate_statements, source) = emit_single_valued_expression(
-                iblk.predicate.as_ref(),
-                hlir,
-                ast,
-                context,
-                ra,
-                afa,
-                names,
-            )?;
+            let (predicate_statements, blks, source) =
+                emit_single_valued_expression(
+                    iblk.predicate.as_ref(),
+                    hlir,
+                    ast,
+                    context,
+                    ra,
+                    afa,
+                    names,
+                    table_context,
+                )?;
+            blocks.extend(blks);
             result.extend(predicate_statements.clone());
             (source, htq::ast::Value::bool(true))
         };
@@ -126,21 +159,32 @@ fn emit_if_block(
         args,
     }));
 
+    // create a clean register allocator for the statements in the new block
+    let mut block_ra = ra.rebase();
+    let block_params = block_ra.all_registers();
+
     let mut blk = StatementBlock {
         name: label,
-        parameters: params,
+        parameters: block_params,
         statements: Vec::default(),
     };
 
     for stmt in &iblk.block.statements {
         // TODO nested if blocks
-        let (stmts, _) =
-            emit_statement(stmt, ast, context, hlir, names, ra, afa, psub)?;
+        let (stmts, blks) = emit_statement(
+            stmt,
+            ast,
+            context,
+            hlir,
+            names,
+            &mut block_ra,
+            afa,
+            psub,
+            table_context,
+        )?;
+        blocks.extend(blks);
         blk.statements.extend(stmts);
     }
-
-    // XXX
-    //result.push(htq::ast::Statement::Label(label, params));
 
     blocks.push(blk);
 
@@ -197,17 +241,29 @@ fn emit_call(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     _psub: &mut HashMap<ControlParameter, Vec<Register>>,
-) -> Result<Vec<htq::ast::Statement>, CodegenError> {
-    let (instrs, _result) = match &context {
-        P4Context::Control(c) => {
-            crate::expression::emit_call(call, c, hlir, ast, ra, afa, names)?
-        }
+    table_context: &mut TableContext,
+) -> Result<
+    (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
+    CodegenError,
+> {
+    let (instrs, blocks, _result) = match &context {
+        P4Context::Control(c) => crate::expression::emit_call(
+            call,
+            c,
+            hlir,
+            ast,
+            context,
+            ra,
+            afa,
+            names,
+            table_context,
+        )?,
         P4Context::Parser(_) => {
             //TODO
-            (Vec::default(), None)
+            (Vec::default(), Vec::default(), None)
         }
     };
-    Ok(instrs)
+    Ok((instrs, blocks))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -221,6 +277,7 @@ fn emit_assignment(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    table_context: &mut TableContext,
 ) -> Result<Vec<htq::ast::Statement>, CodegenError> {
     // Things that can be assigned to are lvalues with the following
     // declaration kinds. The table shows how each kind is referenced
@@ -266,8 +323,17 @@ fn emit_assignment(
         .ok_or(CodegenError::UndefinedLvalue(target.clone()))?;
 
     // reg typ
-    let (mut instrs, expr_value) =
-        emit_expression(source, hlir, ast, context, ra, afa, names)?;
+    // TODO is there an assignment that can result in blocks ....?
+    let (mut instrs, _blocks, expr_value) = emit_expression(
+        source,
+        hlir,
+        ast,
+        context,
+        ra,
+        afa,
+        names,
+        table_context,
+    )?;
 
     let expr_value = expr_value.ok_or(
         CodegenError::AssignmentExpressionRequiresValue(source.clone()),

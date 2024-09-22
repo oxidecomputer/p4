@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use htq::ast::{
-    Fget, Load, Lookup, Or, Register, Rset, Shl, Statement, Type, Value,
+    Beq, Fget, Load, Lookup, Or, Register, Rset, Shl, Statement, Type, Value,
 };
 use p4::{
     ast::{
@@ -14,7 +14,8 @@ use p4::{
 // Copyright 2024 Oxide Computer Company
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::member_offsets,
-    AsyncFlagAllocator, P4Context, RegisterAllocator, VersionedRegister,
+    AsyncFlagAllocator, CompiledTableInfo, P4Context, RegisterAllocator,
+    TableContext, VersionedRegister,
 };
 
 pub(crate) struct ExpressionValue {
@@ -52,36 +53,69 @@ pub(crate) fn emit_expression(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
-) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
+    table_context: &mut TableContext,
+) -> Result<
+    (
+        Vec<Statement>,
+        Vec<htq::ast::StatementBlock>,
+        Option<ExpressionValue>,
+    ),
+    CodegenError,
+> {
     let r = ra.alloc_tmp_for_token(&expr.token);
     match &expr.kind {
-        ExpressionKind::BoolLit(value) => emit_bool_lit(*value, r),
+        ExpressionKind::BoolLit(value) => {
+            let (stmts, value) = emit_bool_lit(*value, r)?;
+            Ok((stmts, Vec::default(), value))
+        }
         ExpressionKind::BitLit(width, value) => {
-            emit_bit_lit(*width, *value, r, expr)
+            let (stmts, value) = emit_bit_lit(*width, *value, r, expr)?;
+            Ok((stmts, Vec::default(), value))
         }
-        ExpressionKind::IntegerLit(value) => emit_int_lit(*value, r),
+        ExpressionKind::IntegerLit(value) => {
+            let (stmts, value) = emit_int_lit(*value, r)?;
+            Ok((stmts, Vec::default(), value))
+        }
         ExpressionKind::SignedLit(width, value) => {
-            emit_signed_lit(*width, *value, r)
+            let (stmts, value) = emit_signed_lit(*width, *value, r)?;
+            Ok((stmts, Vec::default(), value))
         }
-        ExpressionKind::Lvalue(lval) => emit_lval(lval, hlir, ast, ra, names),
+        ExpressionKind::Lvalue(lval) => {
+            let (stmts, value) = emit_lval(lval, hlir, ast, ra, names)?;
+            Ok((stmts, Vec::default(), value))
+        }
         ExpressionKind::Call(call) => match context {
             P4Context::Control(c) => {
-                emit_call(call, c, hlir, ast, ra, afa, names)
+                let (stmts, blks, value) = emit_call(
+                    call,
+                    c,
+                    hlir,
+                    ast,
+                    context,
+                    ra,
+                    afa,
+                    names,
+                    table_context,
+                )?;
+                Ok((stmts, blks, value))
             }
             P4Context::Parser(_) => {
                 Err(CodegenError::CallInParser(expr.clone()))
             }
         },
-        ExpressionKind::Binary(lhs, op, rhs) => emit_binary_expr(
-            lhs.as_ref(),
-            op,
-            rhs.as_ref(),
-            hlir,
-            ast,
-            ra,
-            afa,
-            names,
-        ),
+        ExpressionKind::Binary(lhs, op, rhs) => {
+            let (stmts, value) = emit_binary_expr(
+                lhs.as_ref(),
+                op,
+                rhs.as_ref(),
+                hlir,
+                ast,
+                ra,
+                afa,
+                names,
+            )?;
+            Ok((stmts, Vec::default(), value))
+        }
         xpr => todo!("expression: {xpr:?}"),
     }
 }
@@ -94,16 +128,28 @@ pub(crate) fn emit_single_valued_expression(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
-) -> Result<(Vec<Statement>, Register), CodegenError> {
-    let (stmts, val) =
-        emit_expression(expr, hlir, ast, context, ra, afa, names)?;
+    table_context: &mut TableContext,
+) -> Result<
+    (Vec<Statement>, Vec<htq::ast::StatementBlock>, Register),
+    CodegenError,
+> {
+    let (stmts, blocks, val) = emit_expression(
+        expr,
+        hlir,
+        ast,
+        context,
+        ra,
+        afa,
+        names,
+        table_context,
+    )?;
 
     let val = val.ok_or(CodegenError::ExpressionValueNeeded(expr.clone()))?;
     if val.registers.len() != 1 {
         return Err(CodegenError::SingularExpressionValueNeeded(expr.clone()));
     }
 
-    Ok((stmts, val.registers[0].0.clone()))
+    Ok((stmts, blocks, val.registers[0].0.clone()))
 }
 
 pub(crate) fn emit_binary_expr(
@@ -150,16 +196,61 @@ pub(crate) fn emit_call(
     control: &p4::ast::Control,
     hlir: &Hlir,
     ast: &p4::ast::AST,
+    context: &P4Context<'_>,
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
-) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
+    table_context: &mut TableContext,
+) -> Result<
+    (
+        Vec<Statement>,
+        Vec<htq::ast::StatementBlock>,
+        Option<ExpressionValue>,
+    ),
+    CodegenError,
+> {
     match call.lval.leaf() {
-        "apply" => emit_apply_call(call, control, hlir, ast, ra, afa, names),
-        "setValid" => emit_set_valid_call(call, hlir, ast, ra, names, true),
-        "setInvalid" => emit_set_valid_call(call, hlir, ast, ra, names, false),
-        "isValid" => emit_is_valid_call(call, hlir, ast, ra, names),
-        _ => emit_extern_call(call, hlir, ast, ra, names),
+        "apply" => {
+            let (stmts, result) = emit_apply_call(
+                call,
+                control,
+                hlir,
+                ast,
+                ra,
+                afa,
+                names,
+                table_context,
+            )?;
+            Ok((stmts, Vec::default(), result))
+        }
+        "act" => emit_indirect_action_call(
+            call,
+            hlir,
+            ast,
+            context,
+            ra,
+            names,
+            table_context,
+        ),
+        "setValid" => {
+            let (stmts, result) =
+                emit_set_valid_call(call, hlir, ast, ra, names, true)?;
+            Ok((stmts, Vec::default(), result))
+        }
+        "setInvalid" => {
+            let (stmts, result) =
+                emit_set_valid_call(call, hlir, ast, ra, names, false)?;
+            Ok((stmts, Vec::default(), result))
+        }
+        "isValid" => {
+            let (stmts, result) =
+                emit_is_valid_call(call, hlir, ast, ra, names)?;
+            Ok((stmts, Vec::default(), result))
+        }
+        _ => {
+            let (stmts, result) = emit_extern_call(call, hlir, ast, ra, names)?;
+            Ok((stmts, Vec::default(), result))
+        }
     }
 }
 
@@ -171,6 +262,7 @@ fn emit_apply_call(
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     names: &HashMap<String, NameInfo>,
+    table_context: &mut TableContext,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
     let parent = call.lval.pop_right();
     let parent = parent.leaf();
@@ -189,9 +281,11 @@ fn emit_apply_call(
                     call.clone(),
                     info.ty.clone(),
                 ))?;
-            emit_control_apply_call(call, hlir, ast, ra, names)
+            emit_control_apply_call(call, hlir, ast, ra, names, table_context)
         }
-        p4::ast::Type::Action => emit_action_call(call, hlir, ast, ra, names),
+        p4::ast::Type::Action => {
+            emit_direct_action_call(call, hlir, ast, ra, names, table_context)
+        }
         p4::ast::Type::ExternFunction => {
             emit_extern_call(call, hlir, ast, ra, names)
         }
@@ -313,6 +407,7 @@ fn emit_control_apply_call(
     ast: &p4::ast::AST,
     ra: &mut RegisterAllocator,
     names: &HashMap<String, NameInfo>,
+    table_context: &mut TableContext,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
     // get the control being called
     let info = names
@@ -370,26 +465,42 @@ fn emit_control_apply_call(
     for (i, p) in control.parameters.iter().enumerate() {
         if p.direction.is_out() {
             if p.ty.is_lookup_result() {
-                let arg = match &call.args[i].kind {
-                    ExpressionKind::Lvalue(lval) => lval.root().to_owned(),
+                let arg_lval = match &call.args[i].kind {
+                    ExpressionKind::Lvalue(lval) => lval,
                     _x => panic!("expected lvalue for out parameter"),
                 };
+                let arg = arg_lval.root().to_owned();
                 let hit = ra.alloc(&format!("{}_hit", arg));
-                returned_registers.push((hit, htq::ast::Type::Bool));
+                returned_registers.push((hit.clone(), htq::ast::Type::Bool));
 
                 let variant = ra.alloc(&format!("{}_variant", arg));
                 returned_registers
-                    .push((variant, htq::ast::Type::Unsigned(16)));
+                    .push((variant.clone(), htq::ast::Type::Unsigned(16)));
 
                 let args = ra.alloc(&format!("{}_args", arg));
-                let args_size = control
+                let info = control
                     .resolve_lookup_result_args_size(&p.name, ast)
                     .ok_or(CodegenError::LookupResultArgSize(p.clone()))?;
-                returned_registers
-                    .push((args, htq::ast::Type::Bitfield(args_size)));
+
+                returned_registers.push((
+                    args.clone(),
+                    htq::ast::Type::Bitfield(info.max_arg_size),
+                ));
 
                 let sync = ra.alloc(&format!("{}_sync", arg));
-                returned_registers.push((sync, htq::ast::Type::Bitfield(128)));
+                returned_registers
+                    .push((sync.clone(), htq::ast::Type::Bitfield(128)));
+                table_context.insert(
+                    arg_lval.name.clone(),
+                    CompiledTableInfo {
+                        table: info.table.clone(),
+                        control: control.clone(),
+                        hit,
+                        variant,
+                        args,
+                        sync,
+                    },
+                );
             } else {
                 returned_registers
                     .push((ra.alloc(&p.name), p4_type_to_htq_type(&p.ty)?))
@@ -447,14 +558,96 @@ fn emit_extern_call(
     Ok((Vec::default(), None))
 }
 
-fn emit_action_call(
+fn emit_indirect_action_call(
+    call: &p4::ast::Call,
+    _hlir: &Hlir,
+    _ast: &p4::ast::AST,
+    context: &P4Context<'_>,
+    ra: &mut RegisterAllocator,
+    _names: &HashMap<String, NameInfo>,
+    table_context: &mut TableContext,
+) -> Result<
+    (
+        Vec<Statement>,
+        Vec<htq::ast::StatementBlock>,
+        Option<ExpressionValue>,
+    ),
+    CodegenError,
+> {
+    let mut result = Vec::new();
+    let mut blocks = Vec::new();
+
+    let control = match context {
+        P4Context::Control(c) => *c,
+        P4Context::Parser(_) => {
+            return Err(CodegenError::IndirectActionCallInParser(
+                call.lval.clone(),
+            ))
+        }
+    };
+
+    let table_lval = call.lval.pop_right();
+    let info = table_context.get(&table_lval.name).ok_or(
+        CodegenError::TableNotFoundInContext(
+            table_lval.clone(),
+            table_context.clone(),
+        ),
+    )?;
+
+    let mut block_ra = RegisterAllocator::default();
+    let mut control_params = Vec::new();
+    let mut block_params = Vec::new();
+    for p in &control.parameters {
+        control_params.push(ra.get(&p.name).ok_or(
+            CodegenError::NoRegisterForParameter(p.name.clone(), ra.clone()),
+        )?);
+        block_params.push(block_ra.alloc(&p.name));
+    }
+
+    let control_param_values = control_params
+        .iter()
+        .cloned()
+        .map(Value::reg)
+        .collect::<Vec<_>>();
+
+    let block_param_values = block_params
+        .iter()
+        .cloned()
+        .map(Value::reg)
+        .collect::<Vec<_>>();
+
+    for (i, a) in info.table.actions.iter().enumerate() {
+        result.push(Statement::Beq(Beq {
+            source: info.variant.clone(),
+            predicate: Value::number(i as i128),
+            label: a.name.clone(),
+            args: control_param_values.clone(),
+        }));
+        let mut stmts = Vec::default();
+        stmts.push(Statement::Call(htq::ast::Call {
+            fname: format!("{}_{}", info.control.name, a.name.clone()),
+            args: block_param_values.clone(),
+            targets: Vec::default(), //TODO actual targets,
+        }));
+        blocks.push(htq::ast::StatementBlock {
+            name: a.name.clone(),
+            parameters: block_params.clone(),
+            statements: stmts,
+        });
+    }
+    Ok((result, blocks, None))
+}
+
+fn emit_direct_action_call(
     _call: &p4::ast::Call,
     _hlir: &Hlir,
     _ast: &p4::ast::AST,
     _ra: &mut RegisterAllocator,
     _names: &HashMap<String, NameInfo>,
+    _table_context: &mut TableContext,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    todo!("action call")
+    //TODO
+    Ok((Vec::default(), None))
 }
 
 fn emit_lval(

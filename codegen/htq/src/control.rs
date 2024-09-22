@@ -7,7 +7,7 @@ use p4::{ast::ControlParameter, hlir::Hlir};
 
 use crate::{
     error::CodegenError, p4_type_to_htq_type, statement::emit_statement,
-    AsyncFlagAllocator, P4Context, RegisterAllocator,
+    AsyncFlagAllocator, P4Context, RegisterAllocator, TableContext,
 };
 
 pub(crate) fn emit_control_functions(
@@ -33,6 +33,7 @@ fn emit_control(
 ) -> Result<Vec<htq::ast::Function>, CodegenError> {
     let mut result = Vec::default();
     let mut psub = HashMap::<ControlParameter, Vec<Register>>::default();
+    let mut table_context = TableContext::default();
 
     let mut parameters = Vec::new();
     let mut apply_return_signature = Vec::new();
@@ -48,12 +49,12 @@ fn emit_control(
                 //variant
                 apply_return_signature.push(htq::ast::Type::Unsigned(16));
 
-                let args_size = control
+                let info = control
                     .resolve_lookup_result_args_size(&x.name, ast)
                     .ok_or(CodegenError::LookupResultArgSize(x.clone()))?;
 
                 apply_return_signature
-                    .push(htq::ast::Type::Unsigned(args_size));
+                    .push(htq::ast::Type::Unsigned(info.max_arg_size));
 
                 if x.ty.is_sync() {
                     //async flag
@@ -79,6 +80,7 @@ fn emit_control(
         &apply_return_signature,
         afa,
         &mut psub,
+        &mut table_context,
     )?);
 
     for action in &control.actions {
@@ -91,6 +93,7 @@ fn emit_control(
             &action_return_signature,
             afa,
             &mut psub,
+            &mut table_context,
         )?);
     }
     Ok(result)
@@ -104,6 +107,7 @@ fn emit_control_apply(
     return_signature: &[htq::ast::Type],
     afa: &mut AsyncFlagAllocator,
     psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    table_context: &mut TableContext,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
@@ -127,6 +131,7 @@ fn emit_control_apply(
             &mut ra,
             afa,
             psub,
+            table_context,
         )?;
         statements.extend(stmts);
         blocks.extend(blks);
@@ -180,6 +185,7 @@ fn emit_control_action(
     return_signature: &[htq::ast::Type],
     afa: &mut AsyncFlagAllocator,
     psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    table_context: &mut TableContext,
 ) -> Result<htq::ast::Function, CodegenError> {
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
@@ -218,6 +224,7 @@ fn emit_control_action(
             &mut ra,
             afa,
             psub,
+            table_context,
         )?;
         statements.extend(stmts);
         blocks.extend(blks);
