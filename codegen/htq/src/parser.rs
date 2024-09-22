@@ -52,6 +52,10 @@ fn emit_parser(
 
     let mut names = parser.names();
 
+    // TODO XXX parsers cannot have tables, this indicates broken abstractions
+    // around code generation control flow.
+    let mut table_context = HashMap::default();
+
     for state in &parser.states {
         // keeps track of register revisions for locals
         let mut statements = Vec::default();
@@ -66,6 +70,7 @@ fn emit_parser(
                 &mut ra,
                 afa,
                 &mut psub,
+                &mut table_context,
             )?;
             statements.extend(stmts);
             blocks.extend(blks);

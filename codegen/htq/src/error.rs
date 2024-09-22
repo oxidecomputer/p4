@@ -10,6 +10,8 @@ use p4::{
 };
 use thiserror::Error;
 
+use crate::{RegisterAllocator, TableContext};
+
 #[derive(Error, Debug)]
 pub enum FlagAllocationError {
     #[error("flag overflow: count exceeds 128")]
@@ -100,6 +102,15 @@ pub enum CodegenError {
 
     #[error("missing register for lvalue, this is a compiler bug \n{0:#?}\ncurrent registers: \n{1:#?}")]
     MissingRegisterForLvalue(Lvalue, Vec<Register>),
+
+    #[error("table not found in context \nlvalue:\n{0:#?}\ncontext:\n{1:#?}")]
+    TableNotFoundInContext(Lvalue, TableContext),
+
+    #[error("indirect action call in parser for \n{0:#?}")]
+    IndirectActionCallInParser(Lvalue),
+
+    #[error("no register for parameter {0}\nregisters:\n{1:#?}")]
+    NoRegisterForParameter(String, RegisterAllocator),
 }
 
 #[derive(Error, Debug)]

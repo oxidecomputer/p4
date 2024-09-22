@@ -1,8 +1,13 @@
 // Copyright 2024 Oxide Computer Company
 
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::result_large_err)]
+#![allow(clippy::type_complexity)]
 
-use std::{collections::HashMap, io::Write};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Write,
+};
 
 use control::emit_control_functions;
 use error::{CodegenError, FlagAllocationError};
@@ -123,9 +128,9 @@ fn p4_type_to_htq_type(
     })
 }
 
-#[derive(Default)]
-pub(crate) struct RegisterAllocator {
-    data: HashMap<String, usize>,
+#[derive(Default, Debug, Clone)]
+pub struct RegisterAllocator {
+    data: BTreeMap<String, usize>,
 }
 
 impl RegisterAllocator {
@@ -169,6 +174,12 @@ impl RegisterAllocator {
             .iter()
             .map(|(name, rev)| Self::register_name(name, *rev))
             .collect()
+    }
+
+    pub(crate) fn rebase(&self) -> Self {
+        Self {
+            data: self.data.keys().map(|k| (k.clone(), 0)).collect(),
+        }
     }
 
     fn register_name(name: &str, rev: usize) -> Register {
@@ -254,4 +265,16 @@ pub(crate) enum P4Context<'a> {
     #[allow(dead_code)]
     Parser(&'a p4::ast::Parser),
     Control(&'a p4::ast::Control),
+}
+
+pub type TableContext = HashMap<String, CompiledTableInfo>;
+
+#[derive(Debug, Clone)]
+pub struct CompiledTableInfo {
+    pub table: p4::ast::Table,
+    pub control: p4::ast::Control,
+    pub hit: Register,
+    pub variant: Register,
+    pub args: Register,
+    pub sync: Register,
 }
