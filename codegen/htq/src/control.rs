@@ -108,6 +108,7 @@ fn emit_control_apply(
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
     let mut statements = Vec::default();
+    let mut blocks = Vec::default();
 
     for (p, p4p) in parameters {
         if psub.get(p4p).is_some() {
@@ -117,19 +118,18 @@ fn emit_control_apply(
     }
 
     for s in &control.apply.statements {
-        statements.extend(
-            emit_statement(
-                s,
-                ast,
-                P4Context::Control(control),
-                hlir,
-                &mut names,
-                &mut ra,
-                afa,
-                psub,
-            )?
-            .into_iter(),
-        )
+        let (stmts, blks) = emit_statement(
+            s,
+            ast,
+            &P4Context::Control(control),
+            hlir,
+            &mut names,
+            &mut ra,
+            afa,
+            psub,
+        )?;
+        statements.extend(stmts);
+        blocks.extend(blks);
     }
 
     let mut signature = Vec::new();
@@ -165,6 +165,7 @@ fn emit_control_apply(
         name: format!("{}_apply", control.name),
         parameters: signature,
         statements,
+        blocks,
         return_signature: return_signature.to_vec(),
     };
     Ok(f)
@@ -183,6 +184,7 @@ fn emit_control_action(
     let mut ra = RegisterAllocator::default();
     let mut names = control.names();
     let mut statements = Vec::default();
+    let mut blocks = Vec::default();
     let parameters: Vec<(Parameter, p4::ast::ControlParameter)> = parameters
         .iter()
         .filter(|(_, p4p)| !p4p.ty.is_lookup_result())
@@ -207,19 +209,18 @@ fn emit_control_action(
     }
 
     for s in &action.statement_block.statements {
-        statements.extend(
-            emit_statement(
-                s,
-                ast,
-                P4Context::Control(control),
-                hlir,
-                &mut names,
-                &mut ra,
-                afa,
-                psub,
-            )?
-            .into_iter(),
-        )
+        let (stmts, blks) = emit_statement(
+            s,
+            ast,
+            &P4Context::Control(control),
+            hlir,
+            &mut names,
+            &mut ra,
+            afa,
+            psub,
+        )?;
+        statements.extend(stmts);
+        blocks.extend(blks);
     }
 
     let mut signature = Vec::new();
@@ -255,6 +256,7 @@ fn emit_control_action(
         name: format!("{}_{}", control.name, action.name),
         parameters: action_parameters,
         statements,
+        blocks,
         return_signature: return_signature.to_vec(),
     };
     Ok(f)

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use htq::ast::{Beq, Fset, Register, Rset, Value};
+use htq::ast::{Beq, Fset, Register, Rset, StatementBlock, Value};
 use p4::{
     ast::{
         BinOp, ControlParameter, DeclarationInfo, Direction, Expression,
@@ -20,45 +20,59 @@ use crate::{
 pub(crate) fn emit_statement(
     stmt: &p4::ast::Statement,
     ast: &p4::ast::AST,
-    context: P4Context<'_>,
+    context: &P4Context<'_>,
     hlir: &Hlir,
     names: &mut HashMap<String, NameInfo>,
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
     psub: &mut HashMap<ControlParameter, Vec<Register>>,
-) -> Result<Vec<htq::ast::Statement>, CodegenError> {
+) -> Result<
+    (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
+    CodegenError,
+> {
     use p4::ast::Statement as S;
     match stmt {
-        S::Empty => Ok(Vec::new()),
-        S::Assignment(lval, expr) => emit_assignment(
-            hlir, ast, context, names, lval, expr, ra, afa, psub,
-        ),
+        S::Empty => Ok((Vec::default(), Vec::default())),
+        S::Assignment(lval, expr) => {
+            let stmts = emit_assignment(
+                hlir, ast, context, names, lval, expr, ra, afa, psub,
+            )?;
+            Ok((stmts, Vec::default()))
+        }
         S::Call(call) => {
-            emit_call(hlir, ast, context, names, call, ra, afa, psub)
+            let stmts =
+                emit_call(hlir, ast, context, names, call, ra, afa, psub)?;
+            Ok((stmts, Vec::default()))
         }
         S::If(if_block) => {
             emit_if_block(hlir, ast, context, names, if_block, ra, afa, psub)
         }
         S::Variable(v) => {
-            emit_variable(hlir, ast, context, names, v, ra, afa, psub)
+            let stmts =
+                emit_variable(hlir, ast, context, names, v, ra, afa, psub)?;
+            Ok((stmts, Vec::default()))
         }
-        S::Constant(_c) => Ok(Vec::default()), //TODO
-        S::Transition(_t) => Ok(Vec::default()), //TODO
-        S::Return(_r) => Ok(Vec::default()),   //TODO
+        S::Constant(_c) => Ok((Vec::default(), Vec::default())), //TODO
+        S::Transition(_t) => Ok((Vec::default(), Vec::default())), //TODO
+        S::Return(_r) => Ok((Vec::default(), Vec::default())),   //TODO
     }
 }
 
 fn emit_if_block(
     hlir: &Hlir,
     ast: &p4::ast::AST,
-    context: P4Context<'_>,
+    context: &P4Context<'_>,
     names: &mut HashMap<String, NameInfo>,
     iblk: &p4::ast::IfBlock,
     ra: &mut RegisterAllocator,
     afa: &mut AsyncFlagAllocator,
-    _psub: &mut HashMap<ControlParameter, Vec<Register>>,
-) -> Result<Vec<htq::ast::Statement>, CodegenError> {
+    psub: &mut HashMap<ControlParameter, Vec<Register>>,
+) -> Result<
+    (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
+    CodegenError,
+> {
     let mut result = Vec::default();
+    let mut blocks = Vec::default();
 
     let (source, predicate) =
         if let ExpressionKind::Binary(lhs, BinOp::Eq, rhs) =
@@ -68,7 +82,7 @@ fn emit_if_block(
                 lhs.as_ref(),
                 hlir,
                 ast,
-                &context,
+                context,
                 ra,
                 afa,
                 names,
@@ -80,7 +94,7 @@ fn emit_if_block(
                     rhs.as_ref(),
                     hlir,
                     ast,
-                    &context,
+                    context,
                     ra,
                     afa,
                     names,
@@ -93,7 +107,7 @@ fn emit_if_block(
                 iblk.predicate.as_ref(),
                 hlir,
                 ast,
-                &context,
+                context,
                 ra,
                 afa,
                 names,
@@ -112,15 +126,31 @@ fn emit_if_block(
         args,
     }));
 
-    result.push(htq::ast::Statement::Label(label, params));
+    let mut blk = StatementBlock {
+        name: label,
+        parameters: params,
+        statements: Vec::default(),
+    };
 
-    Ok(result)
+    for stmt in &iblk.block.statements {
+        // TODO nested if blocks
+        let (stmts, _) =
+            emit_statement(stmt, ast, context, hlir, names, ra, afa, psub)?;
+        blk.statements.extend(stmts);
+    }
+
+    // XXX
+    //result.push(htq::ast::Statement::Label(label, params));
+
+    blocks.push(blk);
+
+    Ok((result, blocks))
 }
 
 fn emit_variable(
     _hlir: &Hlir,
     _ast: &p4::ast::AST,
-    _context: P4Context<'_>,
+    _context: &P4Context<'_>,
     names: &mut HashMap<String, NameInfo>,
     var: &p4::ast::Variable,
     ra: &mut RegisterAllocator,
@@ -161,7 +191,7 @@ fn emit_variable(
 fn emit_call(
     hlir: &Hlir,
     ast: &p4::ast::AST,
-    context: P4Context<'_>,
+    context: &P4Context<'_>,
     names: &mut HashMap<String, NameInfo>,
     call: &p4::ast::Call,
     ra: &mut RegisterAllocator,
@@ -184,7 +214,7 @@ fn emit_call(
 fn emit_assignment(
     hlir: &Hlir,
     ast: &p4::ast::AST,
-    context: P4Context<'_>,
+    context: &P4Context<'_>,
     names: &mut HashMap<String, NameInfo>,
     target: &p4::ast::Lvalue,
     source: &p4::ast::Expression,
@@ -237,7 +267,7 @@ fn emit_assignment(
 
     // reg typ
     let (mut instrs, expr_value) =
-        emit_expression(source, hlir, ast, &context, ra, afa, names)?;
+        emit_expression(source, hlir, ast, context, ra, afa, names)?;
 
     let expr_value = expr_value.ok_or(
         CodegenError::AssignmentExpressionRequiresValue(source.clone()),

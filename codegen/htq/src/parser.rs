@@ -55,25 +55,26 @@ fn emit_parser(
     for state in &parser.states {
         // keeps track of register revisions for locals
         let mut statements = Vec::default();
+        let mut blocks = Vec::default();
         for s in &state.statements.statements {
-            statements.extend(
-                emit_statement(
-                    s,
-                    ast,
-                    P4Context::Parser(parser),
-                    hlir,
-                    &mut names,
-                    &mut ra,
-                    afa,
-                    &mut psub,
-                )?
-                .into_iter(),
-            );
+            let (stmts, blks) = emit_statement(
+                s,
+                ast,
+                &P4Context::Parser(parser),
+                hlir,
+                &mut names,
+                &mut ra,
+                afa,
+                &mut psub,
+            )?;
+            statements.extend(stmts);
+            blocks.extend(blks);
         }
         let f = htq::ast::Function {
             name: format!("{}_{}", parser.name, state.name),
             parameters: parameters.clone(),
             statements,
+            blocks,
             return_signature: return_signature.clone(),
         };
         result.push(f);
