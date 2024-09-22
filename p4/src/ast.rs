@@ -1176,7 +1176,7 @@ impl Control {
         &self,
         parameter_name: &str,
         ast: &AST,
-    ) -> Option<usize> {
+    ) -> Option<TableInfo> {
         self.resolve_lookup_result_args_size_rec(
             parameter_name,
             ast,
@@ -1184,13 +1184,15 @@ impl Control {
         )
     }
 
-    //TODO this needs to consider the possibility of multiple assignments
+    //TODO Does this need to consider the possibility of multiple assignments?
+    //     Should that be an error?
     pub fn resolve_lookup_result_args_size_rec(
         &self,
         parameter_name: &str,
         ast: &AST,
         block: &StatementBlock,
-    ) -> Option<usize> {
+    ) -> Option<TableInfo> {
+        let mut table: Option<Table> = None;
         let mut size = 0;
         let mut found = false;
         for x in &block.statements {
@@ -1216,6 +1218,7 @@ impl Control {
                                     ),
                                     size,
                                 );
+                                table = Some(tbl.clone());
                                 found = true;
                             } else {
                                 continue;
@@ -1225,16 +1228,19 @@ impl Control {
                     }
                 }
                 Statement::If(if_block) => {
-                    if let Some(sz) = self.resolve_lookup_result_args_size_rec(
-                        parameter_name,
-                        ast,
-                        &if_block.block,
-                    ) {
+                    if let Some(info) = self
+                        .resolve_lookup_result_args_size_rec(
+                            parameter_name,
+                            ast,
+                            &if_block.block,
+                        )
+                    {
                         found = true;
-                        size = usize::max(size, sz);
+                        size = usize::max(size, info.max_arg_size);
+                        table = Some(info.table);
                     }
                     for x in &if_block.else_ifs {
-                        if let Some(sz) = self
+                        if let Some(info) = self
                             .resolve_lookup_result_args_size_rec(
                                 parameter_name,
                                 ast,
@@ -1242,11 +1248,12 @@ impl Control {
                             )
                         {
                             found = true;
-                            size = usize::max(size, sz);
+                            size = usize::max(size, info.max_arg_size);
+                            table = Some(info.table);
                         }
                     }
                     if let Some(else_block) = &if_block.else_block {
-                        if let Some(sz) = self
+                        if let Some(info) = self
                             .resolve_lookup_result_args_size_rec(
                                 parameter_name,
                                 ast,
@@ -1254,7 +1261,8 @@ impl Control {
                             )
                         {
                             found = true;
-                            size = usize::max(size, sz);
+                            size = usize::max(size, info.max_arg_size);
+                            table = Some(info.table);
                         }
                     }
                 }
@@ -1262,7 +1270,10 @@ impl Control {
             }
         }
         if found {
-            Some(size)
+            Some(TableInfo {
+                max_arg_size: size,
+                table: table.unwrap(),
+            })
         } else {
             None
         }
@@ -1285,6 +1296,11 @@ impl Control {
         }
         size
     }
+}
+
+pub struct TableInfo {
+    pub table: Table,
+    pub max_arg_size: usize,
 }
 
 impl PartialEq for Control {
