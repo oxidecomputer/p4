@@ -443,7 +443,8 @@ fn emit_extern_call(
     _ra: &mut RegisterAllocator,
     _names: &HashMap<String, NameInfo>,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    todo!("extern call")
+    //TODO
+    Ok((Vec::default(), None))
 }
 
 fn emit_action_call(
