@@ -561,7 +561,7 @@ fn emit_extern_call(
 fn emit_indirect_action_call(
     call: &p4::ast::Call,
     _hlir: &Hlir,
-    _ast: &p4::ast::AST,
+    ast: &p4::ast::AST,
     context: &P4Context<'_>,
     ra: &mut RegisterAllocator,
     _names: &HashMap<String, NameInfo>,
@@ -603,6 +603,7 @@ fn emit_indirect_action_call(
         )?);
         block_params.push(block_ra.alloc(&p.name));
     }
+    block_params.push(info.args.clone());
 
     let control_param_values = control_params
         .iter()
@@ -616,21 +617,45 @@ fn emit_indirect_action_call(
         .map(Value::reg)
         .collect::<Vec<_>>();
 
+    let mut block_args = control_param_values.clone();
+    block_args.push(Value::reg(info.args.clone()));
+
     for (i, a) in info.table.actions.iter().enumerate() {
+        // make a clean lbock for each action
+        let mut block_ra = block_ra.clone();
+        let mut block_param_values = block_param_values.clone();
+        // pop the args off, we're going to break it up into components
+        block_param_values.pop();
+
         let action_decl = info.control.get_action(&a.name).ok_or(
             CodegenError::ActionNotFound(a.clone(), info.control.clone()),
         )?;
         let mut control_out_params = Vec::default();
         let mut out_params = Vec::default();
+        let mut stmts = Vec::default();
+
+        let mut action_params = Vec::default();
+
+        let mut offset = 0;
+        let key = info.args.clone();
         for x in &action_decl.parameters {
             if x.direction.is_out() {
-                out_params.push(ra.get(&x.name).ok_or(
-                    CodegenError::NoRegisterForParameter(
-                        x.name.clone(),
-                        ra.clone(),
-                    ),
-                )?)
+                out_params.push(block_ra.alloc(&x.name));
             }
+
+            let action_param_reg = block_ra.alloc(&format!("{}_arg", &x.name));
+            let sz = type_size(&x.ty, ast);
+            action_params.push(action_param_reg.clone());
+            stmts.push(Statement::Load(htq::ast::Load {
+                target: action_param_reg.clone(),
+                typ: Type::Bitfield(sz),
+                source: key.clone(),
+                offset: Value::number(offset),
+            }));
+
+            block_param_values.push(Value::reg(action_param_reg.clone()));
+
+            offset += sz as i128;
         }
         for x in &info.control.parameters {
             if x.ty.is_lookup_result() {
@@ -646,9 +671,9 @@ fn emit_indirect_action_call(
             source: info.variant.clone(),
             predicate: Value::number(i as i128),
             label: a.name.clone(),
-            args: control_param_values.clone(),
+            args: block_args.clone(),
         }));
-        let mut stmts = Vec::default();
+
         stmts.push(Statement::Call(htq::ast::Call {
             fname: format!("{}_{}", info.control.name, a.name.clone()),
             args: block_param_values.clone(),

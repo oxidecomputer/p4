@@ -96,13 +96,59 @@ fn emit_if_block(
     (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
     CodegenError,
 > {
+    let (mut statements, mut blocks) = emit_conditional_block(
+        hlir,
+        ast,
+        context,
+        names,
+        &iblk.predicate,
+        &iblk.block,
+        ra,
+        afa,
+        psub,
+        table_context,
+    )?;
+
+    for elif in &iblk.else_ifs {
+        let (stmts, blks) = emit_conditional_block(
+            hlir,
+            ast,
+            context,
+            names,
+            &elif.predicate,
+            &elif.block,
+            ra,
+            afa,
+            psub,
+            table_context,
+        )?;
+        statements.extend(stmts);
+        blocks.extend(blks);
+    }
+
+    Ok((statements, blocks))
+}
+
+fn emit_conditional_block(
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    context: &P4Context<'_>,
+    names: &mut HashMap<String, NameInfo>,
+    predicate: &p4::ast::Expression,
+    block: &p4::ast::StatementBlock,
+    ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
+    psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    table_context: &mut TableContext,
+) -> Result<
+    (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
+    CodegenError,
+> {
     let mut result = Vec::default();
     let mut blocks = Vec::default();
 
     let (source, predicate) =
-        if let ExpressionKind::Binary(lhs, BinOp::Eq, rhs) =
-            &iblk.predicate.kind
-        {
+        if let ExpressionKind::Binary(lhs, BinOp::Eq, rhs) = &predicate.kind {
             let (source_statements, blks, source) =
                 emit_single_valued_expression(
                     lhs.as_ref(),
@@ -135,7 +181,7 @@ fn emit_if_block(
         } else {
             let (predicate_statements, blks, source) =
                 emit_single_valued_expression(
-                    iblk.predicate.as_ref(),
+                    predicate,
                     hlir,
                     ast,
                     context,
@@ -169,7 +215,7 @@ fn emit_if_block(
         statements: Vec::default(),
     };
 
-    for stmt in &iblk.block.statements {
+    for stmt in &block.statements {
         // TODO nested if blocks
         let (stmts, blks) = emit_statement(
             stmt,
@@ -195,7 +241,7 @@ fn emit_if_block(
             out_params.push(block_ra.get(&x.name).ok_or(
                 CodegenError::NoRegisterForParameter(
                     x.name.clone(),
-                    ra.clone(),
+                    block_ra.clone(),
                 ),
             )?);
         }
