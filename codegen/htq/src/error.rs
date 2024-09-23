@@ -111,6 +111,9 @@ pub enum CodegenError {
 
     #[error("no register for parameter {0}\nregisters:\n{1:#?}")]
     NoRegisterForParameter(String, RegisterAllocator),
+
+    #[error("action not found in control\naction:\n{0:#?}\ncontrol:\n{1:#?}")]
+    ActionNotFound(Lvalue, Control),
 }
 
 #[derive(Error, Debug)]

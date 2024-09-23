@@ -186,6 +186,25 @@ fn emit_if_block(
         blk.statements.extend(stmts);
     }
 
+    if let P4Context::Control(control) = &context {
+        let mut out_params = Vec::default();
+        for x in &control.parameters {
+            if x.ty.is_lookup_result() {
+                continue;
+            }
+            out_params.push(block_ra.get(&x.name).ok_or(
+                CodegenError::NoRegisterForParameter(
+                    x.name.clone(),
+                    ra.clone(),
+                ),
+            )?);
+        }
+        blk.statements
+            .push(htq::ast::Statement::Return(htq::ast::Return {
+                registers: out_params,
+            }));
+    }
+
     blocks.push(blk);
 
     Ok((result, blocks))

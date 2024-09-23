@@ -617,6 +617,31 @@ fn emit_indirect_action_call(
         .collect::<Vec<_>>();
 
     for (i, a) in info.table.actions.iter().enumerate() {
+        let action_decl = info.control.get_action(&a.name).ok_or(
+            CodegenError::ActionNotFound(a.clone(), info.control.clone()),
+        )?;
+        let mut control_out_params = Vec::default();
+        let mut out_params = Vec::default();
+        for x in &action_decl.parameters {
+            if x.direction.is_out() {
+                out_params.push(ra.get(&x.name).ok_or(
+                    CodegenError::NoRegisterForParameter(
+                        x.name.clone(),
+                        ra.clone(),
+                    ),
+                )?)
+            }
+        }
+        for x in &info.control.parameters {
+            if x.ty.is_lookup_result() {
+                continue;
+            }
+            if x.direction.is_out() {
+                out_params.push(block_ra.alloc(&x.name));
+                control_out_params.push(block_ra.get(&x.name).unwrap());
+            }
+        }
+
         result.push(Statement::Beq(Beq {
             source: info.variant.clone(),
             predicate: Value::number(i as i128),
@@ -627,7 +652,10 @@ fn emit_indirect_action_call(
         stmts.push(Statement::Call(htq::ast::Call {
             fname: format!("{}_{}", info.control.name, a.name.clone()),
             args: block_param_values.clone(),
-            targets: Vec::default(), //TODO actual targets,
+            targets: out_params,
+        }));
+        stmts.push(Statement::Return(htq::ast::Return {
+            registers: control_out_params,
         }));
         blocks.push(htq::ast::StatementBlock {
             name: a.name.clone(),
