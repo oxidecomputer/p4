@@ -4,7 +4,7 @@ use htq::ast::Register;
 use p4::{
     ast::{
         Call, Control, ControlParameter, DeclarationInfo, Expression, Lvalue,
-        Type,
+        Transition, Type,
     },
     lexer::Token,
 };
@@ -114,6 +114,9 @@ pub enum CodegenError {
 
     #[error("action not found in control\naction:\n{0:#?}\ncontrol:\n{1:#?}")]
     ActionNotFound(Lvalue, Control),
+
+    #[error("transition must be in parser context\n{0:#?}")]
+    TransitionOutsideParser(Transition),
 }
 
 #[derive(Error, Debug)]
