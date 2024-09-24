@@ -77,9 +77,94 @@ pub(crate) fn emit_statement(
             Ok((stmts, Vec::default()))
         }
         S::Constant(_c) => Ok((Vec::default(), Vec::default())), //TODO
-        S::Transition(_t) => Ok((Vec::default(), Vec::default())), //TODO
-        S::Return(_r) => Ok((Vec::default(), Vec::default())),   //TODO
+        S::Transition(t) => emit_transition(
+            hlir,
+            ast,
+            context,
+            names,
+            t,
+            ra,
+            afa,
+            psub,
+            table_context,
+        ),
+        S::Return(_r) => Ok((Vec::default(), Vec::default())), //TODO
     }
+}
+
+fn emit_transition(
+    _hlir: &Hlir,
+    _ast: &p4::ast::AST,
+    context: &P4Context<'_>,
+    _names: &mut HashMap<String, NameInfo>,
+    transition: &p4::ast::Transition,
+    ra: &mut RegisterAllocator,
+    _afa: &mut AsyncFlagAllocator,
+    _psub: &mut HashMap<ControlParameter, Vec<Register>>,
+    _table_context: &mut TableContext,
+) -> Result<
+    (Vec<htq::ast::Statement>, Vec<htq::ast::StatementBlock>),
+    CodegenError,
+> {
+    let parser = match &context {
+        P4Context::Parser(p) => *p,
+        P4Context::Control(_) => {
+            return Err(CodegenError::TransitionOutsideParser(
+                transition.clone(),
+            ))
+        }
+    };
+
+    let transition_to = match &transition {
+        p4::ast::Transition::Reference(lval) => lval,
+        p4::ast::Transition::Select(_) => todo!("transition select"),
+    };
+
+    let mut args = Vec::default();
+    let mut targets = Vec::default();
+    for x in &parser.parameters {
+        if x.direction.is_out() {
+            targets.push(ra.alloc(&x.name));
+        }
+        args.push(Value::reg(ra.get(&x.name).ok_or(
+            CodegenError::NoRegisterForParameter(x.name.clone(), ra.clone()),
+        )?));
+    }
+
+    let hdr = targets[0].clone();
+
+    let mut stmts = Vec::default();
+    match transition_to.name.as_str() {
+        "accept" => {
+            stmts.push(htq::ast::Statement::SetValid(htq::ast::SetValid {
+                output: ra.alloc(&hdr.0),
+                target: hdr.clone(),
+                offsets: Vec::default(),
+                source: htq::ast::Value::bool(true),
+            }));
+        }
+        "reject" => {
+            stmts.push(htq::ast::Statement::SetValid(htq::ast::SetValid {
+                output: ra.alloc(&hdr.0),
+                target: hdr.clone(),
+                offsets: Vec::default(),
+                source: htq::ast::Value::bool(false),
+            }));
+        }
+        _ => {
+            stmts.push(htq::ast::Statement::Call(htq::ast::Call {
+                fname: format!("{}_{}", parser.name, transition_to.name),
+                args,
+                targets: targets.clone(),
+            }));
+        }
+    }
+
+    stmts.push(htq::ast::Statement::Return(htq::ast::Return {
+        registers: targets,
+    }));
+
+    Ok((stmts, Vec::default()))
 }
 
 fn emit_if_block(
@@ -430,7 +515,9 @@ fn emit_assignment(
             // TODO store instr
         }
         DeclarationInfo::StructMember | DeclarationInfo::HeaderMember => {
-            let treg = ra.alloc(target.root());
+            let treg = ra.get(target.root()).ok_or(
+                CodegenError::RegisterDoesNotExistForLval(target.clone()),
+            )?;
             let output = ra.alloc(target.root());
             let offsets = member_offsets(ast, names, target)?;
             let instr = Fset {
