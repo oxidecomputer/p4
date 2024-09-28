@@ -130,6 +130,12 @@ fn emit_transition(
             CodegenError::NoRegisterForParameter(x.name.clone(), ra.clone()),
         )?));
     }
+    args.push(Value::reg(ra.get("offset").ok_or(
+        CodegenError::NoRegisterForParameter(
+            String::from("offset"),
+            ra.clone(),
+        ),
+    )?));
 
     let hdr = targets[0].clone();
 
@@ -397,7 +403,7 @@ fn emit_call(
     CodegenError,
 > {
     let (instrs, blocks, _result) = match &context {
-        P4Context::Control(c) => crate::expression::emit_call(
+        P4Context::Control(c) => crate::expression::emit_call_in_control(
             call,
             c,
             hlir,
@@ -408,10 +414,16 @@ fn emit_call(
             names,
             table_context,
         )?,
-        P4Context::Parser(_) => {
-            //TODO
-            (Vec::default(), Vec::default(), None)
-        }
+        P4Context::Parser(p) => crate::expression::emit_call_in_parser(
+            call,
+            p,
+            hlir,
+            ast,
+            ra,
+            afa,
+            names,
+            table_context,
+        )?,
     };
     Ok((instrs, blocks))
 }

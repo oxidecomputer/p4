@@ -117,6 +117,21 @@ pub enum CodegenError {
 
     #[error("transition must be in parser context\n{0:#?}")]
     TransitionOutsideParser(Transition),
+
+    #[error("call does not have enough arguments\n{0:#?}")]
+    NotEnoughArgs(Lvalue),
+
+    #[error("expected expression got\n{0:#?}")]
+    ExpectedLvalue(Expression),
+
+    #[error("header declaration not found\n{0:#?}")]
+    HeaderDeclNotFound(Lvalue),
+
+    #[error("expected header type for lvalue\n{0:#?}")]
+    ExpectedHeaderType(Lvalue),
+
+    #[error("header definition for type {0} not found for lvalue\n{1:#?}")]
+    HeaderDefnNotFound(String, Lvalue),
 }
 
 #[derive(Error, Debug)]

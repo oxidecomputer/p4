@@ -50,6 +50,11 @@ fn emit_parser(
         parameters.push(p);
     }
 
+    parameters.push(htq::ast::Parameter {
+        reg: ra.alloc("offset"),
+        typ: htq::ast::Type::Unsigned(32),
+    });
+
     let mut names = parser.names();
 
     // TODO XXX parsers cannot have tables, this indicates broken abstractions
@@ -57,6 +62,7 @@ fn emit_parser(
     let mut table_context = HashMap::default();
 
     for state in &parser.states {
+        let mut ra = ra.clone();
         // keeps track of register revisions for locals
         let mut statements = Vec::default();
         let mut blocks = Vec::default();
