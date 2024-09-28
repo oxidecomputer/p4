@@ -10,3 +10,4 @@ anyhow = "1"
 regex = "1"
 p4 = { path = "../p4" }
 p4-rust = { path = "../codegen/rust" }
+p4-htq = { path = "../codegen/htq" }
