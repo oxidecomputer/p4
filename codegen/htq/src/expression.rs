@@ -86,7 +86,7 @@ pub(crate) fn emit_expression(
         }
         ExpressionKind::Call(call) => match context {
             P4Context::Control(c) => {
-                let (stmts, blks, value) = emit_call(
+                let (stmts, blks, value) = emit_call_in_control(
                     call,
                     c,
                     hlir,
@@ -191,7 +191,44 @@ pub(crate) fn emit_binary_expr_eq(
     todo!()
 }
 
-pub(crate) fn emit_call(
+pub(crate) fn emit_call_in_parser(
+    call: &p4::ast::Call,
+    parser: &p4::ast::Parser,
+    hlir: &Hlir,
+    ast: &p4::ast::AST,
+    ra: &mut RegisterAllocator,
+    afa: &mut AsyncFlagAllocator,
+    names: &HashMap<String, NameInfo>,
+    table_context: &mut TableContext,
+) -> Result<
+    (
+        Vec<Statement>,
+        Vec<htq::ast::StatementBlock>,
+        Option<ExpressionValue>,
+    ),
+    CodegenError,
+> {
+    match call.lval.leaf() {
+        "extract" => {
+            let (stmts, result) = emit_extract_call(
+                call,
+                parser,
+                hlir,
+                ast,
+                ra,
+                afa,
+                names,
+                table_context,
+            )?;
+            Ok((stmts, Vec::default(), result))
+        }
+        x => {
+            todo!("unhandled parser function: {x:#?}");
+        }
+    }
+}
+
+pub(crate) fn emit_call_in_control(
     call: &p4::ast::Call,
     control: &p4::ast::Control,
     hlir: &Hlir,
@@ -252,6 +289,88 @@ pub(crate) fn emit_call(
             Ok((stmts, Vec::default(), result))
         }
     }
+}
+
+fn emit_extract_call(
+    call: &p4::ast::Call,
+    parser: &p4::ast::Parser,
+    _hlir: &Hlir,
+    ast: &p4::ast::AST,
+    ra: &mut RegisterAllocator,
+    _afa: &mut AsyncFlagAllocator,
+    names: &HashMap<String, NameInfo>,
+    _table_context: &mut TableContext,
+) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
+    let src = &parser.parameters[1].name;
+    let source = ra.get(src).ok_or(CodegenError::NoRegisterForParameter(
+        src.to_owned(),
+        ra.clone(),
+    ))?;
+
+    let tgt = call
+        .args
+        .first()
+        .ok_or(CodegenError::NotEnoughArgs(call.lval.clone()))?;
+    let tgt = match &tgt.kind {
+        ExpressionKind::Lvalue(lval) => lval,
+        _ => return Err(CodegenError::ExpectedLvalue(tgt.as_ref().clone())),
+    };
+    let target = ra
+        .get(tgt.root())
+        .ok_or(CodegenError::RegisterDoesNotExistForLval(tgt.clone()))?;
+    let output = ra.alloc(&tgt.root());
+
+    let info = names
+        .get(tgt.root())
+        .ok_or(CodegenError::HeaderDeclNotFound(tgt.clone()))?;
+
+    let typename = match &info.ty {
+        p4::ast::Type::UserDefined(name, _) => name.clone(),
+        _ => return Err(CodegenError::ExpectedHeaderType(tgt.clone())),
+    };
+
+    let offset = if let Some(hdr) = ast.get_header(&typename) {
+        hdr.index_of(tgt.leaf())
+            .ok_or(CodegenError::MemberOffsetNotFound(tgt.clone()))?
+    } else {
+        let st = ast.get_struct(&typename).ok_or(
+            CodegenError::HeaderDefnNotFound(typename.clone(), tgt.clone()),
+        )?;
+        st.index_of(tgt.leaf())
+            .ok_or(CodegenError::MemberOffsetNotFound(tgt.clone()))?
+    };
+
+    let sz = type_size(&info.ty, ast);
+
+    let offset_reg =
+        ra.get("offset")
+            .ok_or(CodegenError::NoRegisterForParameter(
+                String::from("offset"),
+                ra.clone(),
+            ))?;
+
+    let extract_stmt = htq::ast::Extract {
+        output,
+        target,
+        target_offset: Value::number(offset as i128),
+        source,
+        source_offset: Value::reg(offset_reg.clone()), //TODO
+    };
+
+    let add_offset_stmt = htq::ast::Add {
+        target: ra.alloc(&offset_reg.0),
+        typ: Type::Unsigned(32),
+        source_a: Value::reg(offset_reg),
+        source_b: Value::number(sz as i128),
+    };
+
+    Ok((
+        vec![
+            Statement::Extract(extract_stmt),
+            Statement::Add(add_offset_stmt),
+        ],
+        None,
+    ))
 }
 
 fn emit_apply_call(
