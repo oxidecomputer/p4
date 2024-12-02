@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["_hello_pipeline_create","egress_apply","ingress_action_drop","ingress_action_forward","ingress_apply","ingress_tbl","main","parse_finish","parse_start"],"mod":["softnpu_provider"],"struct":["egress_metadata_t","ethernet_h","headers_t","ingress_metadata_t","main_pipeline"]};
