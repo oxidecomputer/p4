@@ -116,7 +116,7 @@ control ingress(
         }
 
         // apply switch forwarding logic
-        fwd.apply(hdr, egress);
+        fwd.apply(hdr, ingress, egress);
 
         // check vlan on egress
         vlan.apply(egress.port, vid, vlan_ok);
@@ -221,12 +221,12 @@ Popping back up to the top level control block. If `vlan_ok` was not set to
 `true` in the `vlan` control block, then we drop the packet. Otherwise we
 continue on to further processing - forwarding.
 
-Here we are passing the entire header and egress metadata structures into the
+Here we are passing the entire header, and ingress and egress metadata structures into the
 `fwd` control block which is an instantiation of the `forward` control block
 type.
 
 ```p4
-fwd.apply(hdr, egress);
+fwd.apply(hdr, ingress, egress);
 ```
 
 Lets take a look at the `forward` control block.
@@ -234,9 +234,10 @@ Lets take a look at the `forward` control block.
 ```p4
 control forward(
     inout headers_t hdr,
+    inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-    action drop() {}
+    action drop() { ingress.drop = true; }
     action forward(bit<16> port) { egress.port = port; }
 
     table fib {
@@ -255,7 +256,7 @@ action `forward` contains a single 16-bit port value.  When the Ethernet
 destination matches an entry in the table, the egress metadata destination for
 the packet is set to the port id that has been set for that table entry.
 
-Note that in this control block both parameters have an `inout` direction,
+Note that in this control block all parameters have an `inout` direction,
 meaning the control block can both read from and write to these parameters.
 Like the `vlan` control block above, there are no static entries here. Entries
 for the table in this control block are filled in by a control-plane program.
@@ -292,13 +293,15 @@ We'll start top down again. Here is the beginning of our Rust program.
 use tests::expect_frames;
 use tests::softnpu::{RxFrame, SoftNpu, TxFrame};
 
+const NUM_PORTS: u16 = 2;
+
 p4_macro::use_p4!(
     p4 = "book/code/src/bin/vlan-switch.p4",
     pipeline_name = "vlan_switch"
 );
 
 fn main() -> Result<(), anyhow::Error> {
-    let mut pipeline = main_pipeline::new(2);
+    let mut pipeline = main_pipeline::new(NUM_PORTS);
 
     let m1 = [0x33, 0x33, 0x33, 0x33, 0x33, 0x33];
     let m2 = [0x44, 0x44, 0x44, 0x44, 0x44, 0x44];
@@ -414,7 +417,7 @@ fn run_test(
     m3: [u8; 6],
 ) -> Result<(), anyhow::Error> {
     // create and run the softnpu instance
-    let mut npu = SoftNpu::new(2, pipeline, false);
+    let mut npu = SoftNpu::new(NUM_PORTS.into(), pipeline, false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
     npu.run();

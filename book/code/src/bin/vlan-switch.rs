@@ -2,13 +2,15 @@
 use tests::expect_frames;
 use tests::softnpu::{RxFrame, SoftNpu, TxFrame};
 
+const NUM_PORTS: u16 = 2;
+
 p4_macro::use_p4!(
     p4 = "book/code/src/bin/vlan-switch.p4",
     pipeline_name = "vlan_switch"
 );
 
 fn main() -> Result<(), anyhow::Error> {
-    let mut pipeline = main_pipeline::new(2);
+    let mut pipeline = main_pipeline::new(NUM_PORTS);
 
     let m1 = [0x33, 0x33, 0x33, 0x33, 0x33, 0x33];
     let m2 = [0x44, 0x44, 0x44, 0x44, 0x44, 0x44];
@@ -50,7 +52,7 @@ fn run_test(
     m3: [u8; 6],
 ) -> Result<(), anyhow::Error> {
     // create and run the softnpu instance
-    let mut npu = SoftNpu::new(2, pipeline, false);
+    let mut npu = SoftNpu::new(NUM_PORTS.into(), pipeline, false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
     npu.run();
