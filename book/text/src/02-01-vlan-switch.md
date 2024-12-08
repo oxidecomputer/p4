@@ -385,6 +385,37 @@ Alternatively you can just run `cargo doc` to have Cargo generate documentation
 for your crate that contains the P4-generated Rust code. This will emit Rust
 documentation that includes documentation for the generated code.
 
+For example, in the main p4 repository that contains the vlan switch example
+code, when you run `cargo doc` you'll see something like this
+
+```
+$ cargo doc
+[snip]
+ Documenting x4c_error_codes v0.1.0 (/Users/ry/src/p4/x4c_error_codes)
+ Documenting clap v3.2.23
+ Documenting tests v0.1.0 (/Users/ry/src/p4/test)
+ Documenting sidecar-lite v0.1.0 (/Users/ry/src/p4/lang/prog/sidecar-lite)
+ Documenting p4-macro-test v0.1.0 (/Users/ry/src/p4/lang/p4-macro-test)
+ Documenting x4c-book v0.1.0 (/Users/ry/src/p4/book/code)
+ Documenting x4c v0.1.0 (/Users/ry/src/p4/x4c)
+    Finished dev [unoptimized + debuginfo] target(s) in 15.87s
+   Generated /Users/ry/src/p4/target/doc/p4_macro/index.html
+   Generated /Users/ry/src/p4/target/doc/p4_macro_test/index.html
+   Generated /Users/ry/src/p4/target/doc/p4_rust/index.html
+   Generated /Users/ry/src/p4/target/doc/p4rs/index.html
+   Generated /Users/ry/src/p4/target/doc/sidecar_lite/index.html
+   Generated /Users/ry/src/p4/target/doc/tests/index.html
+   Generated /Users/ry/src/p4/target/doc/x4c/index.html
+   Generated /Users/ry/src/p4/target/doc/hello_world/index.html
+   Generated /Users/ry/src/p4/target/doc/vlan_switch/index.html
+   Generated /Users/ry/src/p4/target/doc/x4c_error_codes/index.html
+```
+
+If you open the file `target/doc/vlan_switch/index.html`. You'll see several
+struct and function definitions. In particular, if you click on the
+`main_pipeline` struct, you'll see methods associated with the main pipeline
+like `add_ingress_fwd_fib_entry` that allow you to modify pipeline table state.
+
 Now back to the control plane code above. You'll also notice that we are adding
 key values and parameter values to the P4 tables as byte slices. At the time of
 writing, `x4c` is not generating high-level table manipulation APIs so we have
