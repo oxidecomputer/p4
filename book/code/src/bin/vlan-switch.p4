@@ -47,9 +47,10 @@ control vlan(
 
 control forward(
     inout headers_t hdr,
+    inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-    action drop() {}
+    action drop() { ingress.drop = true; }
     action forward(bit<16> port) { egress.port = port; }
 
     table fib {
@@ -85,7 +86,7 @@ control ingress(
         }
 
         // apply switch forwarding logic
-        fwd.apply(hdr, egress);
+        fwd.apply(hdr, ingress, egress);
 
         // check vlan on egress
         vlan.apply(egress.port, vid, vlan_ok);

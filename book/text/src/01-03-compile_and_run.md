@@ -17,15 +17,21 @@ All of the programs in this book are available as buildable programs in the
 use tests::softnpu::{RxFrame, SoftNpu, TxFrame};
 use tests::{expect_frames};
 
+const NUM_PORTS: u16 = 3;
+
 p4_macro::use_p4!(p4 = "book/code/src/bin/hello-world.p4", pipeline_name = "hello");
 
 fn main() -> Result<(), anyhow::Error> {
-    let pipeline = main_pipeline::new(2);
-    let mut npu = SoftNpu::new(2, pipeline, false);
+    let pipeline = main_pipeline::new(NUM_PORTS);
+    let mut npu = SoftNpu::new(NUM_PORTS, pipeline, false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
+    let phy3 = npu.phy(2);
 
     npu.run();
+
+    // Expect this packet to be dropped
+    phy3.send(&[TxFrame::new(phy3.mac, 0, b"to the bit bucket with you!")])?;
 
     phy1.send(&[TxFrame::new(phy2.mac, 0, b"hello")])?;
     expect_frames!(phy2, &[RxFrame::new(phy1.mac, 0, b"hello")]);
@@ -61,14 +67,15 @@ The main artifact this produces is a Rust `struct` called `main_pipeline` which 
 in the code that comes next.
 
 ```rust
-let pipeline = main_pipeline::new(2);
-let mut npu = SoftNpu::new(2, pipeline, false);
+let pipeline = main_pipeline::new(NUM_PORTS);
+let mut npu = SoftNpu::new(NUM_PORTS, pipeline, false);
 let phy1 = npu.phy(0);
 let phy2 = npu.phy(1);
+let phy3 = npu.phy(2);
 ```
 
 This code is instantiating a pipeline object that encapsulates the logic of our
-P4 program. Then a SoftNpu ASIC is constructed with two ports and our pipeline
+P4 program. Then a SoftNpu ASIC is constructed with three ports and our pipeline
 program. SoftNpu objects provide a `phy` method that takes a port index to get a
 reference to a port that is attached to the ASIC. These port objects are used to
 send and receive packets through the ASIC, which uses our compiled P4 code to
@@ -84,13 +91,29 @@ However, this does not actually do anything until we pass some packets through
 it, so lets do that.
 
 ```rust
+// Expect this packet to be dropped
+phy3.send(&[TxFrame::new(phy3.mac, 0, b"to the bit bucket with you!")])?;
+```
+
+This code transmit an Ethernet frame through the third port of the
+ASIC with a payload value of "to the bit bucket with you!".  The
+`phy3.mac` parameter of the `TxFrame` sets the destination MAC address
+and the `0` for the second parameter is the ethertype used in the
+outgoing Ethernet frame.
+
+Based on the logic in our P4 program, we would expect this packet to
+be dropped by the switch, i.e. it will not be sent out of any port at
+all.  This is because the table lookup on the ingress port value of 2
+would get a miss, and the table would execute the default action
+`drop`.  Thus we do not call `expect_frames!` here, as we do for the
+test packets below.
+
+```rust
 phy1.send(&[TxFrame::new(phy2.mac, 0, b"hello")])?;
 ```
 
 This code transmits an Ethernet frame through the first port of the ASIC with a
-payload value of `"hello"`. The `phy2.mac` parameter of the `TxFrame` sets the
-destination MAC address and the `0` for the second parameter is the ethertype
-used in the outgoing Ethernet frame.
+payload value of `"hello"`.
 
 Based on the logic in our P4 program, we would expect this packet to come out
 the second port. Let's test that.
