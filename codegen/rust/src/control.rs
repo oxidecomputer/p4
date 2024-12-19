@@ -52,7 +52,7 @@ impl<'a> ControlGenerator<'a> {
             let control = cs.last().unwrap().1;
             let (_, mut param_types) = self.control_parameters(control);
             for var in &control.variables {
-                if let Type::UserDefined(typename) = &var.ty {
+                if let Type::UserDefined(typename, _) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
                         param_types.push(quote! {
@@ -95,7 +95,7 @@ impl<'a> ControlGenerator<'a> {
             let qtn = qualified_table_function_name(None, &cs, table);
             let (_, mut param_types) = self.control_parameters(c);
             for var in &c.variables {
-                if let Type::UserDefined(typename) = &var.ty {
+                if let Type::UserDefined(typename, _) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
                         param_types.push(quote! {
@@ -143,7 +143,7 @@ impl<'a> ControlGenerator<'a> {
 
         for arg in &control.parameters {
             match arg.ty {
-                Type::UserDefined(ref typename) => {
+                Type::UserDefined(ref typename, _) => {
                     match self.ast.get_user_defined_type(typename) {
                         Some(_udt) => {
                             let name = format_ident!("{}", arg.name);
@@ -202,7 +202,7 @@ impl<'a> ControlGenerator<'a> {
         let (mut params, _) = self.control_parameters(control);
 
         for var in &control.variables {
-            if let Type::UserDefined(typename) = &var.ty {
+            if let Type::UserDefined(typename, _) = &var.ty {
                 if self.ast.get_extern(typename).is_some() {
                     let name = format_ident!("{}", var.name);
                     let extern_type = format_ident!("{}", typename);
@@ -235,7 +235,7 @@ impl<'a> ControlGenerator<'a> {
 
         for arg in &action.parameters {
             // if the type is user defined, check to ensure it's defined
-            if let Type::UserDefined(ref typename) = arg.ty {
+            if let Type::UserDefined(ref typename, _) = arg.ty {
                 match self.ast.get_user_defined_type(typename) {
                     Some(_) => {
                         let name = format_ident!("{}", arg.name);
@@ -490,7 +490,7 @@ impl<'a> ControlGenerator<'a> {
         for var in &control.variables {
             //TODO check in checker that externs are actually defined by
             //SoftNPU.
-            if let Type::UserDefined(typename) = &var.ty {
+            if let Type::UserDefined(typename, _) = &var.ty {
                 if self.ast.get_extern(typename).is_some() {
                     let name = format_ident!("{}", var.name);
                     let extern_type = format_ident!("{}", typename);
