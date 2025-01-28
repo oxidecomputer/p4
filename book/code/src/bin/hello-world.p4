@@ -41,7 +41,9 @@ control ingress(
     inout egress_metadata_t egress,
 ) {
 
-    action drop() { }
+    action drop() {
+        ingress.drop = true;
+    }
 
     action forward(bit<16> port) {
         egress.port = port;
