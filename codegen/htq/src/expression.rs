@@ -318,7 +318,7 @@ fn emit_extract_call(
     let target = ra
         .get(tgt.root())
         .ok_or(CodegenError::RegisterDoesNotExistForLval(tgt.clone()))?;
-    let output = ra.alloc(&tgt.root());
+    let output = ra.alloc(tgt.root());
 
     let info = names
         .get(tgt.root())
