@@ -61,6 +61,27 @@ pub fn emit(
 
     let mut f = std::fs::File::create(filename)?;
 
+    writeln!(
+        f,
+        "parser_entry {}_start;",
+        ast.package_instance
+            .as_ref()
+            .unwrap()
+            .parameters
+            .first()
+            .expect("package instance has parser entry point")
+    )?;
+    writeln!(
+        f,
+        "entry {}_apply;",
+        ast.package_instance
+            .as_ref()
+            .unwrap()
+            .parameters
+            .get(1)
+            .expect("package instance has entry point")
+    )?;
+
     for h in &headers {
         writeln!(f, "{}", h.emit())?;
     }
