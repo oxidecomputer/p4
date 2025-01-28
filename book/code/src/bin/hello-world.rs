@@ -10,7 +10,8 @@ p4_macro::use_p4!(
 );
 
 fn main() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(NUM_PORTS.into(), main_pipeline::new(NUM_PORTS), false);
+    let mut npu =
+        SoftNpu::new(NUM_PORTS.into(), main_pipeline::new(NUM_PORTS), false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
     let phy3 = npu.phy(2);
