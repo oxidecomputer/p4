@@ -5,6 +5,6 @@ edition = "2021"
 
 [dependencies]
 p4 = { path = "../../p4" }
-#htq = { git = "https://github.com/oxidecomputer/htq", branch = "sector-001" }
-htq = { path = "/Users/ry/src/htq" }
+htq = { git = "https://github.com/oxidecomputer/htq", branch = "sector-001" }
+#htq = { path = "/Users/ry/src/htq" }
 thiserror = "1.0.63"
