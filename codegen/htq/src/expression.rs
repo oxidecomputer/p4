@@ -301,7 +301,7 @@ fn emit_extract_call(
     names: &HashMap<String, NameInfo>,
     _table_context: &mut TableContext,
 ) -> Result<(Vec<Statement>, Option<ExpressionValue>), CodegenError> {
-    let src = &parser.parameters[1].name;
+    let src = &parser.parameters[0].name;
     let source = ra.get(src).ok_or(CodegenError::NoRegisterForParameter(
         src.to_owned(),
         ra.clone(),
