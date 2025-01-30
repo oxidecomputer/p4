@@ -32,7 +32,8 @@ impl<'a> StructGenerator<'a> {
             let name = format_ident!("{}", member.name);
             let name_s = &member.name;
             match &member.ty {
-                Type::UserDefined(ref typename) => {
+                //TODO generics
+                Type::UserDefined(ref typename, _) => {
                     if self.ast.get_header(typename).is_some() {
                         let ty = format_ident!("{}", typename);
 

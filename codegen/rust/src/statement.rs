@@ -88,7 +88,7 @@ impl<'a> StatementGenerator<'a> {
                     // TODO eww, to better to figure out precisely when to_owned
                     // and clone are needed
                     quote! { #rhs.to_owned().clone() }
-                } else if let Type::UserDefined(_) = rhs_ty {
+                } else if let Type::UserDefined(_, _) = rhs_ty {
                     quote! { #rhs.clone() }
                 } else {
                     rhs
@@ -394,7 +394,7 @@ impl<'a> StatementGenerator<'a> {
             });
 
         let control_instance = match &name_info.ty {
-            Type::UserDefined(name) => {
+            Type::UserDefined(name, _) => {
                 self.ast.get_control(name).unwrap_or_else(|| {
                     panic!("codegen: control {} not found in AST", name,)
                 })
@@ -526,7 +526,7 @@ impl<'a> StatementGenerator<'a> {
 
         for var in &control.variables {
             let name = format_ident!("{}", var.name);
-            if let Type::UserDefined(typename) = &var.ty {
+            if let Type::UserDefined(typename, _) = &var.ty {
                 if self.ast.get_extern(typename).is_some() {
                     action_args.push(quote! { &#name });
                 }
