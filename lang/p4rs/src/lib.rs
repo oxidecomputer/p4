@@ -97,8 +97,8 @@ impl<'a, const N: usize> Bit<'a, N> {
     }
 }
 
-impl<'a, const N: usize> fmt::LowerHex for Bit<'a, N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<const N: usize> fmt::LowerHex for Bit<'_, N> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for x in self.0 {
             fmt::LowerHex::fmt(&x, f)?;
         }
@@ -114,19 +114,19 @@ impl<'a> From<Bit<'a, 16>> for u16 {
 }
 
 // TODO more of these for other sizes
-impl<'a> std::hash::Hash for Bit<'a, 8> {
+impl std::hash::Hash for Bit<'_, 8> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0[0].hash(state);
     }
 }
 
-impl<'a> std::cmp::PartialEq for Bit<'a, 8> {
+impl std::cmp::PartialEq for Bit<'_, 8> {
     fn eq(&self, other: &Self) -> bool {
         self.0[0] == other.0[0]
     }
 }
 
-impl<'a> std::cmp::Eq for Bit<'a, 8> {}
+impl std::cmp::Eq for Bit<'_, 8> {}
 
 /// Every packet that goes through a P4 pipeline is represented as a `packet_in`
 /// instance. `packet_in` objects wrap an underlying mutable data reference that
