@@ -367,7 +367,7 @@ control egress(
 SoftNPU(
     parse(),
     ingress(),
-    egress(),
+    egress()
 ) main;
 ```
 
