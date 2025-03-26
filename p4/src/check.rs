@@ -313,7 +313,7 @@ pub struct ApplyCallChecker<'a> {
     diags: &'a mut Diagnostics,
 }
 
-impl<'a> VisitorMut for ApplyCallChecker<'a> {
+impl VisitorMut for ApplyCallChecker<'_> {
     fn call(&mut self, call: &Call) {
         let name = call.lval.root();
         let names = self.c.names();
@@ -347,7 +347,7 @@ impl<'a> VisitorMut for ApplyCallChecker<'a> {
     }
 }
 
-impl<'a> ApplyCallChecker<'a> {
+impl ApplyCallChecker<'_> {
     pub fn check_apply_table_apply(&mut self, _call: &Call, _tbl: &Table) {
         //TODO
     }
@@ -559,16 +559,13 @@ fn check_statement_lvalues(
     match stmt {
         Statement::Empty => {}
         Statement::Variable(v) => {
-            match &v.initializer {
-                Some(expr) => {
-                    diags.extend(&check_expression_lvalues(
-                        expr.as_ref(),
-                        ast,
-                        names,
-                    ));
-                }
-                None => {}
-            };
+            if let Some(expr) = &v.initializer {
+                diags.extend(&check_expression_lvalues(
+                    expr.as_ref(),
+                    ast,
+                    names,
+                ));
+            }
             names.insert(
                 v.name.clone(),
                 NameInfo {

@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "sidecar_lite"
-crate_type = ["dylib"]
+crate-type = ["dylib"]
 
 [dependencies]
 p4rs = { path = "../../p4rs" }

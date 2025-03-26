@@ -215,10 +215,7 @@ impl<'a> HlirGenerator<'a> {
             ExpressionKind::List(elements) => {
                 let mut type_elements = Vec::new();
                 for e in elements {
-                    let ty = match self.expression(e.as_ref(), names) {
-                        Some(ty) => ty,
-                        None => return None,
-                    };
+                    let ty = self.expression(e.as_ref(), names)?;
                     type_elements.push(Box::new(ty));
                 }
                 Some(Type::List(type_elements))
@@ -232,10 +229,7 @@ impl<'a> HlirGenerator<'a> {
         xpr: &Expression,
         names: &mut HashMap<String, NameInfo>,
     ) -> Option<Type> {
-        let base_type = match self.lvalue(lval, names) {
-            Some(ty) => ty,
-            None => return None,
-        };
+        let base_type = self.lvalue(lval, names)?;
         match base_type {
             Type::Bool => {
                 self.diags.push(Diagnostic {
@@ -476,15 +470,8 @@ impl<'a> HlirGenerator<'a> {
         op: &BinOp,
         names: &mut HashMap<String, NameInfo>,
     ) -> Option<Type> {
-        let lhs_ty = match self.expression(lhs, names) {
-            Some(ty) => ty,
-            None => return None,
-        };
-
-        let rhs_ty = match self.expression(rhs, names) {
-            Some(ty) => ty,
-            None => return None,
-        };
+        let lhs_ty = self.expression(lhs, names)?;
+        let rhs_ty = self.expression(rhs, names)?;
 
         // TODO just checking that types are the same for now.
         if lhs_ty != rhs_ty {

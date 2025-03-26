@@ -926,7 +926,7 @@ impl Control {
     pub fn tables<'a>(
         &'a self,
         ast: &'a AST,
-    ) -> Vec<(Vec<(String, &Control)>, &Table)> {
+    ) -> Vec<(Vec<(String, &'a Control)>, &'a Table)> {
         self.tables_rec(ast, String::new(), Vec::new())
     }
 
@@ -935,7 +935,7 @@ impl Control {
         ast: &'a AST,
         name: String,
         mut chain: Vec<(String, &'a Control)>,
-    ) -> Vec<(Vec<(String, &Control)>, &Table)> {
+    ) -> Vec<(Vec<(String, &'a Control)>, &'a Table)> {
         let mut result = Vec::new();
         chain.push((name, self));
         for table in &self.tables {
