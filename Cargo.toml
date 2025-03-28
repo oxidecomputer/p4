@@ -35,7 +35,7 @@ rand = "0.8.5"
 regex = "1"
 serde = "1.0"
 serde_tokenstream = "0.1"
-syn = "1.0"
+syn = "2.0"
 tempfile = "3.3"
 usdt = "0.3.5"
 xfr = { git = "https://github.com/oxidecomputer/xfr" }
