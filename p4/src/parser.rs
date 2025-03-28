@@ -929,7 +929,14 @@ impl<'a, 'b> GlobalParser<'a, 'b> {
 
         self.parser.expect_token(lexer::Kind::ParenOpen)?;
         loop {
-            let (arg, _) = self.parser.parse_identifier("package name")?;
+            let token = self.parser.next_token()?;
+            let (arg, _) = match token.kind {
+                lexer::Kind::ParenClose => break,
+                _ => {
+                    self.parser.backlog.push(token);
+                    self.parser.parse_identifier("package_name")?
+                }
+            };
             self.parser.expect_token(lexer::Kind::ParenOpen)?;
             self.parser.expect_token(lexer::Kind::ParenClose)?;
             inst.parameters.push(arg);

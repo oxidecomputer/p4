@@ -5,7 +5,7 @@
 SoftNPU(
     parse(),
     ingress(),
-    egress()
+    egress(),
 ) main;
 
 struct headers_t {
