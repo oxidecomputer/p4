@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-proc-macro2 = "1.0"
-syn = "1.0"
-p4 = { path = "../../p4" }
-p4-rust = { path = "../../codegen/rust" }
-serde_tokenstream = "0.1"
-serde = "1.0"
+proc-macro2.workspace = true
+syn.workspace = true
+p4.workspace = true
+p4-rust.workspace = true
+serde_tokenstream.workspace = true
+serde.workspace = true
 
 [lib]
 proc-macro = true

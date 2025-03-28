@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-num = { version = "0.4", features = ["serde"] }
-bitvec = "1.0"
+num.workspace = true
+bitvec.workspace = true
 usdt.workspace = true
-serde = "1.0"
+serde.workspace = true
 
 [dev-dependencies]
-pnet = "0.31"
+pnet.workspace = true

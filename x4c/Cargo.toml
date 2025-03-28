@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-colored = "2"
-clap = { version = "3", features = ["color", "derive"] }
-anyhow = "1"
-regex = "1"
-p4 = { path = "../p4" }
-p4-rust = { path = "../codegen/rust" }
+colored.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+p4.workspace = true
+p4-rust.workspace = true

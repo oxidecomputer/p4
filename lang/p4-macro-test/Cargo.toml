@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-p4-macro = { path = "../p4-macro" }
-p4rs = { path = "../p4rs" }
-bitvec = "1.0"
-colored = "2.0"
+p4-macro.workspace = true
+p4rs.workspace = true
+bitvec.workspace = true
+colored.workspace = true
 usdt.workspace = true
