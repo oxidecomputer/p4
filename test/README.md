@@ -12,7 +12,7 @@ This directory contains
 Many of the tests rely on waiting for packets to arrive on a particular
 port. If the test is not working, this may never happen. Moreover, you will not
 see printed output guiding to to what may be wrong as pipeline observability is
-built on DTrace. You can however, use DTrace to ge ta sense for what is going on
+built on DTrace. You can however, use DTrace to get a sense for what is going on
 with a test. For example
 
 ```
