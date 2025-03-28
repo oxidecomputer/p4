@@ -23,7 +23,7 @@ tests = { path = "test" }
 anyhow = "1"
 bitvec = "1.0"
 clap = { version = "3", features = ["color", "derive"] }
-colored = "2"
+colored = "3"
 libloading = { version = "0.7" }
 num = { version = "0.4", features = ["serde"] }
 p4 = { path = "p4" }
