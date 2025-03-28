@@ -429,8 +429,8 @@ dependencies = [
  "p4-rust",
  "proc-macro2",
  "serde",
- "serde_tokenstream",
- "syn 1.0.109",
+ "serde_tokenstream 0.2.2",
+ "syn 2.0.100",
 ]
 
 [[package]]
@@ -452,7 +452,7 @@ dependencies = [
  "prettyplease",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.100",
  "tempfile",
 ]
 
@@ -612,12 +612,12 @@ dependencies = [
 
 [[package]]
 name = "prettyplease"
-version = "0.1.25"
+version = "0.2.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c8646e95016a7a6c4adea95bafa8a16baab64b583356217f2c85db4a39d9a86"
+checksum = "5316f57387668042f561aae71480de936257848f9c43ce528e311d89a07cadeb"
 dependencies = [
  "proc-macro2",
- "syn 1.0.109",
+ "syn 2.0.100",
 ]
 
 [[package]]
@@ -793,6 +793,18 @@ dependencies = [
  "proc-macro2",
  "serde",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "serde_tokenstream"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64060d864397305347a78851c51588fd283767e7e7589829e8121d65512340f1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "syn 2.0.100",
 ]
 
 [[package]]
@@ -1005,7 +1017,7 @@ dependencies = [
  "dtrace-parser",
  "proc-macro2",
  "quote",
- "serde_tokenstream",
+ "serde_tokenstream 0.1.7",
  "syn 1.0.109",
  "usdt-impl",
 ]
@@ -1039,7 +1051,7 @@ dependencies = [
  "dtrace-parser",
  "proc-macro2",
  "quote",
- "serde_tokenstream",
+ "serde_tokenstream 0.1.7",
  "syn 1.0.109",
  "usdt-impl",
 ]
