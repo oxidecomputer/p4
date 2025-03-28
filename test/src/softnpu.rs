@@ -403,8 +403,8 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
         rx_p: RingProducer<R, N, F>,
         tx_c: RingConsumer<R, N, F>,
     ) -> Self {
-        let mut rng = rand::thread_rng();
-        let m = rng.gen_range::<u32, _>(0xf00000..0xffffff).to_le_bytes();
+        let mut rng = rand::rng();
+        let m = rng.random_range::<u32, _>(0xf00000..0xffffff).to_le_bytes();
         let mac = [0xa8, 0x40, 0x25, m[0], m[1], m[2]];
 
         Self {
