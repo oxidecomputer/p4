@@ -128,8 +128,11 @@ fn process_include(
             }
         }
     } else if let Some(begin) = line.find('"') {
+        // The file name is quoted by same character "
+        // So, we need to find the next " after the first "
+        let begin = begin + 1;
         match line[begin..].find('"') {
-            Some(end) => (begin + 1, begin + end),
+            Some(end) => (begin, begin + end),
             None => {
                 return Err(PreprocessorError {
                     line: i,
