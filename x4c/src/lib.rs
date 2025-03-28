@@ -33,7 +33,7 @@ pub struct Opts {
     pub filename: String,
 
     /// What target to generate code for.
-    #[clap(arg_enum, default_value_t = Target::Rust)]
+    #[clap(value_enum, default_value_t = Target::Rust)]
     pub target: Target,
 
     /// Just check code, do not compile.
@@ -45,7 +45,7 @@ pub struct Opts {
     pub out: String,
 }
 
-#[derive(clap::ArgEnum, Clone)]
+#[derive(clap::ValueEnum, Clone)]
 pub enum Target {
     Rust,
     RedHawk,
