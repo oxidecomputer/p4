@@ -24,7 +24,7 @@ anyhow = "1"
 bitvec = "1.0"
 clap = { version = "4", features = ["color", "derive"] }
 colored = "3"
-libloading = { version = "0.7" }
+libloading = { version = "0.8" }
 num = { version = "0.4", features = ["serde"] }
 p4 = { path = "p4" }
 pnet = "0.35"
