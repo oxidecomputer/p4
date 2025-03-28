@@ -4,16 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-num = "0.4"
-p4-macro = { path = "../lang/p4-macro" }
-p4rs = { path = "../lang/p4rs" }
-xfr = { git = "https://github.com/oxidecomputer/xfr" }
-bitvec = "1.0"
-pnet = "0.31"
-colored = "2.0"
+num.workspace = true
+p4-macro.workspace = true
+p4rs.workspace = true
+xfr.workspace = true
+bitvec.workspace = true
+pnet.workspace = true
+colored.workspace = true
 usdt.workspace = true
-rand = "0.8.5"
-anyhow = "1"
+rand.workspace = true
+anyhow.workspace  = true
 
 [dev-dependencies]
-libloading = { version = "0.7" }
+libloading.workspace = true

@@ -15,4 +15,27 @@ members = [
 ]
 
 [workspace.dependencies]
+p4-macro = { path = "lang/p4-macro" }
+p4-rust = { path = "codegen/rust" }
+p4rs = { path = "lang/p4rs" }
+tests = { path = "test" }
+
+anyhow = "1"
+bitvec = "1.0"
+clap = { version = "3", features = ["color", "derive"] }
+colored = "2"
+libloading = { version = "0.7" }
+num = { version = "0.4", features = ["serde"] }
+p4 = { path = "p4" }
+pnet = "0.31"
+prettyplease = "0.1"
+proc-macro2 = "1.0"
+quote = "1.0"
+rand = "0.8.5"
+regex = "1"
+serde = "1.0"
+serde_tokenstream = "0.1"
+syn = "1.0"
+tempfile = "3.3"
 usdt = "0.3.5"
+xfr = { git = "https://github.com/oxidecomputer/xfr" }
