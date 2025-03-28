@@ -27,7 +27,7 @@ colored = "3"
 libloading = { version = "0.7" }
 num = { version = "0.4", features = ["serde"] }
 p4 = { path = "p4" }
-pnet = "0.31"
+pnet = "0.35"
 prettyplease = "0.2"
 proc-macro2 = "1.0"
 quote = "1.0"
