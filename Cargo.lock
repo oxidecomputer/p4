@@ -289,6 +289,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "htq"
+version = "0.1.0"
+source = "git+https://github.com/oxidecomputer/htq?branch=sector-001#cc2e6230b13d6d9d3f5edb55201e4a93314503bb"
+dependencies = [
+ "winnow",
+]
+
+[[package]]
 name = "ipnetwork"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -450,6 +458,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "p4-cg"
+version = "0.1.0"
+dependencies = [
+ "p4",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "p4-htq"
+version = "0.1.0"
+dependencies = [
+ "htq",
+ "p4",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "p4-macro"
 version = "0.1.0"
 dependencies = [
@@ -477,6 +502,7 @@ name = "p4-rust"
 version = "0.1.0"
 dependencies = [
  "p4",
+ "p4-cg",
  "prettyplease",
  "proc-macro2",
  "quote",
@@ -1159,6 +1185,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
+name = "winnow"
+version = "0.6.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "wit-bindgen-rt"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1184,6 +1219,7 @@ dependencies = [
  "clap",
  "colored",
  "p4",
+ "p4-htq",
  "p4-rust",
  "regex",
 ]
