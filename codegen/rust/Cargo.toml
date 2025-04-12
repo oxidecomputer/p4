@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 p4.workspace = true
+p4-cg.workspace = true
 quote.workspace = true
 proc-macro2.workspace = true
 syn.workspace = true
