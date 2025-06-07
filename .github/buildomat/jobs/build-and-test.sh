@@ -8,6 +8,9 @@
 #:   "/work/debug/*",
 #:   "/work/release/*",
 #: ]
+#: access_repos = [
+#:   "oxidecomputer/htq",
+#: ]
 #:
 
 set -o errexit
