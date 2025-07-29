@@ -40,6 +40,11 @@ impl<'a> ExpressionGenerator<'a> {
                             p4rs::bitmath::add_le(#lhs_tks.clone(), #rhs_tks.clone())
                         });
                     }
+                    BinOp::Subtract => {
+                        ts.extend(quote!{
+                            p4rs::bitmath::sub_le(#lhs_tks.clone(), #rhs_tks.clone())
+                        })
+                    }
                     BinOp::Mod => {
                         ts.extend(quote!{
                             p4rs::bitmath::mod_le(#lhs_tks.clone(), #rhs_tks.clone())
