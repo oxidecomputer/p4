@@ -116,7 +116,7 @@ pub fn mod_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 mod tests {
 
     #[test]
-    fn bitmath_add() {
+    fn bitmath_add_be() {
         use super::*;
         let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(47);
@@ -133,7 +133,24 @@ mod tests {
     }
 
     #[test]
-    fn bitmath_sub() {
+    fn bitmath_add_le() {
+        use super::*;
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(47);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(74);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = add_le(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_le();
+        assert_eq!(cc, 47u128 + 74u128);
+    }
+
+    #[test]
+    fn bitmath_sub_be() {
         use super::*;
         let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(74);
@@ -142,10 +159,27 @@ mod tests {
 
         println!("{:?}", a);
         println!("{:?}", b);
-        let c = sub_le(a, b);
+        let c = sub_be(a, b);
         println!("{:?}", c);
 
         let cc: u128 = c.load_be();
+        assert_eq!(cc, 74u128 - 47u128);
+    }
+
+    #[test]
+    fn bitmath_sub_le() {
+        use super::*;
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(74);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(47);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = sub_le(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_le();
         assert_eq!(cc, 74u128 - 47u128);
     }
 

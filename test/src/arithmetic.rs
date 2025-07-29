@@ -11,7 +11,7 @@ p4_macro::use_p4!(
 fn arithmetic() -> Result<(), anyhow::Error> {
     let pipeline = main_pipeline::new(2);
 
-    let mut npu = SoftNpu::new(4, pipeline, false);
+    let mut npu = SoftNpu::new(2, pipeline, false);
     let phy0 = npu.phy(0);
     let phy1 = npu.phy(1);
 
