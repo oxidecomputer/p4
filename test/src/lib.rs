@@ -1,6 +1,8 @@
 #![allow(clippy::too_many_arguments)]
 
 #[cfg(test)]
+mod arithmetic;
+#[cfg(test)]
 mod basic_router;
 #[cfg(test)]
 mod controller_multiple_instantiation;

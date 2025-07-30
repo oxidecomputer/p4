@@ -9,7 +9,7 @@ pub fn add_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     // softnpu to have an architectural bit-type width limit of 128.
     let x: u128 = a.load_be();
     let y: u128 = b.load_be();
-    let z = x + y;
+    let z = x.wrapping_add(y);
     let mut c = BitVec::new();
     c.resize(len, false);
     c.store_be(z);
@@ -23,7 +23,29 @@ pub fn add_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     // softnpu to have an architectural bit-type width limit of 128.
     let x: u128 = a.load_le();
     let y: u128 = b.load_le();
-    let z = x + y;
+    let z = x.wrapping_add(y);
+    let mut c = BitVec::new();
+    c.resize(len, false);
+    c.store_le(z);
+    c
+}
+
+pub fn sub_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let len = usize::max(a.len(), b.len());
+    let x: u128 = a.load_be();
+    let y: u128 = b.load_be();
+    let z = x.wrapping_sub(y);
+    let mut c = BitVec::new();
+    c.resize(len, false);
+    c.store_be(z);
+    c
+}
+
+pub fn sub_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let len = usize::max(a.len(), b.len());
+    let x: u128 = a.load_le();
+    let y: u128 = b.load_le();
+    let z = x.wrapping_sub(y);
     let mut c = BitVec::new();
     c.resize(len, false);
     c.store_le(z);
@@ -92,10 +114,10 @@ pub fn mod_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
-    fn bitmath_add() {
-        use super::*;
+    fn bitmath_add_be() {
         let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(47);
         let mut b = bitvec![mut u8, Msb0; 0; 16];
@@ -108,6 +130,56 @@ mod tests {
 
         let cc: u128 = c.load_be();
         assert_eq!(cc, 47u128 + 74u128);
+    }
+
+    #[test]
+    fn bitmath_add_le() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(47);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(74);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = add_le(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_le();
+        assert_eq!(cc, 47u128 + 74u128);
+    }
+
+    #[test]
+    fn bitmath_sub_be() {
+        use super::*;
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_be(74);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_be(47);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = sub_be(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_be();
+        assert_eq!(cc, 74u128 - 47u128);
+    }
+
+    #[test]
+    fn bitmath_sub_le() {
+        use super::*;
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(74);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(47);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = sub_le(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_le();
+        assert_eq!(cc, 74u128 - 47u128);
     }
 
     #[test]
