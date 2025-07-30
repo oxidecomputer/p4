@@ -114,10 +114,10 @@ pub fn mod_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn bitmath_add_be() {
-        use super::*;
         let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(47);
         let mut b = bitvec![mut u8, Msb0; 0; 16];
@@ -134,7 +134,6 @@ mod tests {
 
     #[test]
     fn bitmath_add_le() {
-        use super::*;
         let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_le(47);
         let mut b = bitvec![mut u8, Msb0; 0; 16];
