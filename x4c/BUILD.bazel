@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_binary")
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "x4c",
+    deps = [
+        "//p4",
+        "@crates//:colored",
+        "@crates//:clap",
+        "@crates//:anyhow",
+        "@crates//:regex",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rust_binary(
+    name = "x4c",
+    srcs = ["src/bin/x4c.rs"],
+    deps = [
+        ":lib",
+        "//p4",
+        "//codegen/rust:p4-rust",
+        "@crates//:anyhow",
+        "@crates//:clap",
+    ],
+)

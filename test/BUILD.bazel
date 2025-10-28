@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "tests",
+    srcs = glob(["src/**/*.rs"]), 
+    deps = [
+        "//lang/p4rs",
+        "@crates//:num",
+        "@crates//:bitvec",
+        "@crates//:pnet",
+        "@crates//:colored",
+        "@crates//:usdt",
+        "@crates//:rand",
+        "@crates//:anyhow",
+        "@crates//:xfr",
+        "@crates//:libloading",
+    ],
+    proc_macro_deps = ["//lang/p4-macro"],
+    compile_data = [
+        ":p4",
+        "//p4:examples",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "p4",
+    srcs = glob(["src/**/*.p4"]),
+    visibility = ["//visibility:public"],
+)
+
+rust_test(
+    name = "test",
+    crate = ":tests",
+    # Needed so the library can be loaded dynamically at runtime, see dload.rs.
+    data = ["//lang/prog/sidecar-lite:sidecar-lite"],
+    # Used in dload.rs to dynamically load sidecar_lite.
+    env = {"LIBSIDECAR_LITE_DIR": "lang/prog/sidecar-lite"},
+)

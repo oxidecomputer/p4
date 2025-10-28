@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+    name = "hello-world",
+    srcs = ["src/bin/hello-world.rs"],
+    deps = [
+        "//test:tests",
+        "//lang/p4rs",
+        "@crates//:num",
+        "@crates//:bitvec",
+        "@crates//:pnet",
+        "@crates//:colored",
+        "@crates//:usdt",
+        "@crates//:rand",
+        "@crates//:anyhow",
+        "@crates//:xfr",
+    ],
+    proc_macro_deps = ["//lang/p4-macro"],
+    compile_data = glob(["src/**/*.p4"]),
+)
+
+rust_binary(
+    name = "vlan-switch",
+    srcs = ["src/bin/vlan-switch.rs"],
+    deps = [
+        "//test:tests",
+        "//lang/p4rs",
+        "@crates//:num",
+        "@crates//:bitvec",
+        "@crates//:pnet",
+        "@crates//:colored",
+        "@crates//:usdt",
+        "@crates//:rand",
+        "@crates//:anyhow",
+        "@crates//:xfr",
+    ],
+    proc_macro_deps = ["//lang/p4-macro"],
+    compile_data = glob(["src/**/*.p4"]),
+)
