@@ -161,7 +161,7 @@ impl<'a> PipelineGenerator<'a> {
 
             unsafe impl Send for #pipeline_name { }
 
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             pub extern "C" fn #c_create_fn(radix: u16)
             -> *mut dyn p4rs::Pipeline{
                 let pipeline = main_pipeline::new(radix);
