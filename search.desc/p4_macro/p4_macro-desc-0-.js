@@ -1,0 +1,1 @@
+searchState.loadedDescShard("p4_macro", 0, "The <code>use_p4!</code> macro allows for P4 programs to be directly …\nThe <code>use_p4!</code> macro uses the <code>x4c</code> compiler to generate Rust …")
