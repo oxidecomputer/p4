@@ -1,11 +1,12 @@
 // Copyright 2022 Oxide Computer Company
 
 use crate::{
-    qualified_table_function_name, qualified_table_name, rust_type,
-    type_size_bytes, Context, Settings,
+    qualified_table_function_name, qualified_table_name, rust_type, Context,
+    Settings,
 };
 use p4::ast::{
-    Control, Direction, MatchKind, PackageInstance, Parser, Table, Type, AST,
+    type_size_bytes, Control, Direction, MatchKind, PackageInstance, Parser,
+    Table, Type, AST,
 };
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
@@ -486,7 +487,8 @@ impl<'a> PipelineGenerator<'a> {
             let (_, mut param_types) = cg.control_parameters(table_control);
 
             for var in &table_control.variables {
-                if let Type::UserDefined(typename) = &var.ty {
+                //TODO(generics)
+                if let Type::UserDefined(typename, _) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         let extern_type = format_ident!("{}", typename);
                         param_types.push(quote! {
@@ -807,7 +809,7 @@ impl<'a> PipelineGenerator<'a> {
                     Type::String => {
                         todo!();
                     }
-                    Type::UserDefined(_s) => {
+                    Type::UserDefined(_s, _) => {
                         todo!();
                     }
                     Type::ExternFunction => {
@@ -823,6 +825,9 @@ impl<'a> PipelineGenerator<'a> {
                         todo!();
                     }
                     Type::List(_) => {
+                        todo!();
+                    }
+                    Type::Sync(_) => {
                         todo!();
                     }
                 }
@@ -858,7 +863,8 @@ impl<'a> PipelineGenerator<'a> {
 
             for var in &control.variables {
                 let name = format_ident!("{}", var.name);
-                if let Type::UserDefined(typename) = &var.ty {
+                //TODO(generics)
+                if let Type::UserDefined(typename, _) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {
                         control_params.push(quote! { #name });
                         let extern_type = format_ident!("{}", typename);
@@ -964,7 +970,8 @@ impl<'a> PipelineGenerator<'a> {
 
         for var in &control.variables {
             let name = format_ident!("{}", var.name);
-            if let Type::UserDefined(typename) = &var.ty {
+            //TODO(generics)
+            if let Type::UserDefined(typename, _) = &var.ty {
                 if self.ast.get_extern(typename).is_some() {
                     control_params.push(quote! { #name });
                     let extern_type = format_ident!("{}", typename);

@@ -195,7 +195,7 @@ impl<'a> HlirGenerator<'a> {
                 }
                 // TODO check extern methods in checker before getting here
                 if let Some(name_info) = names.get(call.lval.root()) {
-                    if let Type::UserDefined(typename) = &name_info.ty {
+                    if let Type::UserDefined(typename, _) = &name_info.ty {
                         if let Some(ext) = self.ast.get_extern(typename) {
                             if let Some(m) = ext.get_method(call.lval.leaf()) {
                                 self.hlir
@@ -335,7 +335,7 @@ impl<'a> HlirGenerator<'a> {
                 });
                 None
             }
-            Type::UserDefined(_) => {
+            Type::UserDefined(_, _) => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index a user defined type".into(),
@@ -363,6 +363,14 @@ impl<'a> HlirGenerator<'a> {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: "cannot index a table".into(),
+                    token: lval.token.clone(),
+                });
+                None
+            }
+            Type::Sync(inner) => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!("cannot index a sync<{inner}>"),
                     token: lval.token.clone(),
                 });
                 None
@@ -441,11 +449,11 @@ impl<'a> HlirGenerator<'a> {
         lval: &Lvalue,
         names: &mut HashMap<String, NameInfo>,
     ) -> Option<Type> {
-        match resolve_lvalue(lval, self.ast, names) {
+        match resolve_lvalue(&lval.pop_await(), self.ast, names) {
             Ok(name_info) => {
                 self.hlir
                     .lvalue_decls
-                    .insert(lval.clone(), name_info.clone());
+                    .insert(lval.pop_await(), name_info.clone());
                 Some(name_info.ty)
             }
             Err(e) => {
