@@ -1,6 +1,6 @@
 [net]
 git-fetch-with-cli = true
 
-# https://github.com/rust-lang/cargo/issues/3946#issuecomment-973132993
 [env]
-CARGO_WORKSPACE_DIR = { value = "", relative = true }
+# Used in tests/src/dload.rs to dynamically load sidecar_lite.
+LIBSIDECAR_LITE_DIR = { value = "target/debug", relative = true }

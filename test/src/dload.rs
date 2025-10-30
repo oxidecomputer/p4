@@ -25,12 +25,12 @@ use p4rs::packet_in;
 
 #[test]
 fn dynamic_load() -> Result<(), anyhow::Error> {
-    // see .cargo/config.toml
-    let ws = std::env::var("CARGO_WORKSPACE_DIR").unwrap();
+    // Defined in .cargo/config.toml (Cargo) / test/BUILD.bazel (Bazel).
+    let ws = std::env::var("LIBSIDECAR_LITE_DIR").unwrap();
     #[cfg(target_os = "macos")]
-    let path = format!("{}/target/debug/libsidecar_lite.dylib", ws);
+    let path = format!("{}/libsidecar_lite.dylib", ws);
     #[cfg(not(target_os = "macos"))]
-    let path = format!("{}/target/debug/libsidecar_lite.so", ws);
+    let path = format!("{}/libsidecar_lite.so", ws);
 
     let lib = match unsafe { libloading::Library::new(path) } {
         Ok(l) => l,

@@ -1,0 +1,26 @@
+module(
+    name = "x4c",
+    # Set to version number for releases, only.
+    version = "HEAD",
+)
+
+bazel_dep(name = "rules_rust", version = "0.67.0")
+
+# Pick Rust toolchain version.
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    # TODO: bump up to 2024 once https://github.com/oxidecomputer/p4/pull/195
+    # is merged.
+    edition = "2021",
+    versions = ["1.90.0"],
+)
+use_repo(rust, "rust_toolchains")
+
+# Make all crates declared in Cargo.toml available as @crates//:... to Bazel.
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+)
+use_repo(crate, "crates")

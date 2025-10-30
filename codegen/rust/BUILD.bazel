@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "p4-rust",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "//p4",
+        "@crates//:quote",
+        "@crates//:proc-macro2",
+        "@crates//:syn",
+        "@crates//:prettyplease",
+        "@crates//:tempfile",
+    ],
+    visibility = ["//visibility:public"],
+)

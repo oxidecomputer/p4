@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "p4",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "@crates//:colored",
+        "@crates//:regex",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "examples",
+    srcs = glob(["examples/**/*.p4"]),
+    visibility = ["//visibility:public"],
+)

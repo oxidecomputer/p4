@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+    name = "p4-macro-test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "//lang/p4rs",
+        "@crates//:bitvec",
+        "@crates//:colored",
+        "@crates//:usdt",
+        
+    ],
+    proc_macro_deps = ["//lang/p4-macro"],
+    compile_data = glob(["src/**/*.p4"]),
+)
