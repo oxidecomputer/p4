@@ -199,7 +199,7 @@ dependencies = [
 [[package]]
 name = "dof"
 version = "0.4.0"
-source = "git+https://github.com/smolkaj/usdt.git#3c6b9729d8f87b48ebfa577ce481cacb82aba2e4"
+source = "git+https://github.com/oxidecomputer/usdt#4329591597b3ceaab78d606cf601781c6a99e6de"
 dependencies = [
  "goblin",
  "pretty-hex",
@@ -212,7 +212,7 @@ dependencies = [
 [[package]]
 name = "dtrace-parser"
 version = "0.3.0"
-source = "git+https://github.com/smolkaj/usdt.git#3c6b9729d8f87b48ebfa577ce481cacb82aba2e4"
+source = "git+https://github.com/oxidecomputer/usdt#4329591597b3ceaab78d606cf601781c6a99e6de"
 dependencies = [
  "pest",
  "pest_derive",
@@ -965,7 +965,7 @@ checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"
 [[package]]
 name = "usdt"
 version = "0.6.0"
-source = "git+https://github.com/smolkaj/usdt.git#3c6b9729d8f87b48ebfa577ce481cacb82aba2e4"
+source = "git+https://github.com/oxidecomputer/usdt#4329591597b3ceaab78d606cf601781c6a99e6de"
 dependencies = [
  "dof",
  "goblin",
@@ -979,7 +979,7 @@ dependencies = [
 [[package]]
 name = "usdt-attr-macro"
 version = "0.6.0"
-source = "git+https://github.com/smolkaj/usdt.git#3c6b9729d8f87b48ebfa577ce481cacb82aba2e4"
+source = "git+https://github.com/oxidecomputer/usdt#4329591597b3ceaab78d606cf601781c6a99e6de"
 dependencies = [
  "dtrace-parser",
  "proc-macro2",
@@ -992,7 +992,7 @@ dependencies = [
 [[package]]
 name = "usdt-impl"
 version = "0.6.0"
-source = "git+https://github.com/smolkaj/usdt.git#3c6b9729d8f87b48ebfa577ce481cacb82aba2e4"
+source = "git+https://github.com/oxidecomputer/usdt#4329591597b3ceaab78d606cf601781c6a99e6de"
 dependencies = [
  "byteorder",
  "dof",
@@ -1010,7 +1010,7 @@ dependencies = [
 [[package]]
 name = "usdt-macro"
 version = "0.6.0"
-source = "git+https://github.com/smolkaj/usdt.git#3c6b9729d8f87b48ebfa577ce481cacb82aba2e4"
+source = "git+https://github.com/oxidecomputer/usdt#4329591597b3ceaab78d606cf601781c6a99e6de"
 dependencies = [
  "dtrace-parser",
  "proc-macro2",

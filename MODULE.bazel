@@ -9,8 +9,6 @@ bazel_dep(name = "rules_rust", version = "0.67.0")
 # Pick Rust toolchain version.
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
-    # TODO: bump up to 2024 once https://github.com/oxidecomputer/p4/pull/195
-    # is merged.
     edition = "2021",
     versions = ["1.90.0"],
 )

@@ -37,10 +37,9 @@ serde = "1.0"
 serde_tokenstream = "0.2"
 syn = "2.0"
 tempfile = "3.3"
-usdt = "0.6.0"
+usdt = "0.6"
 xfr = { git = "https://github.com/oxidecomputer/xfr" }
 
-# TODO: Remove this patch once https://github.com/oxidecomputer/usdt/pull/486 is merged.
+# TODO: Remove once https://github.com/oxidecomputer/usdt/pull/486 is released.
 [patch.crates-io]
-usdt = { git = "https://github.com/smolkaj/usdt.git" }
-usdt-impl = { git = "https://github.com/smolkaj/usdt.git" }
+usdt = { git = "https://github.com/oxidecomputer/usdt" }
