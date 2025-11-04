@@ -2,3 +2,5 @@
 *.sw*
 out.rs
 tags
+bazel*
+MODULE.bazel.lock
