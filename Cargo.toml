@@ -5,7 +5,9 @@ members = [
     "p4",
     "x4c",
     "x4c_error_codes",
+    "codegen/common",
     "codegen/rust",
+    "codegen/htq",
     "lang/p4rs",
     "lang/p4-macro",
     "lang/p4-macro-test",
@@ -16,7 +18,9 @@ members = [
 
 [workspace.dependencies]
 p4-macro = { path = "lang/p4-macro" }
+p4-cg = { path = "codegen/common" }
 p4-rust = { path = "codegen/rust" }
+p4-htq = { path = "codegen/htq" }
 p4rs = { path = "lang/p4rs" }
 tests = { path = "test" }
 
@@ -24,6 +28,7 @@ anyhow = "1"
 bitvec = "1.0"
 clap = { version = "4", features = ["color", "derive"] }
 colored = "3"
+htq = { git = "https://github.com/oxidecomputer/htq", branch = "sector-001" }
 libloading = { version = "0.8" }
 num = { version = "0.4", features = ["serde"] }
 p4 = { path = "p4" }
@@ -37,5 +42,6 @@ serde = "1.0"
 serde_tokenstream = "0.2"
 syn = "2.0"
 tempfile = "3.3"
+thiserror = "1.0.63"
 usdt = "0.5.0"
 xfr = { git = "https://github.com/oxidecomputer/xfr" }

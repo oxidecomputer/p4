@@ -1,0 +1,9 @@
+[package]
+name = "p4-htq"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p4.workspace = true
+htq.workspace = true
+thiserror.workspace = true

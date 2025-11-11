@@ -10,7 +10,7 @@ use quote::{format_ident, quote};
 use p4::ast::{
     ActionParameter, Control, ControlParameter, DeclarationInfo, Direction,
     Expression, ExpressionKind, HeaderMember, Lvalue, MutVisitor, NameInfo,
-    Parser, StructMember, Table, Type, UserDefinedType, AST,
+    Parser, StructMember, Table, Type, AST,
 };
 use p4::hlir::Hlir;
 use p4::util::resolve_lvalue;
@@ -218,7 +218,8 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::Int(_size) => todo!("generate int type"),
         Type::Varbit(_size) => todo!("generate varbit type"),
         Type::String => quote! { String },
-        Type::UserDefined(name) => {
+        //TODO generic types
+        Type::UserDefined(name, _) => {
             let typename = format_ident!("{}", name);
             quote! { #typename }
         }
@@ -241,68 +242,8 @@ fn rust_type(ty: &Type) -> TokenStream {
         Type::Action => {
             todo!("rust type for action");
         }
+        Type::Sync(_) => todo!("rust codegen for sync<T>"),
     }
-}
-
-fn type_size(ty: &Type, ast: &AST) -> usize {
-    match ty {
-        Type::Bool => 1,
-        Type::Error => todo!("generate error size"),
-        Type::Bit(size) => *size,
-        Type::Int(size) => *size,
-        Type::Varbit(size) => *size,
-        Type::String => todo!("generate string size"),
-        Type::UserDefined(name) => {
-            let mut sz: usize = 0;
-            let udt = ast.get_user_defined_type(name).unwrap_or_else(|| {
-                panic!("expect user defined type: {}", name)
-            });
-
-            match udt {
-                UserDefinedType::Struct(s) => {
-                    for m in &s.members {
-                        sz += type_size(&m.ty, ast);
-                    }
-                    sz
-                }
-                UserDefinedType::Header(h) => {
-                    for m in &h.members {
-                        sz += type_size(&m.ty, ast);
-                    }
-                    sz
-                }
-                UserDefinedType::Extern(_) => {
-                    todo!("size for extern?");
-                }
-            }
-        }
-        Type::ExternFunction => {
-            todo!("type size for extern function");
-        }
-        Type::HeaderMethod => {
-            todo!("type size for header method");
-        }
-        Type::Table => {
-            todo!("type size for table");
-        }
-        Type::Void => 0,
-        Type::List(_) => todo!("type size for list"),
-        Type::State => {
-            todo!("type size for state");
-        }
-        Type::Action => {
-            todo!("type size for action");
-        }
-    }
-}
-
-fn type_size_bytes(ty: &Type, ast: &AST) -> usize {
-    let s = type_size(ty, ast);
-    let mut b = s >> 3;
-    if s % 8 != 0 {
-        b += 1
-    }
-    b
 }
 
 // in the case of an expression
@@ -332,7 +273,7 @@ fn is_header(
 ) -> bool {
     //TODO: get from hlir?
     let typename = match resolve_lvalue(lval, ast, names).unwrap().ty {
-        Type::UserDefined(name) => name,
+        Type::UserDefined(name, _) => name,
         _ => return false,
     };
     ast.get_header(&typename).is_some()

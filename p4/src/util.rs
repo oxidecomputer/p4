@@ -26,7 +26,8 @@ pub fn resolve_lvalue(
         Type::List(_) => root.clone(),
         Type::State => root.clone(),
         Type::Action => root.clone(),
-        Type::UserDefined(name) => {
+        Type::Sync(_) => root.clone(),
+        Type::UserDefined(name, _) => {
             if lval.degree() == 1 {
                 root.clone()
             } else if let Some(parent) = ast.get_struct(name) {

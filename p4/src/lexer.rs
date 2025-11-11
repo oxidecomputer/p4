@@ -38,6 +38,8 @@ pub enum Kind {
     If,
     Else,
     Return,
+    Async,
+    Await,
 
     //
     // types
@@ -48,6 +50,7 @@ pub enum Kind {
     Varbit,
     Int,
     String,
+    Sync,
 
     //
     // lexical elements
@@ -166,6 +169,8 @@ impl fmt::Display for Kind {
             Kind::If => write!(f, "keyword if"),
             Kind::Else => write!(f, "keyword else"),
             Kind::Return => write!(f, "keyword return"),
+            Kind::Async => write!(f, "keyword async"),
+            Kind::Await => write!(f, "keyword await"),
 
             //
             // types
@@ -176,6 +181,7 @@ impl fmt::Display for Kind {
             Kind::Varbit => write!(f, "type varbit"),
             Kind::Int => write!(f, "type int"),
             Kind::String => write!(f, "type string"),
+            Kind::Sync => write!(f, "type sync"),
 
             //
             // lexical elements
@@ -316,8 +322,8 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        while self.skip_whitespace() {}
-        while self.skip_comment() {}
+        while self.skip_whitespace_or_comment() {}
+        //while self.skip_comment() {}
         if self.line >= self.lines.len() {
             return Ok(Token {
                 kind: Kind::Eof,
@@ -326,8 +332,7 @@ impl<'a> Lexer<'a> {
                 file: self.file.clone(),
             });
         }
-        self.skip_whitespace();
-        //self.skip_comment();
+        self.skip_whitespace_or_comment();
 
         if let Some(t) = self.match_token("#include", Kind::PoundInclude) {
             return Ok(t);
@@ -386,6 +391,14 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(t) = self.match_token("return", Kind::Return) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token("async", Kind::Async) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token("await", Kind::Await) {
             return Ok(t);
         }
 
@@ -526,6 +539,10 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(t) = self.match_token("int", Kind::Int) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token("sync", Kind::Sync) {
             return Ok(t);
         }
 
@@ -850,6 +867,10 @@ impl<'a> Lexer<'a> {
             return true;
         }
         false
+    }
+
+    fn skip_whitespace_or_comment(&mut self) -> bool {
+        self.skip_whitespace() || self.skip_comment()
     }
 
     fn skip_block_comment(&mut self) {

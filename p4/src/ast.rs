@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::lexer::Token;
 
+/// An abstract syntax tree for the P4 language.
 #[derive(Debug, Default)]
 pub struct AST {
     pub constants: Vec<Constant>,
@@ -217,7 +218,7 @@ impl PackageInstance {
 #[derive(Debug)]
 pub struct Package {
     pub name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<PackageParameter>,
 }
 
@@ -262,7 +263,7 @@ impl Package {
 #[derive(Debug)]
 pub struct PackageParameter {
     pub type_name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub name: String,
 }
 
@@ -292,7 +293,7 @@ impl PackageParameter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bool,
     Error,
@@ -300,7 +301,7 @@ pub enum Type {
     Varbit(usize),
     Int(usize),
     String,
-    UserDefined(String),
+    UserDefined(String, Vec<Box<Type>>),
     ExternFunction, //TODO actual signature
     Table,
     Void,
@@ -308,6 +309,7 @@ pub enum Type {
     State,
     Action,
     HeaderMethod,
+    Sync(Box<Type>),
 }
 
 impl Type {
@@ -346,6 +348,18 @@ impl Type {
             }
         }
     }
+
+    pub fn is_lookup_result(&self) -> bool {
+        match self {
+            Self::UserDefined(s, _) if s == "lookup_result" => true,
+            Self::Sync(typ) => typ.is_lookup_result(),
+            _ => false,
+        }
+    }
+
+    pub fn is_sync(&self) -> bool {
+        matches!(self, Self::Sync(_))
+    }
 }
 
 impl fmt::Display for Type {
@@ -357,7 +371,22 @@ impl fmt::Display for Type {
             Type::Varbit(size) => write!(f, "varbit<{}>", size),
             Type::Int(size) => write!(f, "int<{}>", size),
             Type::String => write!(f, "string"),
-            Type::UserDefined(name) => write!(f, "{}", name),
+            Type::UserDefined(name, params) => {
+                if params.is_empty() {
+                    write!(f, "{}", name)
+                } else {
+                    write!(
+                        f,
+                        "{}<{}>",
+                        name,
+                        params
+                            .iter()
+                            .map(|x| x.to_string())
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                }
+            }
             Type::ExternFunction => write!(f, "extern function"),
             Type::Table => write!(f, "table"),
             Type::Void => write!(f, "void"),
@@ -371,6 +400,7 @@ impl fmt::Display for Type {
                 }
                 write!(f, ">")
             }
+            Type::Sync(param) => write!(f, "sync<{param}>"),
         }
     }
 }
@@ -765,6 +795,26 @@ impl Header {
             m.mut_accept_mut(v);
         }
     }
+
+    pub fn index_of(&self, member_name: &str) -> Option<usize> {
+        for (i, m) in self.members.iter().enumerate() {
+            if m.name == member_name {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn offset_of(&self, ast: &AST, member_name: &str) -> Option<usize> {
+        let mut offset = 0;
+        for m in &self.members {
+            if m.name == member_name {
+                return Some(offset);
+            }
+            offset += type_size(&m.ty, ast);
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -850,6 +900,26 @@ impl Struct {
             m.mut_accept_mut(v);
         }
     }
+
+    pub fn index_of(&self, member_name: &str) -> Option<usize> {
+        for (i, m) in self.members.iter().enumerate() {
+            if m.name == member_name {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn offset_of(&self, ast: &AST, member_name: &str) -> Option<usize> {
+        let mut offset = 0;
+        for m in &self.members {
+            if m.name == member_name {
+                return Some(offset);
+            }
+            offset += type_size(&m.ty, ast);
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -886,7 +956,7 @@ pub struct Control {
     pub name: String,
     pub variables: Vec<Variable>,
     pub constants: Vec<Constant>,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<ControlParameter>,
     pub actions: Vec<Action>,
     pub tables: Vec<Table>,
@@ -942,7 +1012,7 @@ impl Control {
             result.push((chain.clone(), table));
         }
         for v in &self.variables {
-            if let Type::UserDefined(typename) = &v.ty {
+            if let Type::UserDefined(typename, _) = &v.ty {
                 if let Some(control_inst) = ast.get_control(typename) {
                     result.extend_from_slice(&control_inst.tables_rec(
                         ast,
@@ -957,7 +1027,7 @@ impl Control {
 
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
-            if t == name {
+            if t.to_string() == name {
                 return true;
             }
         }
@@ -1101,6 +1171,136 @@ impl Control {
             s.mut_accept_mut(v);
         }
     }
+
+    pub fn resolve_lookup_result_args_size(
+        &self,
+        parameter_name: &str,
+        ast: &AST,
+    ) -> Option<TableInfo> {
+        self.resolve_lookup_result_args_size_rec(
+            parameter_name,
+            ast,
+            &self.apply,
+        )
+    }
+
+    //TODO Does this need to consider the possibility of multiple assignments?
+    //     Should that be an error?
+    pub fn resolve_lookup_result_args_size_rec(
+        &self,
+        parameter_name: &str,
+        ast: &AST,
+        block: &StatementBlock,
+    ) -> Option<TableInfo> {
+        let mut table: Option<Table> = None;
+        let mut size = 0;
+        let mut found = false;
+        for x in &block.statements {
+            match x {
+                Statement::Assignment(lval, expr) => {
+                    if lval.root() != parameter_name {
+                        continue;
+                    }
+                    match &expr.kind {
+                        ExpressionKind::Call(call) => {
+                            let mut lv = call.lval.clone();
+                            if lv.leaf() == "await" {
+                                lv = lv.pop_right();
+                            }
+                            if lv.leaf() != "apply" {
+                                continue;
+                            }
+                            if let Some(tbl) = self.get_table(call.lval.root())
+                            {
+                                size = usize::max(
+                                    self.maximum_action_arg_length_for_table(
+                                        ast, tbl,
+                                    ),
+                                    size,
+                                );
+                                table = Some(tbl.clone());
+                                found = true;
+                            } else {
+                                continue;
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                Statement::If(if_block) => {
+                    if let Some(info) = self
+                        .resolve_lookup_result_args_size_rec(
+                            parameter_name,
+                            ast,
+                            &if_block.block,
+                        )
+                    {
+                        found = true;
+                        size = usize::max(size, info.max_arg_size);
+                        table = Some(info.table);
+                    }
+                    for x in &if_block.else_ifs {
+                        if let Some(info) = self
+                            .resolve_lookup_result_args_size_rec(
+                                parameter_name,
+                                ast,
+                                &x.block,
+                            )
+                        {
+                            found = true;
+                            size = usize::max(size, info.max_arg_size);
+                            table = Some(info.table);
+                        }
+                    }
+                    if let Some(else_block) = &if_block.else_block {
+                        if let Some(info) = self
+                            .resolve_lookup_result_args_size_rec(
+                                parameter_name,
+                                ast,
+                                else_block,
+                            )
+                        {
+                            found = true;
+                            size = usize::max(size, info.max_arg_size);
+                            table = Some(info.table);
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+        if found {
+            Some(TableInfo {
+                max_arg_size: size,
+                table: table.unwrap(),
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn maximum_action_arg_length_for_table(
+        &self,
+        ast: &AST,
+        table: &Table,
+    ) -> usize {
+        let mut size = 0;
+        for action in &table.actions {
+            let mut asize = 0;
+            let action = self.get_action(&action.name).unwrap();
+            for p in &action.parameters {
+                let psize = type_size(&p.ty, ast);
+                asize += psize;
+            }
+            size = usize::max(size, asize);
+        }
+        size
+    }
+}
+
+pub struct TableInfo {
+    pub table: Table,
+    pub max_arg_size: usize,
 }
 
 impl PartialEq for Control {
@@ -1112,7 +1312,7 @@ impl PartialEq for Control {
 #[derive(Debug, Clone)]
 pub struct Parser {
     pub name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<ControlParameter>,
     pub states: Vec<State>,
     pub decl_only: bool,
@@ -1135,7 +1335,7 @@ impl Parser {
 
     pub fn is_type_parameter(&self, name: &str) -> bool {
         for t in &self.type_parameters {
-            if t == name {
+            if t.to_string() == name {
                 return true;
             }
         }
@@ -1210,7 +1410,7 @@ impl Parser {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct ControlParameter {
     pub direction: Direction,
     pub ty: Type,
@@ -1243,12 +1443,21 @@ impl ControlParameter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Direction {
     In,
     Out,
     InOut,
     Unspecified,
+}
+
+impl Direction {
+    pub fn is_out(&self) -> bool {
+        *self == Self::Out || *self == Self::InOut
+    }
+    pub fn is_in(&self) -> bool {
+        *self == Self::In || *self == Self::InOut
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1376,10 +1585,11 @@ pub struct Table {
     pub const_entries: Vec<ConstTableEntry>,
     pub size: usize,
     pub token: Token,
+    pub is_async: bool,
 }
 
 impl Table {
-    pub fn new(name: String, token: Token) -> Self {
+    pub fn new(name: String, is_async: bool, token: Token) -> Self {
         Self {
             name,
             actions: Vec::new(),
@@ -1387,6 +1597,7 @@ impl Table {
             key: Vec::new(),
             const_entries: Vec::new(),
             size: 0,
+            is_async,
             token,
         }
     }
@@ -1886,6 +2097,7 @@ impl ElseIfBlock {
 pub struct Call {
     pub lval: Lvalue,
     pub args: Vec<Box<Expression>>,
+    pub with_await: bool,
 }
 
 impl Call {
@@ -1970,6 +2182,25 @@ impl Lvalue {
             },
         }
     }
+    pub fn pop_await(&self) -> Self {
+        let parts = self.parts();
+        Lvalue {
+            name: if parts.len() == 1 {
+                parts[0].to_owned()
+            } else if parts.last() == Some(&"await") {
+                parts[..parts.len() - 1].join(".")
+            } else {
+                parts.join(".")
+            },
+            token: Token {
+                kind: self.token.kind.clone(),
+                line: self.token.line,
+                col: self.token.col,
+                file: self.token.file.clone(),
+            },
+        }
+    }
+
     fn accept<V: Visitor>(&self, v: &V) {
         v.lvalue(self);
     }
@@ -2215,7 +2446,7 @@ impl Extern {
 pub struct ExternMethod {
     pub return_type: Type,
     pub name: String,
-    pub type_parameters: Vec<String>,
+    pub type_parameters: Vec<Type>,
     pub parameters: Vec<ControlParameter>,
 }
 
@@ -2427,4 +2658,66 @@ pub trait MutVisitorMut {
     fn state(&mut self, _: &mut State) {}
     fn package_parameter(&mut self, _: &mut PackageParameter) {}
     fn extern_method(&mut self, _: &mut ExternMethod) {}
+}
+
+pub fn type_size(ty: &Type, ast: &AST) -> usize {
+    match ty {
+        Type::Bool => 1,
+        Type::Error => todo!("generate error size"),
+        Type::Bit(size) => *size,
+        Type::Int(size) => *size,
+        Type::Varbit(size) => *size,
+        Type::String => todo!("generate string size"),
+        Type::UserDefined(name, _) => {
+            let mut sz: usize = 0;
+            let udt = ast.get_user_defined_type(name).unwrap_or_else(|| {
+                panic!("expect user defined type: {}", name)
+            });
+
+            match udt {
+                UserDefinedType::Struct(s) => {
+                    for m in &s.members {
+                        sz += type_size(&m.ty, ast);
+                    }
+                    sz
+                }
+                UserDefinedType::Header(h) => {
+                    for m in &h.members {
+                        sz += type_size(&m.ty, ast);
+                    }
+                    sz
+                }
+                UserDefinedType::Extern(_) => {
+                    todo!("size for extern?");
+                }
+            }
+        }
+        Type::ExternFunction => {
+            todo!("type size for extern function");
+        }
+        Type::HeaderMethod => {
+            todo!("type size for header method");
+        }
+        Type::Table => {
+            todo!("type size for table");
+        }
+        Type::Void => 0,
+        Type::List(_) => todo!("type size for list"),
+        Type::State => {
+            todo!("type size for state");
+        }
+        Type::Action => {
+            todo!("type size for action");
+        }
+        Type::Sync(_) => todo!("type size for sync<T>"),
+    }
+}
+
+pub fn type_size_bytes(ty: &Type, ast: &AST) -> usize {
+    let s = type_size(ty, ast);
+    let mut b = s >> 3;
+    if s % 8 != 0 {
+        b += 1
+    }
+    b
 }

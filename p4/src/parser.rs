@@ -74,6 +74,23 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    fn try_token(&mut self, expected: lexer::Kind) -> Result<(), Error> {
+        let token = self.next_token()?;
+        if token.kind != expected {
+            self.backlog.push(token.clone());
+            return Err(ParserError {
+                at: token.clone(),
+                message: format!(
+                    "Found {} expected '{}'.",
+                    token.kind, expected,
+                ),
+                source: self.lexer.lines[token.line].into(),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
     fn parse_identifier(
         &mut self,
         what: &str,
@@ -82,6 +99,10 @@ impl<'a> Parser<'a> {
         Ok((
             match token.kind {
                 Kind::Identifier(ref name) => name.into(),
+                Kind::Await => {
+                    //TODO this is a bit of a hack
+                    "await".into()
+                }
                 Kind::Apply => {
                     // sometimes apply is not the keyword but a method called
                     // against tables.
@@ -148,9 +169,30 @@ impl<'a> Parser<'a> {
                 }
 
                 lexer::Kind::Identifier(name) => {
-                    Type::UserDefined(name.clone())
+                    let params = match self.parse_type_parameters() {
+                        Ok(params) => params,
+                        Err(_) => Vec::new(),
+                    };
+                    Type::UserDefined(
+                        name.clone(),
+                        params.into_iter().map(Box::new).collect(),
+                    )
                 }
-
+                lexer::Kind::Sync => {
+                    let params = self.parse_type_parameters()?;
+                    if params.len() != 1 {
+                        return Err(ParserError {
+                            at: token.clone(),
+                            message: format!(
+                                "Expected exactly one type parameter, found {}",
+                                params.len(),
+                            ),
+                            source: self.lexer.lines[token.line].into(),
+                        }
+                        .into());
+                    }
+                    Type::Sync(Box::new(params[0].clone()))
+                }
                 _ => {
                     return Err(
                         ParserError {
@@ -390,6 +432,12 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn parse_await(&mut self) -> Result<(), Error> {
+        self.try_token(lexer::Kind::Dot)?;
+        self.try_token(lexer::Kind::Await)?;
+        Ok(())
+    }
+
     // parse a tuple of expressions (<expr>, <expr> ...), used for both tuples
     // and function call sites
     pub fn parse_expr_parameters(
@@ -474,6 +522,7 @@ impl<'a> Parser<'a> {
                 | lexer::Kind::Error
                 | lexer::Kind::Bit
                 | lexer::Kind::Int
+                | lexer::Kind::Sync
                 | lexer::Kind::String => {
                     self.backlog.push(token);
                     let var = self.parse_variable()?;
@@ -487,9 +536,24 @@ impl<'a> Parser<'a> {
                     result.statements.push(Statement::Constant(c));
                 }
 
-                lexer::Kind::Identifier(_)
-                | lexer::Kind::If
-                | lexer::Kind::Return => {
+                lexer::Kind::Identifier(_) => {
+                    if let Ok(peek) = self.next_token() {
+                        if let lexer::Kind::Identifier(_) = &peek.kind {
+                            self.backlog.push(peek);
+                            self.backlog.push(token);
+                            let var = self.parse_variable()?;
+                            result.statements.push(Statement::Variable(var));
+                            continue;
+                        } else {
+                            self.backlog.push(peek);
+                        }
+                    }
+                    self.backlog.push(token);
+                    let mut sp = StatementParser::new(self);
+                    let stmt = sp.run()?;
+                    result.statements.push(stmt);
+                }
+                lexer::Kind::If | lexer::Kind::Return => {
                     // push the identifier token into the backlog and run the
                     // statement parser
                     self.backlog.push(token);
@@ -598,14 +662,15 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    pub fn parse_type_parameters(&mut self) -> Result<Vec<String>, Error> {
+    pub fn parse_type_parameters(&mut self) -> Result<Vec<Type>, Error> {
         let mut result = Vec::new();
 
-        self.expect_token(lexer::Kind::AngleOpen)?;
+        self.try_token(lexer::Kind::AngleOpen)?;
 
         loop {
-            let (ident, _) = self.parse_identifier("type parameter name")?;
-            result.push(ident);
+            //let (ident, _) = self.parse_identifier("type parameter name")?;
+            let (ty, _) = self.parse_type()?;
+            result.push(ty);
 
             let token = self.next_token()?;
             match token.kind {
@@ -1024,11 +1089,19 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         // iterate over body statements
         loop {
             let token = self.parser.next_token()?;
+            let is_async = if token.kind == lexer::Kind::Async {
+                true
+            } else {
+                self.parser.backlog.push(token);
+                false
+            };
+
+            let token = self.parser.next_token()?;
 
             match token.kind {
                 lexer::Kind::CurlyClose => break,
                 lexer::Kind::Action => self.parse_action(control)?,
-                lexer::Kind::Table => self.parse_table(control)?,
+                lexer::Kind::Table => self.parse_table(control, is_async)?,
                 lexer::Kind::Apply => self.parse_apply(control)?,
                 lexer::Kind::Const => {
                     let c = self.parser.parse_constant()?;
@@ -1069,8 +1142,12 @@ impl<'a, 'b> ControlParser<'a, 'b> {
         Ok(())
     }
 
-    pub fn parse_table(&mut self, control: &mut Control) -> Result<(), Error> {
-        let mut tp = TableParser::new(self.parser);
+    pub fn parse_table(
+        &mut self,
+        control: &mut Control,
+        is_async: bool,
+    ) -> Result<(), Error> {
+        let mut tp = TableParser::new(self.parser, is_async);
         let table = tp.run()?;
         control.tables.push(table);
 
@@ -1166,16 +1243,17 @@ impl<'a, 'b> ActionParser<'a, 'b> {
 
 pub struct TableParser<'a, 'b> {
     parser: &'b mut Parser<'a>,
+    is_async: bool,
 }
 
 impl<'a, 'b> TableParser<'a, 'b> {
-    pub fn new(parser: &'b mut Parser<'a>) -> Self {
-        Self { parser }
+    pub fn new(parser: &'b mut Parser<'a>, is_async: bool) -> Self {
+        Self { parser, is_async }
     }
 
     pub fn run(&mut self) -> Result<Table, Error> {
         let (name, tk) = self.parser.parse_identifier("table name")?;
-        let mut table = Table::new(name, tk);
+        let mut table = Table::new(name, self.is_async, tk);
 
         self.parse_body(&mut table)?;
 
@@ -1487,7 +1565,12 @@ impl<'a, 'b> StatementParser<'a, 'b> {
 
     pub fn parse_call(&mut self, lval: Lvalue) -> Result<Statement, Error> {
         let args = self.parser.parse_expr_parameters()?;
-        Ok(Statement::Call(Call { lval, args }))
+        let with_await = self.parser.parse_await().is_ok();
+        Ok(Statement::Call(Call {
+            lval,
+            args,
+            with_await,
+        }))
     }
 
     pub fn parse_parameterized_call(
@@ -1619,9 +1702,14 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 else if token.kind == lexer::Kind::ParenOpen {
                     self.parser.backlog.push(token.clone());
                     let args = self.parser.parse_expr_parameters()?;
+                    let with_await = self.parser.parse_await().is_ok();
                     Expression::new(
                         token,
-                        ExpressionKind::Call(Call { lval, args }),
+                        ExpressionKind::Call(Call {
+                            lval,
+                            args,
+                            with_await,
+                        }),
                     )
                 }
                 // if it's not an index and it's not a call, it's an lvalue

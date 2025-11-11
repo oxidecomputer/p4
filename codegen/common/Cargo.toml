@@ -1,0 +1,8 @@
+[package]
+name = "p4-cg"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p4 = { path = "../../p4" }
+thiserror = "1.0.63"
