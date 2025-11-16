@@ -1,0 +1,30 @@
+name: Bazel CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  bazel-build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-${{ matrix.os }}
+          repository-cache: true
+      - if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y lld
+          sudo update-alternatives --install /usr/bin/ld ld /usr/bin/ld.lld 100
+      - name: Build with Bazel
+        run: bazel build --test_output=errors //...
+      - name: Test with Bazel
+        run: bazel test --test_output=errors //...

@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_shared_library")
+
+rust_shared_library(
+    name = "sidecar-lite",
+    srcs = glob(["src/**/*.rs"]),
+    deps = [
+        "//lang/p4rs",
+        "//codegen/rust:p4-rust",
+        "@crates//:num",
+        "@crates//:bitvec",
+        "@crates//:colored",
+        "@crates//:usdt",
+    ],
+    proc_macro_deps = ["//lang/p4-macro"],
+    visibility = ["//visibility:public"],
+    compile_data = ["//test:p4"],
+)
