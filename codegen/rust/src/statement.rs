@@ -347,6 +347,16 @@ impl<'a> StatementGenerator<'a> {
             args.push(quote! { #arg });
         }
 
+        // pass externs instantiated at control scope to actions
+        for x in &control.variables {
+            if let Type::UserDefined(typename) = &x.ty {
+                if self.ast.get_extern(typename).is_some() {
+                    let arg = format_ident!("{}", x.name);
+                    args.push(quote! { & #arg });
+                }
+            }
+        }
+
         tokens.extend(quote! {
             #(#lvref).*(#(#args),*);
         })
