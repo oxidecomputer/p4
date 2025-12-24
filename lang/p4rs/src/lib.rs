@@ -370,7 +370,7 @@ pub fn extract_bit_action_parameter(
     size: usize,
 ) -> BitVec<u8, Msb0> {
     let mut byte_size = size >> 3;
-    if size % 8 != 0 {
+    if !size.is_multiple_of(8) {
         byte_size += 1;
     }
     let mut b: BitVec<u8, Msb0> =

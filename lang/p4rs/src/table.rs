@@ -84,17 +84,14 @@ impl Key {
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum Ternary {
+    #[default]
     DontCare,
     Value(BigUintKey),
     Masked(BigUint, BigUint, usize),
 }
 
-impl Default for Ternary {
-    fn default() -> Self {
-        Self::DontCare
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct Prefix {
