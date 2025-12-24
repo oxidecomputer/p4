@@ -47,7 +47,10 @@ impl AST {
         self.parsers.iter().find(|&p| p.name == name)
     }
 
-    pub fn get_user_defined_type(&self, name: &str) -> Option<UserDefinedType> {
+    pub fn get_user_defined_type(
+        &self,
+        name: &str,
+    ) -> Option<UserDefinedType<'_>> {
         if let Some(user_struct) = self.get_struct(name) {
             return Some(UserDefinedType::Struct(user_struct));
         }
