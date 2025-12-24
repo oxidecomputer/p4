@@ -101,9 +101,10 @@ pub fn emit(
             // On failure write generated code to a tempfile
             println!("Code generation produced unparsable code");
             write_to_tempfile(&tokens)?;
-            return Err(io::Error::other(
-                format!("Failed to parse generated code: {:?}", e),
-            ));
+            return Err(io::Error::other(format!(
+                "Failed to parse generated code: {:?}",
+                e
+            )));
         }
     };
     fs::write(filename, prettyplease::unparse(&f))?;

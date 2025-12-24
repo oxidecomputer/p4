@@ -83,15 +83,15 @@ impl Key {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(
+    Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize, Default,
+)]
 pub enum Ternary {
     #[default]
     DontCare,
     Value(BigUintKey),
     Masked(BigUint, BigUint, usize),
 }
-
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct Prefix {
