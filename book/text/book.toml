@@ -1,7 +1,6 @@
 [book]
 authors = ["Ryan Goodfellow"]
 language = "en"
-multilingual = false
 src = "src"
 title = "The x4c Book"
 

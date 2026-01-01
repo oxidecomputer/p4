@@ -101,10 +101,10 @@ pub fn emit(
             // On failure write generated code to a tempfile
             println!("Code generation produced unparsable code");
             write_to_tempfile(&tokens)?;
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to parse generated code: {:?}", e),
-            ));
+            return Err(io::Error::other(format!(
+                "Failed to parse generated code: {:?}",
+                e
+            )));
         }
     };
     fs::write(filename, prettyplease::unparse(&f))?;
@@ -299,7 +299,7 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
 fn type_size_bytes(ty: &Type, ast: &AST) -> usize {
     let s = type_size(ty, ast);
     let mut b = s >> 3;
-    if s % 8 != 0 {
+    if !s.is_multiple_of(8) {
         b += 1
     }
     b

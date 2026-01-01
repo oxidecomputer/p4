@@ -62,7 +62,7 @@ pub fn udp6_checksum(data: &[u8]) -> u16 {
     csum.add(payload_len[0], payload_len[1]);
 
     let len = payload.len();
-    let (odd, len) = if len % 2 == 0 {
+    let (odd, len) = if len.is_multiple_of(2) {
         (false, len)
     } else {
         (true, len - 1)
