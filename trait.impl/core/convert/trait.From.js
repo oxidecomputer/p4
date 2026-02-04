@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["p4",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.92.0/alloc/vec/struct.Vec.html\" title=\"struct alloc::vec::Vec\">Vec</a>&lt;<a class=\"struct\" href=\"p4/error/struct.SemanticError.html\" title=\"struct p4::error::SemanticError\">SemanticError</a>&gt;&gt; for <a class=\"enum\" href=\"p4/error/enum.Error.html\" title=\"enum p4::error::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"p4/error/struct.ParserError.html\" title=\"struct p4::error::ParserError\">ParserError</a>&gt; for <a class=\"enum\" href=\"p4/error/enum.Error.html\" title=\"enum p4::error::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"p4/error/struct.TokenError.html\" title=\"struct p4::error::TokenError\">TokenError</a>&gt; for <a class=\"enum\" href=\"p4/error/enum.Error.html\" title=\"enum p4::error::Error\">Error</a>"]]],["p4rs",[["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"p4rs/struct.Bit.html\" title=\"struct p4rs::Bit\">Bit</a>&lt;'a, 16&gt;&gt; for <a class=\"primitive\" href=\"https://doc.rust-lang.org/1.92.0/std/primitive.u16.html\">u16</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1248,371]}
