@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Key","Ternary"],"fn":["key_matches","keyset_matches","prune_entries_by_lpm","sort_entries","sort_entries_by_priority"],"struct":["BigUintKey","Prefix","Table","TableEntry"]};
