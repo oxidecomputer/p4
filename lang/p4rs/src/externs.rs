@@ -29,3 +29,26 @@ impl Default for Checksum {
         Self::new()
     }
 }
+
+/// Marker extern for packet replication. The `replicate` method is a
+/// no-op at runtime. The pipeline codegen detects calls to this extern
+/// and generates the replication loop at the pipeline level (between
+/// ingress and egress).
+pub struct Replicate {}
+
+impl Replicate {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    /// Marker call. The bitmap argument is consumed by the pipeline
+    /// codegen to drive replication. This method is never invoked at
+    /// runtime because the codegen elides it.
+    pub fn replicate(&self, _bitmap: &BitVec<u8, Msb0>) {}
+}
+
+impl Default for Replicate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
