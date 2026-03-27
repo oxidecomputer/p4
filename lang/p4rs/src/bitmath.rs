@@ -98,6 +98,58 @@ pub fn mod_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     c
 }
 
+/// Left shift `a` by `b` positions, big-endian byte order.
+/// Result width matches `a`. Wraps via `u128::wrapping_shl`.
+pub fn shl_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let len = a.len();
+    let x: u128 = a.load_be();
+    let y: u128 = b.load_be();
+    let z = x.wrapping_shl(y as u32);
+    let mut c = BitVec::new();
+    c.resize(len, false);
+    c.store_be(z);
+    c
+}
+
+/// Left shift `a` by `b` positions, little-endian byte order.
+/// Result width matches `a`. Wraps via `u128::wrapping_shl`.
+pub fn shl_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let len = a.len();
+    let x: u128 = a.load_le();
+    let y: u128 = b.load_le();
+    let z = x.wrapping_shl(y as u32);
+    let mut c = BitVec::new();
+    c.resize(len, false);
+    c.store_le(z);
+    c
+}
+
+/// Right shift `a` by `b` positions, big-endian byte order.
+/// Result width matches `a`. Wraps via `u128::wrapping_shr`.
+pub fn shr_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let len = a.len();
+    let x: u128 = a.load_be();
+    let y: u128 = b.load_be();
+    let z = x.wrapping_shr(y as u32);
+    let mut c = BitVec::new();
+    c.resize(len, false);
+    c.store_be(z);
+    c
+}
+
+/// Right shift `a` by `b` positions, little-endian byte order.
+/// Result width matches `a`. Wraps via `u128::wrapping_shr`.
+pub fn shr_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    let len = a.len();
+    let x: u128 = a.load_le();
+    let y: u128 = b.load_le();
+    let z = x.wrapping_shr(y as u32);
+    let mut c = BitVec::new();
+    c.resize(len, false);
+    c.store_le(z);
+    c
+}
+
 pub fn mod_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let len = usize::max(a.len(), b.len());
 
@@ -264,5 +316,87 @@ mod tests {
 
         let cc: u128 = c.load_be();
         assert_eq!(cc, 47u128 % 7u128);
+    }
+
+    #[test]
+    fn bitmath_shl_le() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(1u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(4u128);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = shl_le(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_le();
+        assert_eq!(cc, 1u128 << 4);
+    }
+
+    #[test]
+    fn bitmath_shr_le() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(0x8000u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(4u128);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = shr_le(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_le();
+        assert_eq!(cc, 0x8000u128 >> 4);
+    }
+
+    #[test]
+    fn bitmath_shl_be() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_be(1u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_be(4u128);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = shl_be(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_be();
+        assert_eq!(cc, 1u128 << 4);
+    }
+
+    #[test]
+    fn bitmath_shr_be() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_be(0x8000u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_be(4u128);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let c = shr_be(a, b);
+        println!("{:?}", c);
+
+        let cc: u128 = c.load_be();
+        assert_eq!(cc, 0x8000u128 >> 4);
+    }
+
+    #[test]
+    fn bitmath_shl_shr_roundtrip_le() {
+        let mut a = bitvec![mut u8, Msb0; 0; 32];
+        a.store_le(42u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 32];
+        b.store_le(7u128);
+
+        println!("{:?}", a);
+        println!("{:?}", b);
+        let shifted = shl_le(a, b.clone());
+        println!("{:?}", shifted);
+        let back = shr_le(shifted, b);
+        println!("{:?}", back);
+
+        let result: u128 = back.load_le();
+        assert_eq!(result, 42u128);
     }
 }
