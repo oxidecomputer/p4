@@ -1,5 +1,5 @@
 #include <core.p4>
-#include <softnpu.p4>
+#include <softnpu_mcast.p4>
 #include <headers.p4>
 
 SoftNPU(
@@ -550,6 +550,69 @@ control proxy_arp(
     }
 }
 
+control mcast_ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    action set_port_bitmap(bit<128> bitmap) {
+        egress.port_bitmap = bitmap;
+    }
+
+    table mcast_replication_v6 {
+        key = {
+            hdr.ipv6.dst: exact;
+        }
+        actions = { set_port_bitmap; }
+        default_action = NoAction;
+    }
+
+    apply {
+        if (hdr.ipv6.isValid()) {
+            mcast_replication_v6.apply();
+        }
+    }
+}
+
+control mcast_egress(
+    inout headers_t hdr,
+    inout egress_metadata_t egress,
+) {
+    action decap() {
+        if (hdr.geneve.isValid()) {
+            hdr.geneve.setInvalid();
+            hdr.ethernet = hdr.inner_eth;
+            hdr.inner_eth.setInvalid();
+            if (hdr.inner_ipv4.isValid()) {
+                hdr.ipv4 = hdr.inner_ipv4;
+                hdr.ipv4.setValid();
+                hdr.ipv6.setInvalid();
+                hdr.inner_ipv4.setInvalid();
+            }
+            if (hdr.inner_ipv6.isValid()) {
+                hdr.ipv6 = hdr.inner_ipv6;
+                hdr.ipv6.setValid();
+                hdr.inner_ipv6.setInvalid();
+            }
+            hdr.udp.setInvalid();
+        }
+    }
+
+    // Keyed on the egress port. External ports get decapped,
+    // underlay ports pass through encapsulated.
+    table decap_ports {
+        key = {
+            egress.port: exact;
+        }
+        actions = { decap; }
+        default_action = NoAction;
+    }
+
+    apply {
+        decap_ports.apply();
+    }
+}
+
 control ingress(
     inout headers_t hdr,
     inout ingress_metadata_t ingress,
@@ -561,6 +624,8 @@ control ingress(
     resolver() resolver;
     mac_rewrite() mac;
     proxy_arp() pxarp;
+    mcast_ingress() mcast;
+    Replicate() rep;
 
     apply {
 
@@ -669,9 +734,15 @@ control ingress(
             // check for ingress nat
             nat.apply(hdr, ingress, egress);
 
-            router.apply(hdr, ingress, egress);
-            if (egress.port != 16w0) {
-                resolver.apply(hdr, egress);
+            // check for multicast replication before unicast routing
+            mcast.apply(hdr, ingress, egress);
+            rep.replicate(egress.port_bitmap);
+
+            if (egress.port_bitmap == 128w0) {
+                router.apply(hdr, ingress, egress);
+                if (egress.port != 16w0) {
+                    resolver.apply(hdr, egress);
+                }
             }
         }
 

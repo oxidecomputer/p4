@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
@@ -448,6 +448,8 @@ impl<'a> Parser<'a> {
             lexer::Kind::And => Ok(Some(BinOp::BitAnd)),
             lexer::Kind::Pipe => Ok(Some(BinOp::BitOr)),
             lexer::Kind::Carat => Ok(Some(BinOp::Xor)),
+            lexer::Kind::Shl => Ok(Some(BinOp::Shl)),
+            lexer::Kind::Shr => Ok(Some(BinOp::Shr)),
 
             // TODO other binops
             _ => {
@@ -1454,6 +1456,7 @@ impl<'a, 'b> StatementParser<'a, 'b> {
         let token = self.parser.next_token()?;
         let statement = match token.kind {
             lexer::Kind::Equals => self.parse_assignment(lval)?,
+            lexer::Kind::SquareOpen => self.parse_slice_assignment(lval)?,
             lexer::Kind::ParenOpen => {
                 self.parser.backlog.push(token);
                 self.parse_call(lval)?
@@ -1483,6 +1486,23 @@ impl<'a, 'b> StatementParser<'a, 'b> {
         let mut ep = ExpressionParser::new(self.parser);
         let expression = ep.run()?;
         Ok(Statement::Assignment(lval, expression))
+    }
+
+    /// Parse `lval[hi:lo] = expr`. The opening `[` has already been consumed.
+    pub fn parse_slice_assignment(
+        &mut self,
+        lval: Lvalue,
+    ) -> Result<Statement, Error> {
+        let mut ep = ExpressionParser::new(self.parser);
+        let hi = ep.run()?;
+        self.parser.expect_token(lexer::Kind::Colon)?;
+        let mut ep = ExpressionParser::new(self.parser);
+        let lo = ep.run()?;
+        self.parser.expect_token(lexer::Kind::SquareClose)?;
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        let mut ep = ExpressionParser::new(self.parser);
+        let rhs = ep.run()?;
+        Ok(Statement::SliceAssignment(lval, hi, lo, rhs))
     }
 
     pub fn parse_call(&mut self, lval: Lvalue) -> Result<Statement, Error> {
