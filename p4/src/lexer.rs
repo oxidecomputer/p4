@@ -89,6 +89,7 @@ pub enum Kind {
     Bang,
     Tilde,
     Shl,
+    Shr,
     Pipe,
     Carat,
     GreaterThanEquals,
@@ -217,6 +218,7 @@ impl fmt::Display for Kind {
             Kind::Bang => write!(f, "operator !"),
             Kind::Tilde => write!(f, "operator ~"),
             Kind::Shl => write!(f, "operator <<"),
+            Kind::Shr => write!(f, "operator >>"),
             Kind::Pipe => write!(f, "operator |"),
             Kind::Carat => write!(f, "operator ^"),
             Kind::GreaterThanEquals => write!(f, "operator >="),
@@ -414,6 +416,10 @@ impl<'a> Lexer<'a> {
         }
 
         if let Some(t) = self.match_token("<", Kind::AngleOpen) {
+            return Ok(t);
+        }
+
+        if let Some(t) = self.match_token(">>", Kind::Shr) {
             return Ok(t);
         }
 
@@ -972,6 +978,7 @@ impl<'a> Lexer<'a> {
             },
             Some('>') => match chars.next() {
                 Some('=') => return &self.cursor[..2],
+                Some('>') => return &self.cursor[..2],
                 _ => return &self.cursor[..1],
             },
             Some('<') => match chars.next() {

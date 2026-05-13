@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
@@ -657,6 +657,8 @@ pub enum BinOp {
     BitAnd,
     BitOr,
     Xor,
+    Shl,
+    Shr,
 }
 
 impl BinOp {
@@ -673,6 +675,8 @@ impl BinOp {
             BinOp::BitAnd => "bitwise and",
             BinOp::BitOr => "bitwise or",
             BinOp::Xor => "xor",
+            BinOp::Shl => "shift left",
+            BinOp::Shr => "shift right",
         }
     }
 
@@ -1674,6 +1678,8 @@ impl MatchKind {
 pub enum Statement {
     Empty,
     Assignment(Lvalue, Box<Expression>),
+    /// `lval[hi:lo] = expr` (P4-16 spec 8.6).
+    SliceAssignment(Lvalue, Box<Expression>, Box<Expression>, Box<Expression>),
     //TODO get rid of this in favor of ExpressionKind::Call ???
     Call(Call),
     If(IfBlock),
@@ -1691,6 +1697,12 @@ impl Statement {
             Statement::Empty => {}
             Statement::Assignment(lval, xpr) => {
                 lval.accept(v);
+                xpr.accept(v);
+            }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.accept(v);
+                hi.accept(v);
+                lo.accept(v);
                 xpr.accept(v);
             }
             Statement::Call(call) => call.accept(v),
@@ -1714,6 +1726,12 @@ impl Statement {
                 lval.accept_mut(v);
                 xpr.accept_mut(v);
             }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.accept_mut(v);
+                hi.accept_mut(v);
+                lo.accept_mut(v);
+                xpr.accept_mut(v);
+            }
             Statement::Call(call) => call.accept_mut(v),
             Statement::If(if_block) => if_block.accept_mut(v),
             Statement::Variable(var) => var.accept_mut(v),
@@ -1735,6 +1753,12 @@ impl Statement {
                 lval.mut_accept(v);
                 xpr.mut_accept(v);
             }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.mut_accept(v);
+                hi.mut_accept(v);
+                lo.mut_accept(v);
+                xpr.mut_accept(v);
+            }
             Statement::Call(call) => call.mut_accept(v),
             Statement::If(if_block) => if_block.mut_accept(v),
             Statement::Variable(var) => var.mut_accept(v),
@@ -1754,6 +1778,12 @@ impl Statement {
             Statement::Empty => {}
             Statement::Assignment(lval, xpr) => {
                 lval.mut_accept_mut(v);
+                xpr.mut_accept_mut(v);
+            }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.mut_accept_mut(v);
+                hi.mut_accept_mut(v);
+                lo.mut_accept_mut(v);
                 xpr.mut_accept_mut(v);
             }
             Statement::Call(call) => call.mut_accept_mut(v),
