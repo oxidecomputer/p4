@@ -112,9 +112,39 @@ impl<'a> HeaderGenerator<'a> {
             checksum_statements.push(quote! {
                 csum = p4rs::bitmath::add_le(csum.clone(), self.#name.csum())
             });
+            let dump_call = if size == 32
+                && (name_s == "src"
+                    || name_s == "dst"
+                    || name_s.ends_with("_ip")
+                    || name_s.ends_with("_addr"))
+            {
+                quote! { p4rs::dump_ip4(&self.#name) }
+            } else if size == 128 && (name_s == "src" || name_s == "dst") {
+                quote! { p4rs::dump_ip6(&self.#name) }
+            } else if size == 48
+                && (name_s == "src" || name_s == "dst" || name_s.ends_with("_mac"))
+            {
+                quote! { p4rs::dump_mac(&self.#name) }
+            } else if size == 16
+                && (name_s.ends_with("ether_type")
+                    || name_s == "proto_type"
+                    || name_s == "protocol")
+            {
+                quote! { p4rs::dump_ether_type(&self.#name) }
+            } else if size == 8 && (name_s == "protocol" || name_s == "next_hdr") {
+                quote! { p4rs::dump_ip_proto(&self.#name) }
+            } else if size == 8 && name_s == "flags" {
+                quote! { p4rs::dump_tcp_flags(&self.#name) }
+            } else if size == 16 && name_s == "opcode" {
+                quote! { p4rs::dump_arp_op(&self.#name) }
+            } else if size == 8 && name_s == "type" {
+                quote! { p4rs::dump_icmp_type(&self.#name) }
+            } else {
+                quote! { p4rs::dump_bv(&self.#name) }
+            };
             dump_statements.push(quote! {
                 #name_s.cyan(),
-                p4rs::dump_bv(&self.#name)
+                #dump_call
             });
 
             offset += size;
