@@ -122,7 +122,9 @@ impl<'a> HeaderGenerator<'a> {
             } else if size == 128 && (name_s == "src" || name_s == "dst") {
                 quote! { p4rs::dump_ip6(&self.#name) }
             } else if size == 48
-                && (name_s == "src" || name_s == "dst" || name_s.ends_with("_mac"))
+                && (name_s == "src"
+                    || name_s == "dst"
+                    || name_s.ends_with("_mac"))
             {
                 quote! { p4rs::dump_mac(&self.#name) }
             } else if size == 16
@@ -131,7 +133,9 @@ impl<'a> HeaderGenerator<'a> {
                     || name_s == "protocol")
             {
                 quote! { p4rs::dump_ether_type(&self.#name) }
-            } else if size == 8 && (name_s == "protocol" || name_s == "next_hdr") {
+            } else if size == 8
+                && (name_s == "protocol" || name_s == "next_hdr")
+            {
                 quote! { p4rs::dump_ip_proto(&self.#name) }
             } else if size == 8 && name_s == "flags" {
                 quote! { p4rs::dump_tcp_flags(&self.#name) }

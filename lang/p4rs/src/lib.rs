@@ -363,14 +363,30 @@ pub fn dump_tcp_flags(x: &BitVec<u8, Msb0>) -> String {
         return "none".into();
     }
     let mut flags = Vec::new();
-    if v & 0x01 != 0 { flags.push("FIN"); }
-    if v & 0x02 != 0 { flags.push("SYN"); }
-    if v & 0x04 != 0 { flags.push("RST"); }
-    if v & 0x08 != 0 { flags.push("PSH"); }
-    if v & 0x10 != 0 { flags.push("ACK"); }
-    if v & 0x20 != 0 { flags.push("URG"); }
-    if v & 0x40 != 0 { flags.push("ECE"); }
-    if v & 0x80 != 0 { flags.push("CWR"); }
+    if v & 0x01 != 0 {
+        flags.push("FIN");
+    }
+    if v & 0x02 != 0 {
+        flags.push("SYN");
+    }
+    if v & 0x04 != 0 {
+        flags.push("RST");
+    }
+    if v & 0x08 != 0 {
+        flags.push("PSH");
+    }
+    if v & 0x10 != 0 {
+        flags.push("ACK");
+    }
+    if v & 0x20 != 0 {
+        flags.push("URG");
+    }
+    if v & 0x40 != 0 {
+        flags.push("ECE");
+    }
+    if v & 0x80 != 0 {
+        flags.push("CWR");
+    }
     flags.join("|")
 }
 
@@ -564,8 +580,8 @@ mod tests {
 
     #[test]
     fn test_dump_ip_proto() {
-        assert_eq!(dump_ip_proto(&net_bv(&[1])),  "0x01 (ICMPv4)");
-        assert_eq!(dump_ip_proto(&net_bv(&[6])),  "0x06 (TCP)");
+        assert_eq!(dump_ip_proto(&net_bv(&[1])), "0x01 (ICMPv4)");
+        assert_eq!(dump_ip_proto(&net_bv(&[6])), "0x06 (TCP)");
         assert_eq!(dump_ip_proto(&net_bv(&[17])), "0x11 (UDP)");
         assert_eq!(dump_ip_proto(&net_bv(&[58])), "0x3a (ICMPv6)");
         assert_eq!(dump_ip_proto(&net_bv(&[99])), "0x63");
@@ -578,7 +594,10 @@ mod tests {
         assert_eq!(dump_tcp_flags(&net_bv(&[0x12])), "SYN|ACK");
         assert_eq!(dump_tcp_flags(&net_bv(&[0x01])), "FIN");
         assert_eq!(dump_tcp_flags(&net_bv(&[0x04])), "RST");
-        assert_eq!(dump_tcp_flags(&net_bv(&[0xff])), "FIN|SYN|RST|PSH|ACK|URG|ECE|CWR");
+        assert_eq!(
+            dump_tcp_flags(&net_bv(&[0xff])),
+            "FIN|SYN|RST|PSH|ACK|URG|ECE|CWR"
+        );
     }
 
     #[test]
@@ -590,13 +609,13 @@ mod tests {
 
     #[test]
     fn test_dump_icmp_type() {
-        assert_eq!(dump_icmp_type(&net_bv(&[0])),   "0x00 (Echo Reply)");
-        assert_eq!(dump_icmp_type(&net_bv(&[8])),   "0x08 (Echo Request)");
+        assert_eq!(dump_icmp_type(&net_bv(&[0])), "0x00 (Echo Reply)");
+        assert_eq!(dump_icmp_type(&net_bv(&[8])), "0x08 (Echo Request)");
         assert_eq!(dump_icmp_type(&net_bv(&[133])), "0x85 (RS)");
         assert_eq!(dump_icmp_type(&net_bv(&[134])), "0x86 (RA)");
         assert_eq!(dump_icmp_type(&net_bv(&[135])), "0x87 (NS)");
         assert_eq!(dump_icmp_type(&net_bv(&[136])), "0x88 (NA)");
-        assert_eq!(dump_icmp_type(&net_bv(&[50])),  "0x32");
+        assert_eq!(dump_icmp_type(&net_bv(&[50])), "0x32");
     }
 }
 
