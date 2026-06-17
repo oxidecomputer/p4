@@ -523,6 +523,28 @@ pub fn extract_lpm_key(
     table::Key::Lpm(table::Prefix { addr, len })
 }
 
+pub fn extract_bool_action_parameter(
+    parameter_data: &[u8],
+    offset: usize,
+) -> bool {
+    parameter_data[offset] == 1
+}
+
+pub fn extract_bit_action_parameter(
+    parameter_data: &[u8],
+    offset: usize,
+    size: usize,
+) -> BitVec<u8, Msb0> {
+    let mut byte_size = size >> 3;
+    if !size.is_multiple_of(8) {
+        byte_size += 1;
+    }
+    let mut b: BitVec<u8, Msb0> =
+        BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
+    b.resize(size, false);
+    b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -617,26 +639,4 @@ mod tests {
         assert_eq!(dump_icmp_type(&net_bv(&[136])), "0x88 (NA)");
         assert_eq!(dump_icmp_type(&net_bv(&[50])), "0x32");
     }
-}
-
-pub fn extract_bool_action_parameter(
-    parameter_data: &[u8],
-    offset: usize,
-) -> bool {
-    parameter_data[offset] == 1
-}
-
-pub fn extract_bit_action_parameter(
-    parameter_data: &[u8],
-    offset: usize,
-    size: usize,
-) -> BitVec<u8, Msb0> {
-    let mut byte_size = size >> 3;
-    if !size.is_multiple_of(8) {
-        byte_size += 1;
-    }
-    let mut b: BitVec<u8, Msb0> =
-        BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
-    b.resize(size, false);
-    b
 }
