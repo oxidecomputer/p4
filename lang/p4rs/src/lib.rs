@@ -156,9 +156,7 @@ pub struct TableEntry {
 }
 
 pub trait Pipeline: Send {
-    /// Process an input packet and produce a set of output packets. Normally
-    /// there will be a single output packet. However, if the pipeline sets
-    /// `egress_metadata_t.broadcast` there may be multiple output packets.
+    /// Process an input packet and produce a set of output packets.
     fn process_packet<'a>(
         &mut self,
         port: u16,
@@ -267,6 +265,20 @@ pub fn bitvec_to_bitvec16(mut x: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     x
 }
 
+/// Resize a BitVec to the target width, zero-extending or truncating.
+///
+/// Implements P4-16 spec section 8.11.2 implicit width casts between
+/// `bit<W>` types.
+///
+/// [P4-16 spec]: https://p4.org/wp-content/uploads/sites/53/2024/10/P4-16-spec-v1.2.5.html#sec-implicit-casts
+pub fn bitvec_resize(
+    mut x: BitVec<u8, Msb0>,
+    width: usize,
+) -> BitVec<u8, Msb0> {
+    x.resize(width, false);
+    x
+}
+
 pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
     if x.is_empty() {
         "∅".into()
@@ -334,27 +346,33 @@ pub fn extract_ternary_key(
 pub fn extract_lpm_key(
     keyset_data: &[u8],
     offset: usize,
-    _len: usize,
+    len: usize,
 ) -> table::Key {
-    let (addr, len) = match keyset_data.len() {
+    let (addr, prefix_len) = match len {
         // IPv4
-        5 => {
+        4 => {
             let data: [u8; 4] =
                 keyset_data[offset..offset + 4].try_into().unwrap();
             (IpAddr::from(data), keyset_data[offset + 4])
         }
         // IPv6
-        17 => {
+        16 => {
             let data: [u8; 16] =
                 keyset_data[offset..offset + 16].try_into().unwrap();
             (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
-            panic!("lpm: key must be len 5 (ipv4) or 17 (ipv6) found {}", x);
+            panic!(
+                "lpm: field size must be 4 (ipv4) or 16 (ipv6), found {}",
+                x,
+            );
         }
     };
 
-    table::Key::Lpm(table::Prefix { addr, len })
+    table::Key::Lpm(table::Prefix {
+        addr,
+        len: prefix_len,
+    })
 }
 
 pub fn extract_bool_action_parameter(
@@ -377,4 +395,17 @@ pub fn extract_bit_action_parameter(
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
     b.resize(size, false);
     b
+}
+
+/// Collect output ports from a bitmap, excluding the ingress port.
+///
+/// The bitmap is interpreted as a little-endian integer: bit N
+/// (i.e., the bit with numeric value 2^N) corresponds to port N.
+/// This matches the encoding used by P4 arithmetic (`128w1 << port`)
+/// via `shl_le`.
+pub fn replicate(bitmap: &BitVec<u8, Msb0>, ingress_port: u16) -> Vec<u16> {
+    let val: u128 = bitmap.load_le();
+    (0u16..128)
+        .filter(|&p| val & (1u128 << p) != 0 && p != ingress_port)
+        .collect()
 }

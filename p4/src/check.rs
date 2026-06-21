@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::collections::HashMap;
 
@@ -256,6 +256,54 @@ fn check_statement_block(
                         ),
                         token: xpr.token.clone(),
                     });
+                }
+            }
+            // P4-16 spec 8.6: lval[hi:lo] = x requires x to be bit<hi - lo + 1>.
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                if !hlir.lvalue_decls.contains_key(lval) {
+                    diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!(
+                            "Could not resolve lvalue {}",
+                            lval.name,
+                        ),
+                        token: lval.token.clone(),
+                    });
+                    return;
+                }
+
+                let expression_type =
+                    match hlir.expression_types.get(xpr.as_ref()) {
+                        Some(ty) => ty,
+                        None => {
+                            diags.push(Diagnostic {
+                                level: Level::Error,
+                                message: "Could not determine expression type"
+                                    .to_owned(),
+                                token: xpr.token.clone(),
+                            });
+                            return;
+                        }
+                    };
+
+                // Verify RHS width matches the slice width (P4-16 spec 8.6).
+                if let (
+                    ExpressionKind::IntegerLit(hi_val),
+                    ExpressionKind::IntegerLit(lo_val),
+                ) = (&hi.kind, &lo.kind)
+                {
+                    // hi_val >= lo_val guaranteed by HLIR validation.
+                    let expected_width = (hi_val - lo_val + 1) as usize;
+                    let expected_ty = Type::Bit(expected_width);
+                    if *expression_type != expected_ty {
+                        diags.push(Diagnostic {
+                            level: Level::Error,
+                            message: format!(
+                                "Slice [{hi_val}:{lo_val}] requires {expected_ty}, got {expression_type}"
+                            ),
+                            token: xpr.token.clone(),
+                        });
+                    }
                 }
             }
             Statement::Empty => {}
@@ -582,6 +630,10 @@ fn check_statement_lvalues(
             ));
         }
         Statement::Assignment(lval, expr) => {
+            diags.extend(&check_lvalue(lval, ast, names, None));
+            diags.extend(&check_expression_lvalues(expr, ast, names));
+        }
+        Statement::SliceAssignment(lval, _hi, _lo, expr) => {
             diags.extend(&check_lvalue(lval, ast, names, None));
             diags.extend(&check_expression_lvalues(expr, ast, names));
         }

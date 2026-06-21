@@ -1,8 +1,8 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::{
     expression::ExpressionGenerator, is_header, is_header_member,
-    is_rust_reference, rust_type,
+    is_rust_reference, pipeline::REPLICATE_EXTERN, rust_type,
 };
 use p4::ast::{
     Call, Control, DeclarationInfo, Direction, ExpressionKind, NameInfo,
@@ -100,6 +100,61 @@ impl<'a> StatementGenerator<'a> {
                     quote! { #lhs = #rhs; }
                 }
             }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                let eg = ExpressionGenerator::new(self.hlir);
+                let lhs = eg.generate_lvalue(lval);
+                let rhs = eg.generate_expression(xpr.as_ref());
+
+                let ni =
+                    self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
+                        panic!(
+                            "unresolved lvalue {:#?} in slice assignment",
+                            lval
+                        )
+                    });
+                let field_width = match &ni.ty {
+                    Type::Bit(w) | Type::Varbit(w) | Type::Int(w) => *w,
+                    ty => panic!(
+                        "slice assignment on non-bit type {:?} reached codegen",
+                        ty,
+                    ),
+                };
+
+                let (hi_val, lo_val) =
+                    ExpressionGenerator::slice_bounds(hi, lo);
+
+                if ExpressionGenerator::slice_is_contiguous(
+                    hi_val,
+                    lo_val,
+                    field_width,
+                ) {
+                    let slice = eg.generate_slice(hi, lo, field_width);
+
+                    // Temporary prevents overlapping borrows when
+                    // LHS and RHS alias (e.g. `x[7:4] = x[3:0]`).
+                    quote! {
+                        {
+                            let __slice_rhs = #rhs.to_owned();
+                            #lhs #slice .copy_from_bitslice(&__slice_rhs);
+                        }
+                    }
+                } else {
+                    // Non-contiguous after byte reversal; instead, use
+                    // arithmetic (load, mask, shift, store).
+                    let slice_width = hi_val - lo_val + 1;
+                    let mask_val = (1u128 << slice_width) - 1;
+                    quote! {
+                        {
+                            let __rhs_val: u128 = #rhs.load_le();
+                            let __lhs_val: u128 = #lhs.load_le();
+                            let __mask: u128 = #mask_val << #lo_val;
+                            let __new = (__lhs_val & !__mask)
+                                | ((__rhs_val & #mask_val) << #lo_val);
+                            #lhs.store_le(__new);
+                        }
+                    }
+                }
+            }
             Statement::Call(c) => match &self.context {
                 StatementContext::Control(control) => {
                     let mut ts = TokenStream::new();
@@ -140,6 +195,13 @@ impl<'a> StatementGenerator<'a> {
                         let mut ini = eg.generate_expression(xpr.as_ref());
                         if let ExpressionKind::Lvalue(_) = xpr.kind {
                             ini = quote! { #ini.clone() };
+                        }
+                        // Slice reads (e.g., x[15:0]) produce a &BitSlice
+                        // reference. Convert to owned BitVec for assignment.
+                        if let ExpressionKind::Index(_, inner) = &xpr.kind {
+                            if let ExpressionKind::Slice(_, _) = &inner.kind {
+                                ini = quote! { #ini.to_bitvec() };
+                            }
                         }
                         let ini_ty =
                             self.hlir.expression_types.get(xpr).unwrap_or_else(
@@ -309,6 +371,29 @@ impl<'a> StatementGenerator<'a> {
             "isValid" => {
                 self.generate_header_get_validity(c, tokens);
             }
+            "replicate" => {
+                // The Replicate extern is a compile-time marker. The
+                // pipeline codegen scans the AST for this call to find
+                // the replication bitmap, then generates the replication
+                // loop at the pipeline level (between ingress and egress)
+                // where it has access to the egress function and tables.
+                //
+                // The call is elided from generated code. Validate the
+                // contract here so errors surface at compile time.
+                let root = c.lval.root();
+                let is_replicate = control.variables.iter().any(|v| {
+                    v.name == root
+                        && matches!(
+                            &v.ty,
+                            Type::UserDefined(n) if n == REPLICATE_EXTERN
+                        )
+                });
+                if is_replicate {
+                    self.validate_replicate_call(control, c, tokens);
+                } else {
+                    self.generate_control_extern_call(control, c, tokens);
+                }
+            }
             _ => {
                 // assume we are at an extern call
 
@@ -329,25 +414,15 @@ impl<'a> StatementGenerator<'a> {
         let eg = ExpressionGenerator::new(self.hlir);
         let mut args = Vec::new();
 
-        for a in &c.args {
-            let arg_xpr = eg.generate_expression(a.as_ref());
-            args.push(arg_xpr);
-        }
-
-        let lvref: Vec<TokenStream> = c
-            .lval
-            .name
-            .split('.')
-            .map(|x| format_ident!("{}_action_{}", control.name, x))
-            .map(|x| quote! { #x })
-            .collect();
-
+        // Control parameters come first in the action function signature
+        // (see generate_control_action in control.rs), followed by
+        // extern references, then action-specific parameters.
         for a in &control.parameters {
             let arg = format_ident!("{}", a.name);
             args.push(quote! { #arg });
         }
 
-        // pass externs instantiated at control scope to actions
+        // Pass externs instantiated at control scope to actions.
         for x in &control.variables {
             if let Type::UserDefined(typename) = &x.ty {
                 if self.ast.get_extern(typename).is_some() {
@@ -356,6 +431,25 @@ impl<'a> StatementGenerator<'a> {
                 }
             }
         }
+
+        // Action-specific arguments last. We clone lvalue args to avoid
+        // moving out from mutable references.
+        for a in &c.args {
+            let arg_xpr = eg.generate_expression(a.as_ref());
+            if matches!(a.kind, ExpressionKind::Lvalue(_)) {
+                args.push(quote! { #arg_xpr.clone() });
+            } else {
+                args.push(arg_xpr);
+            }
+        }
+
+        let lvref: Vec<TokenStream> = c
+            .lval
+            .name
+            .split('.')
+            .map(|x| format_ident!("{}_action_{x}", control.name))
+            .map(|x| quote! { #x })
+            .collect();
 
         tokens.extend(quote! {
             #(#lvref).*(#(#args),*);
@@ -387,6 +481,25 @@ impl<'a> StatementGenerator<'a> {
         tokens.extend(quote! {
             #(#lvref).*(#(#args),*);
         })
+    }
+
+    /// Validate a `Replicate.replicate(bitmap)` call at compile time.
+    /// The argument can be any expression that evaluates to a bit<N>
+    /// type (field reference, binary expression, etc.).
+    fn validate_replicate_call(
+        &self,
+        _control: &Control,
+        c: &Call,
+        tokens: &mut TokenStream,
+    ) {
+        if c.args.len() != 1 {
+            let msg = format!(
+                "Replicate.replicate() requires exactly one argument, \
+                 found {}",
+                c.args.len()
+            );
+            tokens.extend(quote! { compile_error!(#msg); });
+        }
     }
 
     fn generate_control_apply_body_call(
@@ -646,6 +759,12 @@ impl<'a> StatementGenerator<'a> {
             }
             (Type::Bit(x), Type::Bit(16)) if *x <= 16 => {
                 quote! { p4rs::bitvec_to_bitvec16 }
+            }
+            // General bit-width conversion (P4-16 spec 8.11.2):
+            // zero-extend or truncate via resize to the target width.
+            (Type::Bit(_), Type::Bit(y)) => {
+                let target = *y;
+                quote! { (|__bv| p4rs::bitvec_resize(__bv, #target)) }
             }
             _ => todo!("type converter for {} to {}", from, to),
         }

@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::ast::{
     BinOp, Constant, Control, DeclarationInfo, Expression, ExpressionKind,
@@ -84,6 +84,37 @@ impl<'a> HlirGenerator<'a> {
                 Statement::Assignment(lval, xpr) => {
                     self.lvalue(lval, names);
                     self.expression(xpr, names);
+                }
+                Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                    self.lvalue(lval, names);
+                    self.expression(hi, names);
+                    self.expression(lo, names);
+                    self.expression(xpr, names);
+
+                    // Validate slice bounds.
+                    if let Some(name_info) = self.hlir.lvalue_decls.get(lval) {
+                        let width = match &name_info.ty {
+                            Type::Bit(w) | Type::Varbit(w) | Type::Int(w) => *w,
+                            _ => {
+                                self.diags.push(Diagnostic {
+                                    level: Level::Error,
+                                    message: format!(
+                                        "slice assignment requires a \
+                                         bit type, got {}",
+                                        name_info.ty,
+                                    ),
+                                    token: lval.token.clone(),
+                                });
+                                continue;
+                            }
+                        };
+                        self.validate_slice_assignment(
+                            hi,
+                            lo,
+                            width,
+                            &lval.token,
+                        );
+                    }
                 }
                 Statement::Call(c) => {
                     // pop the function name off the lval before resolving
@@ -296,7 +327,7 @@ impl<'a> HlirGenerator<'a> {
                 }
             },
             Type::Varbit(width) => match &xpr.kind {
-                ExpressionKind::Slice(begin, end) => {
+                ExpressionKind::Slice(end, begin) => {
                     let (begin_val, end_val) = self.slice(begin, end, width)?;
                     let w = end_val - begin_val + 1;
                     Some(Type::Varbit(w as usize))
@@ -312,7 +343,7 @@ impl<'a> HlirGenerator<'a> {
                 }
             },
             Type::Int(width) => match &xpr.kind {
-                ExpressionKind::Slice(begin, end) => {
+                ExpressionKind::Slice(end, begin) => {
                     let (begin_val, end_val) = self.slice(begin, end, width)?;
                     let w = end_val - begin_val + 1;
                     Some(Type::Int(w as usize))
@@ -376,17 +407,16 @@ impl<'a> HlirGenerator<'a> {
         end: &Expression,
         width: usize,
     ) -> Option<(i128, i128)> {
-        // According to P4-16 section 8.5, slice values must be
-        // known at compile time. For now just enfoce integer
-        // literals only, we can get fancier later with other
-        // things that can be figured out at compile time.
+        // P4-16 section 8.6: slice bounds must be compile-time
+        // known values. Currently only integer literals are accepted, while
+        // constant expressions are not yet supported.
         let begin_val = match &begin.kind {
             ExpressionKind::IntegerLit(v) => *v,
             _ => {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message:
-                        "only interger literals are supported as slice bounds"
+                        "only integer literals are supported as slice bounds"
                             .into(),
                     token: begin.token.clone(),
                 });
@@ -399,7 +429,7 @@ impl<'a> HlirGenerator<'a> {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message:
-                        "only interger literals are supported as slice bounds"
+                        "only integer literals are supported as slice bounds"
                             .into(),
                     token: begin.token.clone(),
                 });
@@ -423,17 +453,84 @@ impl<'a> HlirGenerator<'a> {
             });
             return None;
         }
-        if begin_val >= end_val {
+        if begin_val > end_val {
             self.diags.push(Diagnostic {
                 level: Level::Error,
                 message: "slice upper bound must be \
-                    greater than the lower bound"
+                    greater than or equal to the lower bound"
                     .into(),
                 token: begin.token.clone(),
             });
             return None;
         }
+
         Some((begin_val, end_val))
+    }
+
+    /// Validate bounds for a slice assignment `lval[hi:lo] = expr`.
+    /// Takes (hi, lo) in the natural P4 order, unlike `slice()`
+    /// which uses swapped (lo, hi) naming.
+    fn validate_slice_assignment(
+        &mut self,
+        hi: &Expression,
+        lo: &Expression,
+        width: usize,
+        token: &crate::lexer::Token,
+    ) {
+        let hi_val = match &hi.kind {
+            ExpressionKind::IntegerLit(v) => *v,
+            _ => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message:
+                        "only integer literals are supported as slice bounds"
+                            .into(),
+                    token: hi.token.clone(),
+                });
+                return;
+            }
+        };
+        let lo_val = match &lo.kind {
+            ExpressionKind::IntegerLit(v) => *v,
+            _ => {
+                self.diags.push(Diagnostic {
+                    level: Level::Error,
+                    message:
+                        "only integer literals are supported as slice bounds"
+                            .into(),
+                    token: lo.token.clone(),
+                });
+                return;
+            }
+        };
+
+        let width = i128::try_from(width).unwrap();
+
+        if !(0..width).contains(&hi_val) {
+            self.diags.push(Diagnostic {
+                level: Level::Error,
+                message: "slice upper bound out of bounds".into(),
+                token: hi.token.clone(),
+            });
+            return;
+        }
+        if !(0..width).contains(&lo_val) {
+            self.diags.push(Diagnostic {
+                level: Level::Error,
+                message: "slice lower bound out of bounds".into(),
+                token: lo.token.clone(),
+            });
+            return;
+        }
+        if hi_val < lo_val {
+            self.diags.push(Diagnostic {
+                level: Level::Error,
+                message: "slice upper bound must be \
+                    greater than or equal to the lower bound"
+                    .into(),
+                token: token.clone(),
+            });
+        }
     }
 
     fn lvalue(
@@ -499,5 +596,72 @@ impl<'a> HlirGenerator<'a> {
             let mut local_names = names.clone();
             self.statement_block(&s.statements, &mut local_names);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::AST;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use std::sync::Arc;
+
+    fn check_p4(source: &str) -> crate::check::Diagnostics {
+        let lines: Vec<&str> = source.lines().collect();
+        let filename = Arc::new("test.p4".to_string());
+        let lexer = Lexer::new(lines, filename);
+        let mut parser = Parser::new(lexer);
+        let mut ast = AST::default();
+        parser.run(&mut ast).expect("parse failed");
+        let (_hlir, diags) = crate::check::all(&ast);
+        diags
+    }
+
+    #[test]
+    fn slice_read_clean() {
+        let source = r#"
+header h_t {
+    bit<32> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr) {
+    apply {
+        bit<8> x = hdr.h.f[31:24];
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn slice_assign_clean() {
+        let source = r#"
+header h_t {
+    bit<32> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr) {
+    apply {
+        hdr.h.f[31:24] = 8w0;
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
     }
 }

@@ -25,6 +25,7 @@ impl<'a> StructGenerator<'a> {
         let mut valid_member_size = Vec::new();
         let mut to_bitvec_stmts = Vec::new();
         let mut dump_statements = Vec::new();
+        let mut default_fields = Vec::new();
         let fmt = "{}: {}\n".repeat(s.members.len());
         let fmt = fmt.trim();
 
@@ -54,6 +55,9 @@ impl<'a> StructGenerator<'a> {
                             }
                         });
 
+                        default_fields.push(quote! {
+                            #name: #ty::default()
+                        });
                         dump_statements.push(quote! {
                             #name_s.blue(),
                             self.#name.dump()
@@ -67,6 +71,9 @@ impl<'a> StructGenerator<'a> {
                 }
                 Type::Bit(size) => {
                     members.push(quote! { pub #name: BitVec::<u8, Msb0> });
+                    default_fields.push(quote! {
+                        #name: bitvec![u8, Msb0; 0; #size]
+                    });
                     dump_statements.push(quote! {
                         #name_s.blue(),
                         p4rs::dump_bv(&self.#name)
@@ -81,6 +88,9 @@ impl<'a> StructGenerator<'a> {
                 }
                 Type::Bool => {
                     members.push(quote! { pub #name: bool });
+                    default_fields.push(quote! {
+                        #name: false
+                    });
                     dump_statements.push(quote! {
                         #name_s.blue(),
                         self.#name
@@ -99,9 +109,17 @@ impl<'a> StructGenerator<'a> {
         let name = format_ident!("{}", s.name);
 
         let mut structure = quote! {
-            #[derive(Debug, Default, Clone)]
+            #[derive(Debug, Clone)]
             pub struct #name {
                 #(#members),*
+            }
+
+            impl Default for #name {
+                fn default() -> Self {
+                    Self {
+                        #(#default_fields),*
+                    }
+                }
             }
         };
         if !valid_member_size.is_empty() {
