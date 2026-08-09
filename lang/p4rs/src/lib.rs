@@ -61,7 +61,7 @@
 #![allow(non_camel_case_types)]
 
 use std::fmt;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 pub use error::TryFromSliceError;
 use serde::{Deserialize, Serialize};
@@ -276,6 +276,172 @@ pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
     }
 }
 
+pub fn dump_ip4(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 32 {
+        return dump_bv(x);
+    }
+    let v: u32 = x.load_le();
+    Ipv4Addr::from(v).to_string()
+}
+
+pub fn dump_ip6(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 128 {
+        return dump_bv(x);
+    }
+    let v: u128 = x.load_le();
+    Ipv6Addr::from(v).to_string()
+}
+
+pub fn dump_mac(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 48 {
+        return dump_bv(x);
+    }
+    let v: u128 = x.load_le();
+    format!(
+        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+        (v >> 40) & 0xff,
+        (v >> 32) & 0xff,
+        (v >> 24) & 0xff,
+        (v >> 16) & 0xff,
+        (v >> 8) & 0xff,
+        v & 0xff,
+    )
+}
+
+pub fn dump_ether_type(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 16 {
+        return dump_bv(x);
+    }
+    let v: u16 = x.load_le();
+    let name = match v {
+        0x0800 => Some("IPv4"),
+        0x0806 => Some("ARP"),
+        0x0901 => Some("Sidecar"),
+        0x8100 => Some("VLAN"),
+        0x86dd => Some("IPv6"),
+        0x8847 => Some("MPLS unicast"),
+        0x8848 => Some("MPLS multicast"),
+        0x88a8 => Some("QinQ"),
+        _ => None,
+    };
+    match name {
+        Some(n) => format!("0x{:04x} ({})", v, n),
+        None => format!("0x{:04x}", v),
+    }
+}
+
+pub fn dump_ip_proto(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 8 {
+        return dump_bv(x);
+    }
+    let v: u8 = x.load_le();
+    let name = match v {
+        1 => Some("ICMPv4"),
+        6 => Some("TCP"),
+        17 => Some("UDP"),
+        41 => Some("IPv6-in-IPv4"),
+        43 => Some("IPv6-Route"),
+        44 => Some("IPv6-Frag"),
+        58 => Some("ICMPv6"),
+        59 => Some("IPv6-NoNxt"),
+        60 => Some("IPv6-Opts"),
+        132 => Some("SCTP"),
+        _ => None,
+    };
+    match name {
+        Some(n) => format!("0x{:02x} ({})", v, n),
+        None => format!("0x{:02x}", v),
+    }
+}
+
+pub fn dump_tcp_flags(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 8 {
+        return dump_bv(x);
+    }
+    let v: u8 = x.load_le();
+    if v == 0 {
+        return "none".into();
+    }
+    let mut flags = Vec::new();
+    if v & 0x01 != 0 {
+        flags.push("FIN");
+    }
+    if v & 0x02 != 0 {
+        flags.push("SYN");
+    }
+    if v & 0x04 != 0 {
+        flags.push("RST");
+    }
+    if v & 0x08 != 0 {
+        flags.push("PSH");
+    }
+    if v & 0x10 != 0 {
+        flags.push("ACK");
+    }
+    if v & 0x20 != 0 {
+        flags.push("URG");
+    }
+    if v & 0x40 != 0 {
+        flags.push("ECE");
+    }
+    if v & 0x80 != 0 {
+        flags.push("CWR");
+    }
+    flags.join("|")
+}
+
+pub fn dump_arp_op(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 16 {
+        return dump_bv(x);
+    }
+    let v: u16 = x.load_le();
+    let name = match v {
+        1 => Some("Request"),
+        2 => Some("Reply"),
+        3 => Some("RARP Request"),
+        4 => Some("RARP Reply"),
+        _ => None,
+    };
+    match name {
+        Some(n) => format!("0x{:04x} ({})", v, n),
+        None => format!("0x{:04x}", v),
+    }
+}
+
+pub fn dump_icmp_type(x: &BitVec<u8, Msb0>) -> String {
+    if x.len() != 8 {
+        return dump_bv(x);
+    }
+    let v: u8 = x.load_le();
+    // Types 0-127 use ICMPv4 semantics; types 128-255 are exclusively ICMPv6.
+    let name = match v {
+        // ICMPv4
+        0 => Some("Echo Reply"),
+        3 => Some("Dest Unreachable"),
+        5 => Some("Redirect"),
+        8 => Some("Echo Request"),
+        11 => Some("Time Exceeded"),
+        12 => Some("Parameter Problem"),
+        // ICMPv6 (128+ are unambiguously ICMPv6)
+        128 => Some("Echo Request"),
+        129 => Some("Echo Reply"),
+        130 => Some("MLD Query"),
+        131 => Some("MLD Report"),
+        132 => Some("MLD Done"),
+        133 => Some("RS"),
+        134 => Some("RA"),
+        135 => Some("NS"),
+        136 => Some("NA"),
+        137 => Some("Redirect"),
+        143 => Some("MLDv2 Report"),
+        _ => None,
+    };
+    match name {
+        Some(n) => format!("0x{:02x} ({})", v, n),
+        None => format!("0x{:02x}", v),
+    }
+}
+
 pub fn extract_exact_key(
     keyset_data: &[u8],
     offset: usize,
@@ -377,4 +543,100 @@ pub fn extract_bit_action_parameter(
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
     b.resize(size, false);
     b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Construct a bitvec as it would appear after header::set() — bytes are
+    // reversed for multi-byte fields (>8 bits), unchanged for single-byte fields.
+    fn net_bv(bytes: &[u8]) -> BitVec<u8, Msb0> {
+        let mut v = bytes.to_vec();
+        if v.len() > 1 {
+            v.reverse();
+        }
+        BitVec::<u8, Msb0>::from_vec(v)
+    }
+
+    #[test]
+    fn test_dump_ip4() {
+        assert_eq!(dump_ip4(&net_bv(&[192, 168, 1, 1])), "192.168.1.1");
+        assert_eq!(dump_ip4(&net_bv(&[10, 0, 0, 1])), "10.0.0.1");
+        assert_eq!(dump_ip4(&net_bv(&[0, 0, 0, 0])), "0.0.0.0");
+        assert_eq!(dump_ip4(&net_bv(&[255, 255, 255, 255])), "255.255.255.255");
+    }
+
+    #[test]
+    fn test_dump_ip6() {
+        let mut fd00_1 = [0u8; 16];
+        fd00_1[0] = 0xfd;
+        fd00_1[15] = 0x01;
+        assert_eq!(dump_ip6(&net_bv(&fd00_1)), "fd00::1");
+
+        let mut loopback = [0u8; 16];
+        loopback[15] = 1;
+        assert_eq!(dump_ip6(&net_bv(&loopback)), "::1");
+    }
+
+    #[test]
+    fn test_dump_mac() {
+        assert_eq!(
+            dump_mac(&net_bv(&[0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])),
+            "aa:bb:cc:dd:ee:ff"
+        );
+        assert_eq!(
+            dump_mac(&net_bv(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
+            "00:00:00:00:00:00"
+        );
+    }
+
+    #[test]
+    fn test_dump_ether_type() {
+        assert_eq!(dump_ether_type(&net_bv(&[0x08, 0x00])), "0x0800 (IPv4)");
+        assert_eq!(dump_ether_type(&net_bv(&[0x08, 0x06])), "0x0806 (ARP)");
+        assert_eq!(dump_ether_type(&net_bv(&[0x86, 0xdd])), "0x86dd (IPv6)");
+        assert_eq!(dump_ether_type(&net_bv(&[0x09, 0x01])), "0x0901 (Sidecar)");
+        assert_eq!(dump_ether_type(&net_bv(&[0x12, 0x34])), "0x1234");
+    }
+
+    #[test]
+    fn test_dump_ip_proto() {
+        assert_eq!(dump_ip_proto(&net_bv(&[1])), "0x01 (ICMPv4)");
+        assert_eq!(dump_ip_proto(&net_bv(&[6])), "0x06 (TCP)");
+        assert_eq!(dump_ip_proto(&net_bv(&[17])), "0x11 (UDP)");
+        assert_eq!(dump_ip_proto(&net_bv(&[58])), "0x3a (ICMPv6)");
+        assert_eq!(dump_ip_proto(&net_bv(&[99])), "0x63");
+    }
+
+    #[test]
+    fn test_dump_tcp_flags() {
+        assert_eq!(dump_tcp_flags(&net_bv(&[0x00])), "none");
+        assert_eq!(dump_tcp_flags(&net_bv(&[0x02])), "SYN");
+        assert_eq!(dump_tcp_flags(&net_bv(&[0x12])), "SYN|ACK");
+        assert_eq!(dump_tcp_flags(&net_bv(&[0x01])), "FIN");
+        assert_eq!(dump_tcp_flags(&net_bv(&[0x04])), "RST");
+        assert_eq!(
+            dump_tcp_flags(&net_bv(&[0xff])),
+            "FIN|SYN|RST|PSH|ACK|URG|ECE|CWR"
+        );
+    }
+
+    #[test]
+    fn test_dump_arp_op() {
+        assert_eq!(dump_arp_op(&net_bv(&[0x00, 0x01])), "0x0001 (Request)");
+        assert_eq!(dump_arp_op(&net_bv(&[0x00, 0x02])), "0x0002 (Reply)");
+        assert_eq!(dump_arp_op(&net_bv(&[0x00, 0x05])), "0x0005");
+    }
+
+    #[test]
+    fn test_dump_icmp_type() {
+        assert_eq!(dump_icmp_type(&net_bv(&[0])), "0x00 (Echo Reply)");
+        assert_eq!(dump_icmp_type(&net_bv(&[8])), "0x08 (Echo Request)");
+        assert_eq!(dump_icmp_type(&net_bv(&[133])), "0x85 (RS)");
+        assert_eq!(dump_icmp_type(&net_bv(&[134])), "0x86 (RA)");
+        assert_eq!(dump_icmp_type(&net_bv(&[135])), "0x87 (NS)");
+        assert_eq!(dump_icmp_type(&net_bv(&[136])), "0x88 (NA)");
+        assert_eq!(dump_icmp_type(&net_bv(&[50])), "0x32");
+    }
 }
