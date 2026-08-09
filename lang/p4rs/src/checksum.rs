@@ -86,7 +86,12 @@ fn bvec_csum(bv: &BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let buf = x.to_be_bytes();
     let mut c: u16 = 0;
     for i in (0..16).step_by(2) {
-        c += u16::from_be_bytes([buf[i], buf[i + 1]])
+        let (mut result, overflow) =
+            c.overflowing_add(u16::from_be_bytes([buf[i], buf[i + 1]]));
+        if overflow {
+            result += 1;
+        }
+        c = result;
     }
     let c = !c;
     let mut result = bitvec![u8, Msb0; 0u8, 16];
