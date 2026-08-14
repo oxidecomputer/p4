@@ -334,23 +334,26 @@ pub fn extract_ternary_key(
 pub fn extract_lpm_key(
     keyset_data: &[u8],
     offset: usize,
-    _len: usize,
+    len: usize,
 ) -> table::Key {
-    let (addr, len) = match keyset_data.len() {
+    // The wire format for an lpm key is the address bytes followed by a
+    // one-byte prefix length. Use the field width to locate it so lpm keys
+    // compose with other keys in a keyset.
+    let (addr, len) = match len {
         // IPv4
-        5 => {
+        4 => {
             let data: [u8; 4] =
                 keyset_data[offset..offset + 4].try_into().unwrap();
             (IpAddr::from(data), keyset_data[offset + 4])
         }
         // IPv6
-        17 => {
+        16 => {
             let data: [u8; 16] =
                 keyset_data[offset..offset + 16].try_into().unwrap();
             (IpAddr::from(data), keyset_data[offset + 16])
         }
         x => {
-            panic!("lpm: key must be len 5 (ipv4) or 17 (ipv6) found {}", x);
+            panic!("lpm: field must be 4 (ipv4) or 16 (ipv6) bytes, got {x}");
         }
     };
 
