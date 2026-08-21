@@ -729,13 +729,16 @@ impl<'a> PipelineGenerator<'a> {
                     });
                     offset += 1; // for the prefix length byte
                 }
-                MatchKind::Range => keys.push(quote! {
-                    p4rs::extract_range_key(
-                        keyset_data,
-                        #offset,
-                        #sz,
-                    )
-                }),
+                MatchKind::Range => {
+                    keys.push(quote! {
+                        p4rs::extract_range_key(
+                            keyset_data,
+                            #offset,
+                            #sz,
+                        )
+                    });
+                    offset += sz; // range takes len + len
+                }
             }
             offset += sz;
         }
