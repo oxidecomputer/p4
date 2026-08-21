@@ -239,10 +239,16 @@ impl<'a> packet_in<'a> {
 
 //XXX: remove once classifier defined in terms of bitvecs
 pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> table::BigUintKey {
-    let s = bv.as_raw_slice();
+    let mut bytes = bv.as_raw_slice().to_vec();
+
+    // Align the last bits
+    if let Some(last) = bytes.last_mut() {
+        *last >>= (8 - bv.len() % 8) % 8;
+    }
+
     table::BigUintKey {
-        value: num::BigUint::from_bytes_le(s),
-        width: s.len(),
+        value: num::BigUint::from_bytes_le(&bytes),
+        width: bytes.len(),
     }
 }
 
@@ -377,4 +383,25 @@ pub fn extract_bit_action_parameter(
         BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
     b.resize(size, false);
     b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use num::bigint::BigUint;
+
+    /// Checks [`bitvec_to_biguint`] is semantically equivalent to `load_le`
+    /// even with non-byte-aligned widths.
+    #[test]
+    fn bitvec_to_biguint_non_byte_aligned() {
+        for width in 1..=16 {
+            let mut bv = bitvec![u8, Msb0; 0; width];
+            bv.store_le(0xbeefu16);
+
+            assert_eq!(
+                bitvec_to_biguint(&bv).value,
+                BigUint::from(bv.load_le::<u16>()),
+            );
+        }
+    }
 }
