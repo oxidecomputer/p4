@@ -28,6 +28,8 @@ mod range;
 mod table_in_egress_and_ingress;
 #[cfg(test)]
 mod vlan;
+#[cfg(test)]
+mod vrf_router;
 
 pub mod data;
 pub mod packet;
