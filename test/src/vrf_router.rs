@@ -58,7 +58,7 @@ fn vrf_router() -> Result<(), anyhow::Error> {
         0,
     );
 
-    // vrf b (port 0): 10.1.0.0/16 -> port 3
+    // vrf b (port 1): 10.1.0.0/16 -> port 3
     let buf = vrf_key("10.1.0.0".parse().unwrap(), 16, 1);
     pipeline.add_ingress_vrf_router_entry(
         "forward",
