@@ -719,13 +719,16 @@ impl<'a> PipelineGenerator<'a> {
                     });
                     offset += 1; // for care/dontcare indicator
                 }
-                MatchKind::LongestPrefixMatch => keys.push(quote! {
-                    p4rs::extract_lpm_key(
-                        keyset_data,
-                        #offset,
-                        #sz,
-                    )
-                }),
+                MatchKind::LongestPrefixMatch => {
+                    keys.push(quote! {
+                        p4rs::extract_lpm_key(
+                            keyset_data,
+                            #offset,
+                            #sz,
+                        )
+                    });
+                    offset += 1; // for the prefix length byte
+                }
                 MatchKind::Range => keys.push(quote! {
                     p4rs::extract_range_key(
                         keyset_data,
