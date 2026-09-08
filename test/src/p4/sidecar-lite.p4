@@ -625,7 +625,7 @@ control ingress(
     mac_rewrite() mac;
     proxy_arp() pxarp;
     mcast_ingress() mcast;
-    Replicate() rep;
+    Replicate() mcast_rep;
 
     apply {
 
@@ -698,7 +698,10 @@ control ingress(
                     hdr.inner_udp.setInvalid();
                 }
                 router.apply(hdr, ingress, egress);
-                if (egress.port != 16w0) {
+                if (egress.nexthop_v4 != 32w0) {
+                    resolver.apply(hdr, egress);
+                }
+                if (egress.nexthop_v6 != 128w0) {
                     resolver.apply(hdr, egress);
                 }
             }
@@ -736,15 +739,19 @@ control ingress(
 
             // check for multicast replication before unicast routing
             mcast.apply(hdr, ingress, egress);
-            rep.replicate(egress.port_bitmap);
 
             if (egress.port_bitmap == 128w0) {
                 router.apply(hdr, ingress, egress);
-                if (egress.port != 16w0) {
+                if (egress.nexthop_v4 != 32w0) {
+                    resolver.apply(hdr, egress);
+                }
+                if (egress.nexthop_v6 != 128w0) {
                     resolver.apply(hdr, egress);
                 }
             }
         }
+
+        mcast_rep.replicate(egress.port_bitmap);
 
         //
         // Rewrite the mac on the way out the door.

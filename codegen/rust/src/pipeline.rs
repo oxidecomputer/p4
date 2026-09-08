@@ -178,54 +178,89 @@ impl<'a> PipelineGenerator<'a> {
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);
     }
 
-    /// Scan controls for a `Replicate` extern call and extract the bitmap
-    /// argument expression. The `Replicate` extern is a marker. The call
-    /// itself is elided, but its argument tells the pipeline codegen which
-    /// expression drives replication.
-    ///
-    /// The argument can be a simple field reference (e.g., `egress.port_bitmap`)
-    /// or an arbitrary expression
-    /// (e.g., `egress.external_bitmap | egress.underlay_bitmap`).
-    fn find_replicate_bitmap(
-        &self,
-        controls: &[&Control],
-    ) -> Option<Expression> {
-        controls.iter().find_map(|control| {
-            let instances: Vec<&str> = control
-                .variables
-                .iter()
-                .filter(|v| {
-                    matches!(&v.ty, Type::UserDefined(n) if n == REPLICATE_EXTERN)
-                })
-                .map(|v| v.name.as_str())
-                .collect();
+    /// Scan the ingress control for a top-level `Replicate` extern call and
+    /// extract its bitmap argument expression.
+    fn find_replicate_bitmap(&self, control: &Control) -> Option<Expression> {
+        let instances: Vec<&str> = control
+            .variables
+            .iter()
+            .filter(|v| {
+                matches!(&v.ty, Type::UserDefined(n) if n == REPLICATE_EXTERN)
+            })
+            .map(|v| v.name.as_str())
+            .collect();
 
-            Self::find_replicate_in_block(&control.apply, &instances)
-        })
+        let nested = control.apply.statements.iter().any(|stmt| {
+            let Statement::If(if_block) = stmt else {
+                return false;
+            };
+
+            Self::block_calls_replicate(&if_block.block, &instances)
+                || if_block.else_ifs.iter().any(|ei| {
+                    Self::block_calls_replicate(&ei.block, &instances)
+                })
+                || if_block.else_block.as_ref().is_some_and(|eb| {
+                    Self::block_calls_replicate(eb, &instances)
+                })
+        });
+
+        if nested {
+            panic!(
+                "replicate() must be a top-level statement \
+                 in apply, not inside a conditional",
+            );
+        }
+
+        let mut calls =
+            control
+                .apply
+                .statements
+                .iter()
+                .filter_map(|stmt| match stmt {
+                    Statement::Call(call)
+                        if instances.contains(&call.lval.root())
+                            && call.lval.leaf() == REPLICATE_METHOD =>
+                    {
+                        Some(call)
+                    }
+                    _ => None,
+                });
+
+        let first = calls.next();
+        if calls.next().is_some() {
+            panic!(
+                "replicate() may only be called once per control, \
+                 found multiple calls in {}",
+                control.name,
+            );
+        }
+
+        first
+            .and_then(|call| call.args.first())
+            .map(|arg| arg.as_ref().clone())
     }
 
-    /// Recursively search a statement block for `rep.replicate(arg)` calls,
-    /// where `rep` is in `instances`. Returns the argument expression.
-    fn find_replicate_in_block(
+    /// Whether a statement block, or any block nested under it,
+    /// contains a `rep.replicate(arg)` call for `rep` in `instances`.
+    fn block_calls_replicate(
         block: &p4::ast::StatementBlock,
         instances: &[&str],
-    ) -> Option<Expression> {
-        block.statements.iter().find_map(|stmt| match stmt {
-            Statement::Call(call)
-                if instances.contains(&call.lval.root())
-                    && call.lval.leaf() == REPLICATE_METHOD =>
-            {
-                call.args.first().map(|arg| arg.as_ref().clone())
+    ) -> bool {
+        block.statements.iter().any(|stmt| match stmt {
+            Statement::Call(call) => {
+                instances.contains(&call.lval.root())
+                    && call.lval.leaf() == REPLICATE_METHOD
             }
             Statement::If(if_block) => {
-                Self::find_replicate_in_block(&if_block.block, instances)
-                    .or_else(|| {
-                        if_block.else_block.as_ref().and_then(|eb| {
-                            Self::find_replicate_in_block(eb, instances)
-                        })
+                Self::block_calls_replicate(&if_block.block, instances)
+                    || if_block.else_ifs.iter().any(|ei| {
+                        Self::block_calls_replicate(&ei.block, instances)
+                    })
+                    || if_block.else_block.as_ref().is_some_and(|eb| {
+                        Self::block_calls_replicate(eb, instances)
                     })
             }
-            _ => None,
+            _ => false,
         })
     }
 
@@ -241,7 +276,7 @@ impl<'a> PipelineGenerator<'a> {
         let ingress_meta_var = format_ident!("{}", ingress.parameters[1].name);
         let egress_meta_var = format_ident!("{}", egress.parameters[2].name);
         let ingress_meta_type = rust_type(&ingress.parameters[1].ty);
-        let egress_meta_type = rust_type(&ingress.parameters[2].ty);
+        let egress_meta_type = rust_type(&egress.parameters[2].ty);
 
         // determine table arguments
         let ingress_tables = ingress.tables(self.ast);
@@ -264,15 +299,22 @@ impl<'a> PipelineGenerator<'a> {
             });
         }
 
-        let bitmap_expr = self.find_replicate_bitmap(&[ingress, egress]);
+        let bitmap_expr = self.find_replicate_bitmap(ingress);
         let egress_ports = if let Some(expr) = bitmap_expr {
             let eg = ExpressionGenerator::new(self.hlir);
             let bitmap_tks = eg.generate_expression(&expr);
+            // A set bitmap takes precedence. An empty replication set
+            // falls back to the broadcast/unicast logic where pipelines
+            // that mix multicast and unicast forwarding still can emit
+            // unicast packets.
             quote! {
-                let ports: Vec<u16> = {
+                let ports: Vec<u16> = if #egress_meta_var.drop {
+                    Vec::new()
+                } else {
                     let replicated = p4rs::replicate(
                         &#bitmap_tks,
                         port,
+                        self.radix,
                     );
                     if !replicated.is_empty() {
                         replicated
@@ -280,31 +322,25 @@ impl<'a> PipelineGenerator<'a> {
                         (0..self.radix)
                             .filter(|&p| p != port)
                             .collect()
+                    } else if #egress_meta_var.port.is_empty() {
+                        Vec::new()
                     } else {
-                        if #egress_meta_var.port.is_empty()
-                            || #egress_meta_var.drop
-                        {
-                            Vec::new()
-                        } else {
-                            vec![#egress_meta_var.port.load_le()]
-                        }
+                        vec![#egress_meta_var.port.load_le()]
                     }
                 };
             }
         } else {
             quote! {
-                let ports: Vec<u16> = if #egress_meta_var.broadcast {
+                let ports: Vec<u16> = if #egress_meta_var.drop {
+                    Vec::new()
+                } else if #egress_meta_var.broadcast {
                     (0..self.radix)
                         .filter(|&p| p != port)
                         .collect()
+                } else if #egress_meta_var.port.is_empty() {
+                    Vec::new()
                 } else {
-                    if #egress_meta_var.port.is_empty()
-                        || #egress_meta_var.drop
-                    {
-                        Vec::new()
-                    } else {
-                        vec![#egress_meta_var.port.load_le()]
-                    }
+                    vec![#egress_meta_var.port.load_le()]
                 };
             }
         };
@@ -312,6 +348,7 @@ impl<'a> PipelineGenerator<'a> {
         let egress_loop = quote! {
             ports.into_iter()
                 .filter_map(|eport| {
+                    let mut igm = #ingress_meta_var.clone();
                     let mut egm = #egress_meta_var.clone();
                     let mut parsed_ = parsed.clone();
 
@@ -323,7 +360,7 @@ impl<'a> PipelineGenerator<'a> {
 
                     (self.egress)(
                         &mut parsed_,
-                        &mut #ingress_meta_var,
+                        &mut igm,
                         &mut egm,
                         #(#egress_tbl_args),*
                     );
@@ -346,6 +383,7 @@ impl<'a> PipelineGenerator<'a> {
         let egress_loop_headers = quote! {
             ports.into_iter()
                 .filter_map(|eport| {
+                    let mut igm = #ingress_meta_var.clone();
                     let mut egm = #egress_meta_var.clone();
                     let mut parsed_ = parsed.clone();
 
@@ -357,7 +395,7 @@ impl<'a> PipelineGenerator<'a> {
 
                     (self.egress)(
                         &mut parsed_,
-                        &mut #ingress_meta_var,
+                        &mut igm,
                         &mut egm,
                         #(#egress_tbl_args),*
                     );
@@ -388,6 +426,7 @@ impl<'a> PipelineGenerator<'a> {
                     ..Default::default()
                 };
                 let mut #egress_meta_var = #egress_meta_type::default();
+                #egress_meta_var.port = BitVec::new();
 
                 let accept = (self.parse)(
                     pkt, &mut parsed, &mut #ingress_meta_var,
@@ -442,6 +481,7 @@ impl<'a> PipelineGenerator<'a> {
                     ..Default::default()
                 };
                 let mut #egress_meta_var = #egress_meta_type::default();
+                #egress_meta_var.port = BitVec::new();
 
                 let accept = (self.parse)(
                     pkt, &mut parsed, &mut #ingress_meta_var,
@@ -739,15 +779,18 @@ impl<'a> PipelineGenerator<'a> {
                             #sz,
                         )
                     });
-                    offset += 1; // for prefix_len byte
+                    offset += 1; // for the prefix length byte
                 }
-                MatchKind::Range => keys.push(quote! {
-                    p4rs::extract_range_key(
-                        keyset_data,
-                        #offset,
-                        #sz,
-                    )
-                }),
+                MatchKind::Range => {
+                    keys.push(quote! {
+                        p4rs::extract_range_key(
+                            keyset_data,
+                            #offset,
+                            #sz,
+                        )
+                    });
+                    offset += sz; // range takes len + len
+                }
             }
             offset += sz;
         }

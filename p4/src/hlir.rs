@@ -67,7 +67,9 @@ impl<'a> HlirGenerator<'a> {
                 self.lvalue(lval, &mut local_names);
             }
             for lval in &t.actions {
-                self.lvalue(lval, &mut local_names);
+                if lval.name != "NoAction" {
+                    self.lvalue(lval, &mut local_names);
+                }
             }
         }
         self.statement_block(&c.apply, &mut names);

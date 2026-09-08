@@ -37,7 +37,7 @@ control ingress(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-    Replicate() rep;
+    Replicate() replicator;
 
     action drop() { }
 
@@ -49,7 +49,17 @@ control ingress(
         egress.bitmap_a = bitmap;
     }
 
-    table tbl {
+    action set_bitmap_broadcast(bit<128> bitmap) {
+        egress.bitmap_a = bitmap;
+        egress.broadcast = true;
+    }
+
+    action set_bitmap_drop(bit<128> bitmap) {
+        egress.bitmap_a = bitmap;
+        egress.drop = true;
+    }
+
+    table bitmap_table {
         key = {
             ingress.port: exact;
         }
@@ -57,13 +67,15 @@ control ingress(
             drop;
             forward;
             set_bitmap;
+            set_bitmap_broadcast;
+            set_bitmap_drop;
         }
         default_action = drop;
     }
 
     apply {
-        tbl.apply();
-        rep.replicate(egress.bitmap_a | egress.bitmap_b);
+        bitmap_table.apply();
+        replicator.replicate(egress.bitmap_a | egress.bitmap_b);
     }
 
 }
@@ -73,5 +85,10 @@ control egress(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-    apply { }
+    apply {
+        if (ingress.nat == true) {
+            egress.drop = true;
+        }
+        ingress.nat = true;
+    }
 }

@@ -105,14 +105,14 @@ impl<'a> StatementGenerator<'a> {
                 let lhs = eg.generate_lvalue(lval);
                 let rhs = eg.generate_expression(xpr.as_ref());
 
-                let ni =
+                let name_info =
                     self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
                         panic!(
                             "unresolved lvalue {:#?} in slice assignment",
                             lval
                         )
                     });
-                let field_width = match &ni.ty {
+                let field_width = match &name_info.ty {
                     Type::Bit(w) | Type::Varbit(w) | Type::Int(w) => *w,
                     ty => panic!(
                         "slice assignment on non-bit type {:?} reached codegen",
@@ -140,7 +140,9 @@ impl<'a> StatementGenerator<'a> {
                     }
                 } else {
                     // Non-contiguous after byte reversal; instead, use
-                    // arithmetic (load, mask, shift, store).
+                    // arithmetic (load, mask, shift, store). Fields fit
+                    // in the u128 loads because the checker rejects
+                    // widths over 128.
                     let slice_width = hi_val - lo_val + 1;
                     let mask_val = (1u128 << slice_width) - 1;
                     quote! {
@@ -415,7 +417,7 @@ impl<'a> StatementGenerator<'a> {
         let mut args = Vec::new();
 
         // Control parameters come first in the action function signature
-        // (see generate_control_action in control.rs), followed by
+        // (@see generate_control_action in control.rs), followed by
         // extern references, then action-specific parameters.
         for a in &control.parameters {
             let arg = format_ident!("{}", a.name);
@@ -432,7 +434,7 @@ impl<'a> StatementGenerator<'a> {
             }
         }
 
-        // Action-specific arguments last. We clone lvalue args to avoid
+        // Action-specific arguments come last. We clone lvalue args to avoid
         // moving out from mutable references.
         for a in &c.args {
             let arg_xpr = eg.generate_expression(a.as_ref());
@@ -485,7 +487,7 @@ impl<'a> StatementGenerator<'a> {
 
     /// Validate a `Replicate.replicate(bitmap)` call at compile time.
     /// The argument can be any expression that evaluates to a bit<N>
-    /// type (field reference, binary expression, etc.).
+    /// type (e.g., a field reference or binary expression).
     fn validate_replicate_call(
         &self,
         _control: &Control,

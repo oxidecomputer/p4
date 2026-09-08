@@ -1,6 +1,7 @@
 // Copyright 2026 Oxide Computer Company
 
-use pnet::packet::ipv4::Ipv4Packet;
+use p4rs::{packet_in, Pipeline};
+use pnet::packet::ipv4::{Ipv4Packet, MutableIpv4Packet};
 
 use crate::softnpu::{Interface4, SoftNpu};
 
@@ -44,6 +45,41 @@ fn slice_read_top_nibble() -> Result<(), anyhow::Error> {
         42,
         "ipv4.dst[23:20] should be 0xA (top nibble of 0xAB)"
     );
+
+    Ok(())
+}
+
+#[test]
+fn slice_read_sub_byte_field() -> Result<(), anyhow::Error> {
+    let mut pipeline = main_pipeline::new(2);
+
+    let mut buf = [0u8; 34];
+    buf[..6].copy_from_slice(&[0x02, 0, 0, 0, 0, 1]);
+    buf[6..12].copy_from_slice(&[0x02, 0, 0, 0, 0, 0]);
+    buf[12..14].copy_from_slice(&0x0800u16.to_be_bytes());
+
+    {
+        let mut ip = MutableIpv4Packet::new(&mut buf[14..]).unwrap();
+        ip.set_version(4);
+        ip.set_header_length(5);
+        ip.set_total_length(20);
+        ip.set_ttl(0x35);
+        ip.set_source("10.0.0.1".parse().unwrap());
+        ip.set_destination("239.171.2.3".parse().unwrap());
+    }
+
+    let mut pkt = packet_in::new(&buf);
+    let out = pipeline.process_packet(0, &mut pkt);
+    assert_eq!(out.len(), 1, "packet should egress on port 1");
+    assert_eq!(out[0].1, 1);
+
+    let ip_out = Ipv4Packet::new(&out[0].0.header_data[14..]).unwrap();
+    assert_eq!(
+        ip_out.get_next_level_protocol().0,
+        0x5b,
+        "ipv4.ttl[3:0] should read 0x5, the low nibble of 0x35"
+    );
+    assert_eq!(ip_out.get_ttl(), 0x35);
 
     Ok(())
 }

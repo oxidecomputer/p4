@@ -1,5 +1,6 @@
 use crate::softnpu::{RxFrame, SoftNpu, TxFrame};
 use crate::{expect_frames, muffins};
+use p4rs::{packet_in, Pipeline};
 
 p4_macro::use_p4!(p4 = "test/src/p4/mcast.p4", pipeline_name = "mcast");
 
@@ -23,7 +24,7 @@ fn bitmap_ports_1_2() -> Result<(), anyhow::Error> {
     let mut pipeline = main_pipeline::new(4);
 
     let bitmap = port_bitmap(16, &[1, 2]);
-    pipeline.add_ingress_tbl_entry(
+    pipeline.add_ingress_bitmap_table_entry(
         "set_bitmap",
         &0u16.to_le_bytes(),
         &bitmap,
@@ -55,7 +56,7 @@ fn bitmap_no_self_replication() -> Result<(), anyhow::Error> {
 
     // Port 0 is in the bitmap but is also the ingress port.
     let bitmap = port_bitmap(16, &[0, 1, 2]);
-    pipeline.add_ingress_tbl_entry(
+    pipeline.add_ingress_bitmap_table_entry(
         "set_bitmap",
         &0u16.to_le_bytes(),
         &bitmap,
@@ -86,7 +87,7 @@ fn bitmap_empty() -> Result<(), anyhow::Error> {
 
     // Empty bitmap: no ports set.
     let bitmap = port_bitmap(16, &[]);
-    pipeline.add_ingress_tbl_entry(
+    pipeline.add_ingress_bitmap_table_entry(
         "set_bitmap",
         &0u16.to_le_bytes(),
         &bitmap,
@@ -113,6 +114,96 @@ fn bitmap_empty() -> Result<(), anyhow::Error> {
 }
 
 #[test]
+fn metadata_bit_fields_default_to_sized_zeros() {
+    let egress = egress_metadata_t::default();
+
+    assert_eq!(egress.bitmap_a.len(), 128);
+    assert_eq!(egress.bitmap_b.len(), 128);
+    assert_eq!(egress.port_bitmap.len(), 128);
+    assert_eq!(egress.nexthop_v6.len(), 128);
+    assert_eq!(egress.nexthop_v4.len(), 32);
+    assert_eq!(egress.port.len(), 16);
+    assert!(!egress.bitmap_a.any());
+    assert!(!egress.port_bitmap.any());
+}
+
+#[test]
+fn no_table_match_yields_no_egress() -> Result<(), anyhow::Error> {
+    let mut pipeline = main_pipeline::new(4);
+
+    let data = [0u8; 64];
+    let mut pkt = packet_in::new(&data);
+    let out = pipeline.process_packet(0, &mut pkt);
+    let ports: Vec<u16> = out.iter().map(|(_, port)| *port).collect();
+
+    assert_eq!(
+        ports,
+        Vec::<u16>::new(),
+        "an unassigned egress port must not resolve to port 0"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn empty_bitmap_falls_back_to_broadcast() -> Result<(), anyhow::Error> {
+    let mut pipeline = main_pipeline::new(4);
+    let bitmap = port_bitmap(16, &[]);
+    pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap_broadcast",
+        &0u16.to_le_bytes(),
+        &bitmap,
+        0,
+    );
+
+    let data = [0u8; 64];
+    let mut pkt = packet_in::new(&data);
+    let out = pipeline.process_packet(0, &mut pkt);
+    let ports: Vec<u16> = out.iter().map(|(_, port)| *port).collect();
+    assert_eq!(ports, vec![1, 2, 3]);
+
+    Ok(())
+}
+
+#[test]
+fn empty_bitmap_falls_back_to_unicast() -> Result<(), anyhow::Error> {
+    let mut pipeline = main_pipeline::new(4);
+    pipeline.add_ingress_bitmap_table_entry(
+        "forward",
+        &0u16.to_le_bytes(),
+        &1u16.to_le_bytes(),
+        0,
+    );
+
+    let data = [0u8; 64];
+    let mut pkt = packet_in::new(&data);
+    let out = pipeline.process_packet(0, &mut pkt);
+    let ports: Vec<u16> = out.iter().map(|(_, port)| *port).collect();
+    assert_eq!(ports, vec![1]);
+
+    Ok(())
+}
+
+#[test]
+fn drop_precedes_nonempty_bitmap() -> Result<(), anyhow::Error> {
+    let mut pipeline = main_pipeline::new(4);
+    let bitmap = port_bitmap(16, &[1, 2]);
+    pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap_drop",
+        &0u16.to_le_bytes(),
+        &bitmap,
+        0,
+    );
+
+    let data = [0u8; 64];
+    let mut pkt = packet_in::new(&data);
+    let out = pipeline.process_packet(0, &mut pkt);
+    assert!(out.is_empty());
+
+    Ok(())
+}
+
+#[test]
 fn bitmap_precedence_over_broadcast() -> Result<(), anyhow::Error> {
     let mut pipeline = main_pipeline::new(4);
 
@@ -120,8 +211,8 @@ fn bitmap_precedence_over_broadcast() -> Result<(), anyhow::Error> {
     // so even though broadcast might be set elsewhere, bitmap wins
     // when port_bitmap has bits set.
     let bitmap = port_bitmap(16, &[1]);
-    pipeline.add_ingress_tbl_entry(
-        "set_bitmap",
+    pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap_broadcast",
         &0u16.to_le_bytes(),
         &bitmap,
         0,
@@ -151,7 +242,7 @@ fn bitmap_all_ports() -> Result<(), anyhow::Error> {
 
     // All ports set, equivalent to broadcast.
     let bitmap = port_bitmap(16, &[0, 1, 2, 3]);
-    pipeline.add_ingress_tbl_entry(
+    pipeline.add_ingress_bitmap_table_entry(
         "set_bitmap",
         &0u16.to_le_bytes(),
         &bitmap,
@@ -174,6 +265,54 @@ fn bitmap_all_ports() -> Result<(), anyhow::Error> {
     expect_frames!(phy2, &[RxFrame::new(phy0.mac, 0, msg.0)]);
     expect_frames!(phy3, &[RxFrame::new(phy0.mac, 0, msg.0)]);
     assert_eq!(phy0.recv_buffer_len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn per_replica_ingress_metadata_is_isolated() -> Result<(), anyhow::Error> {
+    let mut pipeline = main_pipeline::new(4);
+    let bitmap = port_bitmap(16, &[1, 2, 3]);
+    pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap",
+        &0u16.to_le_bytes(),
+        &bitmap,
+        0,
+    );
+
+    let data = [0u8; 64];
+    let mut pkt = packet_in::new(&data);
+    let out = pipeline.process_packet(0, &mut pkt);
+    let ports: Vec<u16> = out.iter().map(|(_, port)| *port).collect();
+    assert_eq!(ports, vec![1, 2, 3]);
+
+    let mut pkt = packet_in::new(&data);
+    let out = pipeline.process_packet_headers(0, &mut pkt);
+    let ports: Vec<u16> = out.iter().map(|(_, port)| *port).collect();
+    assert_eq!(ports, vec![1, 2, 3]);
+
+    Ok(())
+}
+
+#[test]
+fn bitmap_ports_beyond_radix_ignored() -> Result<(), anyhow::Error> {
+    let mut radix_pipeline = main_pipeline::new(4);
+
+    // Port 127 is the top bitmap bit and outside the
+    // radix-4 pipeline; ignore it.
+    let bitmap = port_bitmap(16, &[1, 127]);
+    radix_pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap",
+        &0u16.to_le_bytes(),
+        &bitmap,
+        0,
+    );
+
+    let data = [0u8; 64];
+    let mut pkt = packet_in::new(&data);
+    let out = radix_pipeline.process_packet(0, &mut pkt);
+    let ports: Vec<u16> = out.iter().map(|(_, port)| *port).collect();
+    assert_eq!(ports, vec![1]);
 
     Ok(())
 }

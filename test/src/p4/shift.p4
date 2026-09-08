@@ -37,13 +37,13 @@ control ingress(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-    Replicate() rep;
+    Replicate() replicator;
 
     action set_bitmap(bit<128> bitmap) {
         egress.bitmap_a = bitmap;
     }
 
-    table tbl {
+    table bitmap_table {
         key = {
             ingress.port: exact;
         }
@@ -54,8 +54,8 @@ control ingress(
     }
 
     apply {
-        tbl.apply();
-        rep.replicate(egress.bitmap_a);
+        bitmap_table.apply();
+        replicator.replicate(egress.bitmap_a);
     }
 }
 

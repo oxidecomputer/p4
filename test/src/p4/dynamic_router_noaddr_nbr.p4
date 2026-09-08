@@ -141,7 +141,7 @@ control router(
 
     apply {
         router.apply();
-        if (egress.port != 16w0) {
+        if (egress.nexthop_v6 != 128w0) {
             resolver.apply(hdr, egress);
         }
     }

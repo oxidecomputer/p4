@@ -1036,7 +1036,13 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                     let c = self.parser.parse_constant()?;
                     control.constants.push(c);
                 }
-                lexer::Kind::Identifier(_) => {
+                lexer::Kind::Bool
+                | lexer::Kind::Error
+                | lexer::Kind::Bit
+                | lexer::Kind::Varbit
+                | lexer::Kind::Int
+                | lexer::Kind::String
+                | lexer::Kind::Identifier(_) => {
                     self.parser.backlog.push(token);
                     let v = self.parser.parse_variable()?;
                     control.variables.push(v);
@@ -1630,7 +1636,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                             ),
                         )
                     } else {
-                        self.parser.backlog.push(token.clone());
+                        self.parser.backlog.push(slice_token);
                         self.parser.expect_token(lexer::Kind::SquareClose)?;
                         Expression::new(token, ExpressionKind::Index(lval, xpr))
                     }

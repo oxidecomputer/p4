@@ -45,6 +45,11 @@ control ingress(
         egress.broadcast = true;
     }
 
+    action broadcast_drop() {
+        egress.broadcast = true;
+        egress.drop = true;
+    }
+
     table tbl {
         key = {
             ingress.port: exact;
@@ -52,6 +57,7 @@ control ingress(
         actions = {
             drop;
             forward;
+            broadcast_drop;
         }
         default_action = drop;
         const entries = {

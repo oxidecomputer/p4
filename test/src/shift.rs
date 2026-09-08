@@ -20,7 +20,7 @@ fn shift_in_egress() -> Result<(), anyhow::Error> {
     let mut pipeline = main_pipeline::new(4);
 
     let bitmap = port_bitmap(16, &[1, 2]);
-    pipeline.add_ingress_tbl_entry(
+    pipeline.add_ingress_bitmap_table_entry(
         "set_bitmap",
         &0u16.to_le_bytes(),
         &bitmap,
@@ -60,7 +60,7 @@ fn shift_higher_port() -> Result<(), anyhow::Error> {
     let mut pipeline = main_pipeline::new(4);
 
     let bitmap = port_bitmap(16, &[3]);
-    pipeline.add_ingress_tbl_entry(
+    pipeline.add_ingress_bitmap_table_entry(
         "set_bitmap",
         &0u16.to_le_bytes(),
         &bitmap,

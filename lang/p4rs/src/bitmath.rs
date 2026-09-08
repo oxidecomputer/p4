@@ -99,12 +99,12 @@ pub fn mod_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 }
 
 /// Left shift `a` by `b` positions, big-endian byte order.
-/// Result width matches `a`. Wraps via `u128::wrapping_shl`.
+/// Result width matches `a`. Shifts by the operand width or more produce zero.
 pub fn shl_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let len = a.len();
     let x: u128 = a.load_be();
     let y: u128 = b.load_be();
-    let z = x.wrapping_shl(y as u32);
+    let z = if y >= len as u128 { 0 } else { x << (y as u32) };
     let mut c = BitVec::new();
     c.resize(len, false);
     c.store_be(z);
@@ -112,12 +112,12 @@ pub fn shl_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 }
 
 /// Left shift `a` by `b` positions, little-endian byte order.
-/// Result width matches `a`. Wraps via `u128::wrapping_shl`.
+/// Result width matches `a`. Shifts by the operand width or more produce zero.
 pub fn shl_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let len = a.len();
     let x: u128 = a.load_le();
     let y: u128 = b.load_le();
-    let z = x.wrapping_shl(y as u32);
+    let z = if y >= len as u128 { 0 } else { x << (y as u32) };
     let mut c = BitVec::new();
     c.resize(len, false);
     c.store_le(z);
@@ -125,12 +125,12 @@ pub fn shl_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 }
 
 /// Right shift `a` by `b` positions, big-endian byte order.
-/// Result width matches `a`. Wraps via `u128::wrapping_shr`.
+/// Result width matches `a`. Shifts by the operand width or more produce zero.
 pub fn shr_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let len = a.len();
     let x: u128 = a.load_be();
     let y: u128 = b.load_be();
-    let z = x.wrapping_shr(y as u32);
+    let z = if y >= len as u128 { 0 } else { x >> (y as u32) };
     let mut c = BitVec::new();
     c.resize(len, false);
     c.store_be(z);
@@ -138,12 +138,12 @@ pub fn shr_be(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
 }
 
 /// Right shift `a` by `b` positions, little-endian byte order.
-/// Result width matches `a`. Wraps via `u128::wrapping_shr`.
+/// Result width matches `a`. Shifts by the operand width or more produce zero.
 pub fn shr_le(a: BitVec<u8, Msb0>, b: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     let len = a.len();
     let x: u128 = a.load_le();
     let y: u128 = b.load_le();
-    let z = x.wrapping_shr(y as u32);
+    let z = if y >= len as u128 { 0 } else { x >> (y as u32) };
     let mut c = BitVec::new();
     c.resize(len, false);
     c.store_le(z);
@@ -351,6 +351,17 @@ mod tests {
     }
 
     #[test]
+    fn bitmath_shifts_at_width_le() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_le(1u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_le(16u128);
+
+        assert_eq!(shl_le(a.clone(), b.clone()).load_le::<u16>(), 0);
+        assert_eq!(shr_le(a, b).load_le::<u16>(), 0);
+    }
+
+    #[test]
     fn bitmath_shl_be() {
         let mut a = bitvec![mut u8, Msb0; 0; 16];
         a.store_be(1u128);
@@ -380,6 +391,17 @@ mod tests {
 
         let cc: u128 = c.load_be();
         assert_eq!(cc, 0x8000u128 >> 4);
+    }
+
+    #[test]
+    fn bitmath_shifts_at_width_be() {
+        let mut a = bitvec![mut u8, Msb0; 0; 16];
+        a.store_be(1u128);
+        let mut b = bitvec![mut u8, Msb0; 0; 16];
+        b.store_be(16u128);
+
+        assert_eq!(shl_be(a.clone(), b.clone()).load_be::<u16>(), 0);
+        assert_eq!(shr_be(a, b).load_be::<u16>(), 0);
     }
 
     #[test]

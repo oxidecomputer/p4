@@ -77,6 +77,7 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     for h in &ast.headers {
         diags.extend(&HeaderChecker::check(h, ast));
     }
+    check_replicate_scope(ast, &mut diags);
     (hg.hlir, diags)
 }
 
@@ -96,6 +97,7 @@ impl ControlChecker {
 
     pub fn check_params(c: &Control, ast: &AST, diags: &mut Diagnostics) {
         for p in &c.parameters {
+            check_type_width(&p.ty, &p.ty_token, diags);
             if let Type::UserDefined(typename) = &p.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
@@ -140,6 +142,7 @@ impl ControlChecker {
 
     pub fn check_variables(c: &Control, ast: &AST, diags: &mut Diagnostics) {
         for v in &c.variables {
+            check_type_width(&v.ty, &v.token, diags);
             if let Type::UserDefined(typename) = &v.ty {
                 if ast.get_user_defined_type(typename).is_some() {
                     continue;
@@ -166,6 +169,9 @@ impl ControlChecker {
             Self::check_table_action_reference(c, t, ast, diags);
         }
         for a in &c.actions {
+            for p in &a.parameters {
+                check_type_width(&p.ty, &p.ty_token, diags);
+            }
             check_statement_block(&a.statement_block, hlir, diags, ast, true);
         }
     }
@@ -177,7 +183,7 @@ impl ControlChecker {
         diags: &mut Diagnostics,
     ) {
         for a in &t.actions {
-            if c.get_action(&a.name).is_none() {
+            if a.name != "NoAction" && c.get_action(&a.name).is_none() {
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
@@ -197,6 +203,7 @@ impl ControlChecker {
         diags: &mut Diagnostics,
     ) {
         diags.extend(&check_statement_block_lvalues(&c.apply, ast, &c.names()));
+        check_replicate_placement(c, ast, diags);
 
         let mut apc = ApplyCallChecker {
             c,
@@ -205,6 +212,282 @@ impl ControlChecker {
             diags,
         };
         c.accept_mut(&mut apc);
+    }
+}
+
+fn replicate_instances(c: &Control) -> Vec<&crate::ast::Variable> {
+    c.variables
+        .iter()
+        .filter(|v| matches!(&v.ty, Type::UserDefined(n) if n == "Replicate"))
+        .collect()
+}
+
+fn pipeline_bound_metadata_roots(c: &Control, ast: &AST) -> Vec<String> {
+    let mut roots = Vec::new();
+
+    if let Some(ingress_meta) = c.parameters.get(1) {
+        roots.push(ingress_meta.name.clone());
+    }
+
+    let egress_meta = ast
+        .package_instance
+        .as_ref()
+        .and_then(|inst| inst.parameters.get(2))
+        .and_then(|name| ast.get_control(name))
+        .or(Some(c))
+        .and_then(|egress| egress.parameters.get(2));
+
+    if let Some(egress_meta) = egress_meta {
+        if !roots.contains(&egress_meta.name) {
+            roots.push(egress_meta.name.clone());
+        }
+    }
+
+    roots
+}
+
+fn check_replicate_placement(c: &Control, ast: &AST, diags: &mut Diagnostics) {
+    let vars = replicate_instances(c);
+    if vars.is_empty() {
+        return;
+    }
+
+    let instances: Vec<&str> = vars.iter().map(|v| v.name.as_str()).collect();
+
+    check_replicate_block(&c.apply, &instances, false, diags);
+
+    for action in &c.actions {
+        let mut action_calls = Vec::new();
+        collect_replicate_calls(
+            &action.statement_block,
+            &instances,
+            &mut action_calls,
+        );
+        for call in action_calls {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "replicate() may only appear as a top-level statement in \
+                     apply, found a call in action {}",
+                    action.name,
+                ),
+                token: call.lval.token.clone(),
+            });
+        }
+    }
+
+    let calls: Vec<&Call> = c
+        .apply
+        .statements
+        .iter()
+        .filter_map(|stmt| match stmt {
+            Statement::Call(call)
+                if instances.contains(&call.lval.root())
+                    && call.lval.leaf() == "replicate" =>
+            {
+                Some(call)
+            }
+            _ => None,
+        })
+        .collect();
+
+    for call in calls.iter().skip(1) {
+        diags.push(Diagnostic {
+            level: Level::Error,
+            message: "replicate() may only be called once per control, \
+                      the pipeline uses a single replication bitmap"
+                .into(),
+            token: call.lval.token.clone(),
+        });
+    }
+
+    let bound = pipeline_bound_metadata_roots(c, ast);
+
+    for call in &calls {
+        check_replicate_argument(c, &bound, call, diags);
+    }
+}
+
+fn check_replicate_argument(
+    c: &Control,
+    bound: &[String],
+    call: &Call,
+    diags: &mut Diagnostics,
+) {
+    if call.args.len() != 1 {
+        diags.push(Diagnostic {
+            level: Level::Error,
+            message: format!(
+                "replicate() takes exactly one argument, found {}",
+                call.args.len(),
+            ),
+            token: call.lval.token.clone(),
+        });
+        return;
+    }
+    check_replicate_argument_expression(c, bound, &call.args[0], diags);
+}
+
+fn check_replicate_argument_expression(
+    c: &Control,
+    bound: &[String],
+    xpr: &Expression,
+    diags: &mut Diagnostics,
+) {
+    match &xpr.kind {
+        ExpressionKind::BoolLit(_)
+        | ExpressionKind::IntegerLit(_)
+        | ExpressionKind::BitLit(_, _)
+        | ExpressionKind::SignedLit(_, _) => {}
+        ExpressionKind::Lvalue(lval) => {
+            check_replicate_argument_root(c, bound, lval, diags);
+        }
+        ExpressionKind::Binary(lhs, _, rhs) => {
+            check_replicate_argument_expression(c, bound, lhs, diags);
+            check_replicate_argument_expression(c, bound, rhs, diags);
+        }
+        ExpressionKind::Index(lval, _) => {
+            check_replicate_argument_root(c, bound, lval, diags);
+        }
+        _ => {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: "replicate() argument must be a literal, a field \
+                          reference, or a binary expression over them"
+                    .into(),
+                token: xpr.token.clone(),
+            });
+        }
+    }
+}
+
+fn check_replicate_argument_root(
+    c: &Control,
+    bound: &[String],
+    lval: &Lvalue,
+    diags: &mut Diagnostics,
+) {
+    let root = lval.root();
+    if bound.is_empty() {
+        if !c.parameters.iter().any(|p| p.name == root) {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "replicate() argument must be built from the \
+                     parameters of control {}, {root} is not one of them",
+                    c.name,
+                ),
+                token: lval.token.clone(),
+            });
+        }
+        return;
+    }
+
+    if !bound.iter().any(|name| name == root) {
+        diags.push(Diagnostic {
+            level: Level::Error,
+            message: format!(
+                "replicate() argument must be built from the metadata \
+                 parameters the pipeline binds for control {} ({}); {root} is \
+                 not one of them",
+                c.name,
+                bound.join(", "),
+            ),
+            token: lval.token.clone(),
+        });
+    }
+}
+
+fn check_replicate_scope(ast: &AST, diags: &mut Diagnostics) {
+    let ingress = match ast
+        .package_instance
+        .as_ref()
+        .and_then(|inst| inst.parameters.get(1))
+    {
+        Some(name) => name,
+        None => return,
+    };
+
+    for c in &ast.controls {
+        if &c.name == ingress {
+            continue;
+        }
+        for v in replicate_instances(c) {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "Replicate may only be instantiated in the ingress \
+                     control ({ingress}), found an instance in control {}",
+                    c.name,
+                ),
+                token: v.token.clone(),
+            });
+        }
+    }
+}
+
+fn collect_replicate_calls<'a>(
+    block: &'a StatementBlock,
+    instances: &[&str],
+    calls: &mut Vec<&'a Call>,
+) {
+    for stmt in &block.statements {
+        match stmt {
+            Statement::Call(call)
+                if instances.contains(&call.lval.root())
+                    && call.lval.leaf() == "replicate" =>
+            {
+                calls.push(call);
+            }
+            Statement::If(if_block) => {
+                collect_replicate_calls(&if_block.block, instances, calls);
+                for else_if in &if_block.else_ifs {
+                    collect_replicate_calls(&else_if.block, instances, calls);
+                }
+                if let Some(else_block) = &if_block.else_block {
+                    collect_replicate_calls(else_block, instances, calls);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn check_replicate_block(
+    block: &StatementBlock,
+    instances: &[&str],
+    nested: bool,
+    diags: &mut Diagnostics,
+) {
+    for stmt in &block.statements {
+        match stmt {
+            Statement::Call(call)
+                if nested
+                    && instances.contains(&call.lval.root())
+                    && call.lval.leaf() == "replicate" =>
+            {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: "replicate() must be a top-level statement in apply, not inside a conditional".into(),
+                    token: call.lval.token.clone(),
+                });
+            }
+            Statement::If(if_block) => {
+                check_replicate_block(&if_block.block, instances, true, diags);
+                for else_if in &if_block.else_ifs {
+                    check_replicate_block(
+                        &else_if.block,
+                        instances,
+                        true,
+                        diags,
+                    );
+                }
+                if let Some(else_block) = &if_block.else_block {
+                    check_replicate_block(else_block, instances, true, diags);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -346,6 +629,9 @@ fn check_statement_block(
                     }
                     _ => {}
                 }
+            }
+            Statement::Variable(v) => {
+                check_type_width(&v.ty, &v.token, diags);
             }
             _ => {
                 // TODO
@@ -532,6 +818,7 @@ impl StructChecker {
     pub fn check(s: &Struct, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
         for m in &s.members {
+            check_type_width(&m.ty, &m.token, &mut diags);
             if let Type::UserDefined(typename) = &m.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
@@ -555,6 +842,7 @@ impl HeaderChecker {
     pub fn check(h: &Header, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
         for m in &h.members {
+            check_type_width(&m.ty, &m.token, &mut diags);
             if let Type::UserDefined(typename) = &m.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
@@ -569,6 +857,23 @@ impl HeaderChecker {
             }
         }
         diags
+    }
+}
+
+/// Rust represents bit values as u128 for literals, shifts,
+/// and arithmetic slice operations. Declarations wider
+/// than 128 bits are rejected outright.
+fn check_type_width(ty: &Type, token: &Token, diags: &mut Diagnostics) {
+    if let Type::Bit(w) | Type::Varbit(w) | Type::Int(w) = ty {
+        if *w > 128 {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "Width {w} exceeds the 128-bit compiler limit",
+                ),
+                token: token.clone(),
+            });
+        }
     }
 }
 
@@ -607,6 +912,7 @@ fn check_statement_lvalues(
     match stmt {
         Statement::Empty => {}
         Statement::Variable(v) => {
+            check_type_width(&v.ty, &v.token, &mut diags);
             if let Some(expr) = &v.initializer {
                 diags.extend(&check_expression_lvalues(
                     expr.as_ref(),
@@ -1123,5 +1429,580 @@ impl ExpressionTypeChecker {
 
     pub fn check_parser(&self, _index: usize) -> Diagnostics {
         todo!("parser expression type check");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::AST;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use std::sync::Arc;
+
+    fn check_p4(source: &str) -> super::Diagnostics {
+        let lines: Vec<&str> = source.lines().collect();
+        let filename = Arc::new("test.p4".to_string());
+        let lexer = Lexer::new(lines, filename);
+        let mut parser = Parser::new(lexer);
+        let mut ast = AST::default();
+        parser.run(&mut ast).expect("parse failed");
+        let (_hlir, diags) = crate::check::all(&ast);
+        diags
+    }
+
+    #[test]
+    fn width_128_accepted() {
+        let source = r#"
+header h_t {
+    bit<128> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr) {
+    apply {
+        bit<128> x = hdr.h.f;
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn width_over_128_rejected() {
+        let source = r#"
+header h_t {
+    bit<129> f;
+}
+struct metadata_t {
+    bit<130> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr, in bit<131> parameter) {
+    bit<132> control_variable;
+    action a(bit<133> action_parameter) {
+        bit<134> action_variable;
+    }
+    apply {
+        bit<135> apply_variable;
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert_eq!(
+            errors.len(),
+            7,
+            "expected an error for each declaration site: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+        let messages: Vec<_> =
+            errors.iter().map(|error| &error.message).collect();
+        for width in 129..=135 {
+            assert!(
+                messages.iter().any(|message| message
+                    .contains(&format!("Width {width} exceeds"))),
+                "missing diagnostic for width {width}: {messages:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn replicate_inside_conditional_rejected() {
+        let source = r#"
+control ingress() {
+    Replicate() rep;
+
+    apply {
+        if (1w1 == 1w1) {
+            rep.replicate(128w0);
+        }
+    }
+}
+        "#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| {
+                error.message
+                    == "replicate() must be a top-level statement in apply, not inside a conditional"
+            }),
+            "missing replication placement diagnostic: {:?}",
+            errors.iter().map(|error| &error.message).collect::<Vec<_>>(),
+        );
+    }
+    #[test]
+    fn replicate_call_top_level_clean() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        rep.replicate(egress.bitmap);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_requires_one_argument() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+control ingress() {
+    Replicate() rep;
+    apply {
+        rep.replicate();
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| {
+                error.message
+                    == "replicate() takes exactly one argument, found 0"
+            }),
+            "missing replication argument-count diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_called_twice_rejected() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap_a;
+    bit<128> bitmap_b;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        rep.replicate(egress.bitmap_a);
+        rep.replicate(egress.bitmap_b);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| error
+                .message
+                .contains("replicate() may only be called once")),
+            "missing replication arity diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_instantiated_twice_with_one_call_clean() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep_a;
+    Replicate() rep_b;
+    apply {
+        rep_a.replicate(egress.bitmap);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_outside_ingress_rejected() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct meta_t {
+    bit<128> bitmap;
+}
+parser parse(inout meta_t m) {
+    state start {
+        transition accept;
+    }
+}
+control ingress(inout meta_t m) {
+    apply { }
+}
+control egress(inout meta_t m) {
+    Replicate() rep;
+    apply {
+        rep.replicate(m.bitmap);
+    }
+}
+SoftNPU(parse(), ingress(), egress()) main;
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| error
+                .message
+                .contains("Replicate may only be instantiated in the ingress")),
+            "missing replication scope diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_in_ingress_with_package_clean() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct meta_t {
+    bit<128> bitmap;
+}
+parser parse(inout meta_t m) {
+    state start {
+        transition accept;
+    }
+}
+control ingress(inout meta_t m) {
+    Replicate() rep;
+    apply {
+        rep.replicate(m.bitmap);
+    }
+}
+control egress(inout meta_t m) {
+    apply { }
+}
+SoftNPU(parse(), ingress(), egress()) main;
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_argument_local_rejected() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        bit<128> local_bitmap = egress.bitmap;
+        rep.replicate(local_bitmap);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| error.message.contains(
+                "replicate() argument must be built from the metadata \
+                 parameters the pipeline binds for control ingress (ingress, \
+                 egress); local_bitmap is not one of them"
+            )),
+            "missing replication argument diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_argument_constant_slice_clean() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        rep.replicate(egress.bitmap[127:0]);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_argument_non_slice_index_rejected() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        rep.replicate(egress.bitmap[0]);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| error
+                .message
+                .contains("only slices supported as index arguments")),
+            "missing replication index diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_argument_binary_over_egress_metadata_clean() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap_a;
+    bit<128> bitmap_b;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        rep.replicate(egress.bitmap_a | egress.bitmap_b);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_argument_header_root_rejected() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<128> bitmap;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+    apply {
+        rep.replicate(hdr.bitmap);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| error.message.contains(
+                "replicate() argument must be built from the metadata \
+                 parameters the pipeline binds for control ingress (ingress, \
+                 egress); hdr is not one of them"
+            )),
+            "missing replication argument root diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn replicate_in_action_rejected() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    bit<128> bitmap;
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    Replicate() rep;
+
+    action set_bitmap(bit<128> bitmap) {
+        egress.bitmap = bitmap;
+        rep.replicate(egress.bitmap);
+    }
+
+    table tbl {
+        key = {
+            ingress.port: exact;
+        }
+        actions = {
+            set_bitmap;
+        }
+        default_action = NoAction;
+    }
+
+    apply {
+        tbl.apply();
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|error| error.message.contains(
+                "replicate() may only appear as a top-level statement in \
+                 apply, found a call in action set_bitmap"
+            )),
+            "missing replication action-body diagnostic: {:?}",
+            errors
+                .iter()
+                .map(|error| &error.message)
+                .collect::<Vec<_>>(),
+        );
     }
 }

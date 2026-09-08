@@ -134,12 +134,12 @@ impl<'a> ExpressionGenerator<'a> {
                 // so generate_slice can adjust for header.rs byte
                 // reversal.
                 if let ExpressionKind::Slice(begin, end) = &xpr.kind {
-                    let ni =
+                    let name_info =
                         self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
                             panic!("unresolved lvalue {:#?} in slice", lval)
                         });
 
-                    let field_width = match &ni.ty {
+                    let field_width = match &name_info.ty {
                         p4::ast::Type::Bit(w)
                         | p4::ast::Type::Varbit(w)
                         | p4::ast::Type::Int(w) => *w,
@@ -154,6 +154,8 @@ impl<'a> ExpressionGenerator<'a> {
                     } else {
                         // Non-contiguous after byte reversal;
                         // replace the lvalue suffix with arithmetic.
+                        // Fields fit in the u128 load because the
+                        // checker rejects widths over 128.
                         return Self::generate_slice_read_arith(&ts, hi, lo);
                     }
                 } else {
@@ -220,12 +222,9 @@ impl<'a> ExpressionGenerator<'a> {
         lo: P4Bit,
         field_width: FieldWidth,
     ) -> bool {
-        if field_width <= 8 {
-            return true;
-        }
         // Non-byte-multiple widths have an additional bit-shift in
         // header.rs storage that reversed_slice_range does not model.
-        if !field_width.is_multiple_of(8) {
+        if field_width > 8 && !field_width.is_multiple_of(8) {
             return false;
         }
         reversed_slice_range(hi, lo, field_width).is_some()
@@ -239,24 +238,16 @@ impl<'a> ExpressionGenerator<'a> {
     ) -> TokenStream {
         let (hi, lo) = Self::slice_bounds(begin, end);
 
-        if field_width > 8 {
-            let (r, l) = reversed_slice_range(hi, lo, field_width).expect(
-                "non-contiguous slice reads must be handled \
-                     by the caller via generate_slice_read_arith",
-            );
-            quote! { [#r..#l] }
-        } else {
-            // Fields <= 8 bits are not byte-reversed by header.rs,
-            // so the naive P4-to-bitvec mapping is correct.
-            let l = hi + 1;
-            let r = lo;
-            quote! { [#r..#l] }
-        }
+        let (start, end) = reversed_slice_range(hi, lo, field_width).expect(
+            "non-contiguous slice reads must be handled \
+                 by the caller via generate_slice_read_arith",
+        );
+        quote! { [#start..#end] }
     }
 
     /// Emit an arithmetic slice read for non-contiguous slices.
-    /// Loads the field as an integer, shifts and masks to extract
-    /// the requested bits, then packs into a new bitvec.
+    /// This loads the field as an integer, shifts and masks to extract
+    /// the requested bits, then packs everything into a new bitvec.
     pub(crate) fn generate_slice_read_arith(
         lhs: &TokenStream,
         hi: P4Bit,
@@ -379,6 +370,7 @@ pub(crate) fn reversed_slice_range(
 ) -> Option<BitvecRange> {
     // Wire byte indices for the slice endpoints. P4 bit W-1 is in wire
     // byte 0 (MSB-first), so higher bit numbers map to lower byte indices.
+    let storage_bytes = field_width.div_ceil(8);
     let wire_byte_hi = (field_width - 1 - hi) / 8;
     let wire_byte_lo = (field_width - 1 - lo) / 8;
 
@@ -388,7 +380,7 @@ pub(crate) fn reversed_slice_range(
             let wire_idx = field_width - 1 - bit_pos;
             let wire_byte = wire_idx / 8;
             let bit_in_byte = wire_idx % 8;
-            let storage_byte = field_width / 8 - 1 - wire_byte;
+            let storage_byte = storage_bytes - 1 - wire_byte;
             storage_byte * 8 + bit_in_byte
         };
 
@@ -398,8 +390,8 @@ pub(crate) fn reversed_slice_range(
     } else if (hi + 1).is_multiple_of(8) && lo.is_multiple_of(8) {
         // Multi-byte byte-aligned slice: reversed bytes form a
         // contiguous block.
-        let storage_byte_start = field_width / 8 - 1 - wire_byte_lo;
-        let storage_byte_end = field_width / 8 - 1 - wire_byte_hi;
+        let storage_byte_start = storage_bytes - 1 - wire_byte_lo;
+        let storage_byte_end = storage_bytes - 1 - wire_byte_hi;
         Some((storage_byte_start * 8, (storage_byte_end + 1) * 8))
     } else {
         // Non-byte-aligned multi-byte slice: byte reversal makes the
@@ -491,6 +483,33 @@ mod tests {
     #[test]
     fn slice_48bit_upper_24() {
         assert_eq!(reversed_slice_range(47, 24, 48), Some((24, 48)));
+    }
+
+    #[test]
+    fn slice_8bit_bottom_nibble() {
+        assert_eq!(reversed_slice_range(3, 0, 8), Some((4, 8)));
+    }
+
+    #[test]
+    fn slice_8bit_top_nibble() {
+        assert_eq!(reversed_slice_range(7, 4, 8), Some((0, 4)));
+    }
+
+    #[test]
+    fn slice_8bit_whole_field() {
+        assert_eq!(reversed_slice_range(7, 0, 8), Some((0, 8)));
+    }
+
+    #[test]
+    fn slice_8bit_single_bit() {
+        assert_eq!(reversed_slice_range(0, 0, 8), Some((7, 8)));
+        assert_eq!(reversed_slice_range(7, 7, 8), Some((0, 1)));
+    }
+
+    #[test]
+    fn slice_4bit_field() {
+        assert_eq!(reversed_slice_range(3, 0, 4), Some((0, 4)));
+        assert_eq!(reversed_slice_range(1, 0, 4), Some((2, 4)));
     }
 
     #[test]

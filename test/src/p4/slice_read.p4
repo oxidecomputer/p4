@@ -53,6 +53,10 @@ control ingress(
             hdr.ipv4.identification = 16w42;
         }
 
+        if (hdr.ipv4.ttl[3:0] == 4w0x5) {
+            hdr.ipv4.protocol = 8w0x5b;
+        }
+
         egress.port = 16w1;
     }
 }
