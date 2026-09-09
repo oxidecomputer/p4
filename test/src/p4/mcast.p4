@@ -1,5 +1,5 @@
 #include <core.p4>
-#include <softnpu.p4>
+#include <softnpu_mcast.p4>
 
 SoftNPU(
     parse(),
@@ -37,37 +37,45 @@ control ingress(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
+    Replicate() replicator;
 
     action drop() { }
 
     action forward(bit<16> port) {
         egress.port = port;
+    }
+
+    action set_bitmap(bit<128> bitmap) {
+        egress.bitmap_a = bitmap;
+    }
+
+    action set_bitmap_broadcast(bit<128> bitmap) {
+        egress.bitmap_a = bitmap;
         egress.broadcast = true;
     }
 
-    action broadcast_drop() {
-        egress.broadcast = true;
+    action set_bitmap_drop(bit<128> bitmap) {
+        egress.bitmap_a = bitmap;
         egress.drop = true;
     }
 
-    table tbl {
+    table bitmap_table {
         key = {
             ingress.port: exact;
         }
         actions = {
             drop;
             forward;
-            broadcast_drop;
+            set_bitmap;
+            set_bitmap_broadcast;
+            set_bitmap_drop;
         }
         default_action = drop;
-        const entries = {
-            16w0 : forward(16w1);
-            16w1 : forward(16w0);
-        }
     }
 
     apply {
-        tbl.apply();
+        bitmap_table.apply();
+        replicator.replicate(egress.bitmap_a | egress.bitmap_b);
     }
 
 }
@@ -77,5 +85,10 @@ control egress(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-
+    apply {
+        if (ingress.nat == true) {
+            egress.drop = true;
+        }
+        ingress.nat = true;
+    }
 }

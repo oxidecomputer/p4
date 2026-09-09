@@ -156,9 +156,7 @@ pub struct TableEntry {
 }
 
 pub trait Pipeline: Send {
-    /// Process an input packet and produce a set of output packets. Normally
-    /// there will be a single output packet. However, if the pipeline sets
-    /// `egress_metadata_t.broadcast` there may be multiple output packets.
+    /// Process an input packet and produce a set of output packets.
     fn process_packet<'a>(
         &mut self,
         port: u16,
@@ -239,16 +237,13 @@ impl<'a> packet_in<'a> {
 
 //XXX: remove once classifier defined in terms of bitvecs
 pub fn bitvec_to_biguint(bv: &BitVec<u8, Msb0>) -> table::BigUintKey {
-    let mut bytes = bv.as_raw_slice().to_vec();
-
-    // Align the last bits
-    if let Some(last) = bytes.last_mut() {
-        *last >>= (8 - bv.len() % 8) % 8;
-    }
-
     table::BigUintKey {
-        value: num::BigUint::from_bytes_le(&bytes),
-        width: bytes.len(),
+        value: if bv.is_empty() {
+            num::BigUint::default()
+        } else {
+            bv.load_le::<u128>().into()
+        },
+        width: bv.len().div_ceil(8),
     }
 }
 
@@ -270,6 +265,20 @@ pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
 
 pub fn bitvec_to_bitvec16(mut x: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
     x.resize(16, false);
+    x
+}
+
+/// Resize a BitVec to the target width, zero-extending or truncating.
+///
+/// Implements P4-16 spec section 8.11.2 implicit width casts between
+/// `bit<W>` types.
+///
+/// [P4-16 spec]: https://p4.org/wp-content/uploads/sites/53/2024/10/P4-16-spec-v1.2.5.html#sec-implicit-casts
+pub fn bitvec_resize(
+    mut x: BitVec<u8, Msb0>,
+    width: usize,
+) -> BitVec<u8, Msb0> {
+    x.resize(width, false);
     x
 }
 
@@ -342,7 +351,7 @@ pub fn extract_lpm_key(
     offset: usize,
     len: usize,
 ) -> table::Key {
-    let (addr, len) = match len {
+    let (addr, prefix_len) = match len {
         // IPv4
         4 => {
             let data: [u8; 4] =
@@ -360,7 +369,10 @@ pub fn extract_lpm_key(
         }
     };
 
-    table::Key::Lpm(table::Prefix { addr, len })
+    table::Key::Lpm(table::Prefix {
+        addr,
+        len: prefix_len,
+    })
 }
 
 pub fn extract_bool_action_parameter(
@@ -385,12 +397,35 @@ pub fn extract_bit_action_parameter(
     b
 }
 
+/// Collect output ports from a bitmap, excluding the ingress port.
+///
+/// Bits at or above `radix` are ignored. We can't allow a stray bit
+/// to address a port outside the pipeline.
+///
+/// The bitmap is interpreted as a little-endian integer: bit N
+/// (i.e., the bit with numeric value 2^N) corresponds to port N.
+/// This matches the encoding used by P4 arithmetic (`128w1 << port`)
+/// via `shl_le`.
+pub fn replicate(
+    bitmap: &BitVec<u8, Msb0>,
+    ingress_port: u16,
+    radix: u16,
+) -> Vec<u16> {
+    if bitmap.is_empty() {
+        return Vec::new();
+    }
+    let val: u128 = bitmap.load_le();
+    (0..radix.min(128))
+        .filter(|&p| val & (1u128 << p) != 0 && p != ingress_port)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use num::bigint::BigUint;
 
-    /// Checks [`bitvec_to_biguint`] is semantically equivalent to `load_le`
+    /// Checks [`bitvec_to_biguint`] is semantically equivalent to `load_le`,
     /// even with non-byte-aligned widths.
     #[test]
     fn bitvec_to_biguint_non_byte_aligned() {
@@ -403,5 +438,55 @@ mod tests {
                 BigUint::from(bv.load_le::<u16>()),
             );
         }
+    }
+
+    #[test]
+    fn bitvec_to_biguint_parsed_ihl() {
+        let data = [0x45u8];
+        let ihl = data.view_bits::<Msb0>()[4..8].to_bitvec();
+        let key = bitvec_to_biguint(&ihl);
+
+        assert_eq!(key.value, BigUint::from(5u8));
+        assert_eq!(key.width, 1);
+    }
+
+    #[test]
+    fn bitvec_to_biguint_storage_offsets() {
+        for offset in 0..8 {
+            for width in 1..=128 {
+                let storage = bitvec![u8, Msb0; 1; offset + width];
+                let mut bv = storage[offset..].to_bitvec();
+                let expected = u128::MAX >> (128 - width);
+                bv.store_le(expected);
+                bv.set_uninitialized(true);
+                let key = bitvec_to_biguint(&bv);
+
+                assert_eq!(key.value, BigUint::from(expected));
+                assert_eq!(key.width, width.div_ceil(8));
+            }
+        }
+    }
+
+    #[test]
+    fn bitvec_to_biguint_empty() {
+        let key = bitvec_to_biguint(&BitVec::new());
+
+        assert_eq!(key.value, BigUint::default());
+        assert_eq!(key.width, 0);
+    }
+
+    #[test]
+    fn replication_radix_is_bounded_by_bitmap_width() {
+        let mut bitmap = bitvec![u8, Msb0; 0; 128];
+        bitmap.store_le(1u128 << 127);
+
+        assert_eq!(replicate(&bitmap, 0, u16::MAX), vec![127]);
+    }
+
+    #[test]
+    fn replication_of_empty_bitmap_yields_no_ports() {
+        let bitmap: BitVec<u8, Msb0> = BitVec::new();
+
+        assert_eq!(replicate(&bitmap, 0, 4), Vec::<u16>::new());
     }
 }

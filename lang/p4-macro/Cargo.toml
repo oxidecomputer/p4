@@ -13,3 +13,6 @@ serde.workspace = true
 
 [lib]
 proc-macro = true
+
+[dev-dependencies]
+tempfile.workspace = true

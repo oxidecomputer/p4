@@ -23,6 +23,7 @@
 //! For documentation on using [Pipeline](../p4rs/trait.Pipeline.html) trait, see the
 //! [p4rs](../p4rs/index.html) docs.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -84,28 +85,30 @@ fn do_use_p4(item: TokenStream) -> Result<TokenStream, syn::Error> {
             )
         };
 
-    generate_rs(filename, settings)
+    generate_rs(filename, settings).map(Into::into)
 }
 
 fn generate_rs(
     filename: String,
     settings: GenerationSettings,
-) -> Result<TokenStream, syn::Error> {
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     //TODO gracefull error handling
 
     let mut ast = AST::default();
-    process_file(Arc::new(filename), &mut ast, &settings)?;
+    let mut sources = HashMap::new();
+    process_file(Arc::new(filename), &mut ast, &mut sources)?;
+    p4_rust::sanitize(&mut ast);
 
-    let (hlir, _) = check::all(&ast);
+    let (hlir, diags) = check::all(&ast);
+    check(&sources, &diags)?;
 
-    let tokens: TokenStream = p4_rust::emit_tokens(
+    let tokens = p4_rust::emit_tokens(
         &ast,
         &hlir,
         p4_rust::Settings {
             pipeline_name: settings.pipeline_name.clone(),
         },
-    )
-    .into();
+    );
 
     Ok(tokens)
 }
@@ -113,7 +116,7 @@ fn generate_rs(
 fn process_file(
     filename: Arc<String>,
     ast: &mut AST,
-    _settings: &GenerationSettings,
+    sources: &mut HashMap<Arc<String>, Vec<String>>,
 ) -> Result<(), syn::Error> {
     let contents = match fs::read_to_string(&*filename) {
         Ok(c) => c,
@@ -128,25 +131,26 @@ fn process_file(
             process_file(
                 Arc::new(joined.to_str().unwrap().to_string()),
                 ast,
-                _settings,
+                sources,
             )?
         } else {
-            process_file(Arc::new(included.clone()), ast, _settings)?;
+            process_file(Arc::new(included.clone()), ast, sources)?;
         }
     }
 
-    let (_, diags) = check::all(ast);
     let lines: Vec<&str> = ppr.lines.iter().map(|x| x.as_str()).collect();
-    check(&lines, &diags);
-    let lxr = lexer::Lexer::new(lines.clone(), filename);
+    let lxr = lexer::Lexer::new(lines, filename.clone());
     let mut psr = parser::Parser::new(lxr);
     psr.run(ast).unwrap();
-    p4_rust::sanitize(ast);
+    sources.insert(filename, ppr.lines);
     Ok(())
 }
 
 // TODO copy pasta from x4c
-fn check(lines: &[&str], diagnostics: &Diagnostics) {
+fn check(
+    sources: &HashMap<Arc<String>, Vec<String>>,
+    diagnostics: &Diagnostics,
+) -> Result<(), syn::Error> {
     let errors = diagnostics.errors();
     if !errors.is_empty() {
         let mut err = Vec::new();
@@ -154,9 +158,128 @@ fn check(lines: &[&str], diagnostics: &Diagnostics) {
             err.push(SemanticError {
                 at: e.token.clone(),
                 message: e.message.clone(),
-                source: lines[e.token.line].into(),
+                source: sources
+                    .get(&e.token.file)
+                    .and_then(|lines| lines.get(e.token.line))
+                    .cloned()
+                    .unwrap_or_default(),
             });
         }
-        panic!("{}", error::Error::Semantic(err));
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            error::Error::Semantic(err).to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn macro_rejects_replication_outside_ingress() {
+        let source = r#"
+extern Replicate {
+    void replicate(in bit<128> bitmap);
+}
+struct meta_t {
+    bit<128> bitmap;
+}
+parser parse(inout meta_t m) {
+    state start {
+        transition accept;
+    }
+}
+control ingress(inout meta_t m) {
+    apply { }
+}
+control egress(inout meta_t m) {
+    Replicate() rep;
+    apply {
+        rep.replicate(m.bitmap);
+    }
+}
+SoftNPU(parse(), ingress(), egress()) main;
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("egress.p4");
+        fs::write(&path, source).unwrap();
+
+        let error = generate_rs(
+            path.to_str().unwrap().into(),
+            GenerationSettings::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains(
+            "Replicate may only be instantiated in the ingress control"
+        ));
+        assert!(error.contains("Replicate() rep;"));
+        assert!(error.contains(path.to_str().unwrap()));
+    }
+
+    #[test]
+    fn macro_rejects_width_in_final_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wide.p4");
+        fs::write(&path, "header wide_t {\n    bit<129> field;\n}\n").unwrap();
+
+        let error = generate_rs(
+            path.to_str().unwrap().into(),
+            GenerationSettings::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("Width 129 exceeds the 128-bit compiler limit"));
+        assert!(error.contains("bit<129> field;"));
+    }
+
+    #[test]
+    fn macro_diagnostic_uses_included_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("main.p4");
+        let included = dir.path().join("wide.p4");
+        fs::write(&path, "#include <wide.p4>\n").unwrap();
+        fs::write(
+            &included,
+            "\n\n\nheader wide_t {\n    bit<129> included_field;\n}\n",
+        )
+        .unwrap();
+
+        let error = generate_rs(
+            path.to_str().unwrap().into(),
+            GenerationSettings::default(),
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("Width 129 exceeds the 128-bit compiler limit"));
+        assert!(error.contains("bit<129> included_field;"));
+        assert!(error.contains(included.to_str().unwrap()));
+    }
+
+    #[test]
+    fn macro_checks_complete_program_after_includes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("main.p4");
+        fs::write(
+            &path,
+            "#include <structs.p4>\nheader header_t {\n    bit<8> field;\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("structs.p4"),
+            "struct headers_t {\n    header_t hdr;\n}\n",
+        )
+        .unwrap();
+
+        generate_rs(
+            path.to_str().unwrap().into(),
+            GenerationSettings::default(),
+        )
+        .unwrap();
     }
 }

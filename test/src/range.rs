@@ -21,6 +21,7 @@ fn range() -> Result<(), anyhow::Error> {
     let end = v4_range_key("4.0.0.0".parse().unwrap());
     let mut buf = begin.to_vec();
     buf.extend_from_slice(&end);
+    buf.extend_from_slice(&0x0800u16.to_le_bytes());
 
     pipeline.add_ingress_power_ranger_entry(
         "forward",
@@ -33,6 +34,7 @@ fn range() -> Result<(), anyhow::Error> {
     let end = v4_range_key("8.0.0.0".parse().unwrap());
     let mut buf = begin.to_vec();
     buf.extend_from_slice(&end);
+    buf.extend_from_slice(&0x0800u16.to_le_bytes());
 
     pipeline.add_ingress_power_ranger_entry(
         "forward",
@@ -45,6 +47,7 @@ fn range() -> Result<(), anyhow::Error> {
     let end = v4_range_key("12.0.0.0".parse().unwrap());
     let mut buf = begin.to_vec();
     buf.extend_from_slice(&end);
+    buf.extend_from_slice(&0x0800u16.to_le_bytes());
 
     pipeline.add_ingress_power_ranger_entry(
         "forward",
@@ -57,6 +60,7 @@ fn range() -> Result<(), anyhow::Error> {
     let end = v4_range_key("16.0.0.0".parse().unwrap());
     let mut buf = begin.to_vec();
     buf.extend_from_slice(&end);
+    buf.extend_from_slice(&0x0800u16.to_le_bytes());
 
     pipeline.add_ingress_power_ranger_entry(
         "forward",

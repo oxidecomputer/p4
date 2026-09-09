@@ -1,3 +1,5 @@
+// Copyright 2026 Oxide Computer Company
+
 #![allow(clippy::too_many_arguments)]
 
 #[cfg(test)]
@@ -23,7 +25,15 @@ mod ipv6;
 #[cfg(test)]
 mod mac_rewrite;
 #[cfg(test)]
+mod mcast;
+#[cfg(test)]
 mod range;
+#[cfg(test)]
+mod shift;
+#[cfg(test)]
+mod slice_assign;
+#[cfg(test)]
+mod slice_read;
 #[cfg(test)]
 mod table_in_egress_and_ingress;
 #[cfg(test)]
