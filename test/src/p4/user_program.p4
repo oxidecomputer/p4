@@ -92,7 +92,7 @@ parser parse(
 
     state geneve {
         pkt.extract(hdr.geneve);
-        transition inner_eth;
+        transition inner_ethernet;
     }
 
     state inner_ethernet {
@@ -143,7 +143,4 @@ control egress(
     inout headers_t hdr,
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
-) {
-    apply {
-    }
-}
+) {}

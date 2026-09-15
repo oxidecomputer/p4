@@ -80,11 +80,32 @@ control ingress(
     inout egress_metadata_t egress,
 ) {
 
+    // Set the user program in the ingress metadata to the program id in table
+    // action entry.
+    action set_user_program_id(bit<16> program_id) {
+        ingress.user_program = program_id;
+    }
+
     action drop() { }
 
     action forward(bit<16> port) {
         egress.port = port;
         egress.broadcast = false;
+    }
+
+    // This table associates geneve packets with a user program id.
+    table geneve_pkt {
+        key = {
+            hdr.udp.dst_port: exact;
+        }
+        actions = {
+            set_user_program;
+        }
+        default_action = NoAction;
+
+        const entries = {
+            16w6081 : set_user_program(16w10);
+        }
     }
 
     table tbl {
@@ -103,7 +124,13 @@ control ingress(
     }
 
     apply {
-        tbl.apply();
+        geneve_pkt.apply();
+
+        if (ingress.user_program != 0w16) {
+            resubmit_exec(ingress.user_program);
+        } else {
+            tbl.apply();
+        }
     }
 
 }
@@ -112,35 +139,4 @@ control egress(
     inout headers_t hdr,
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
-) {
-
-    // Set the user program in the ingress metadata to the program id in table
-    // action entry.
-    action set_user_program(bit<16> program_id) {
-        ingress.user_program = program_id;
-    }
-
-    // This table associates geneve packets with a user program id.
-    table geneve_pkt {
-        key = {
-            hdr.udp.dst_port: exact;
-        }
-        actions = {
-            set_user_program;
-        }
-        default_action = NoAction;
-
-        const entries = {
-            16w6081 : set_user_program(16w10);
-        }
-    }
-
-    apply {
-        geneve_pkt.apply();
-
-        if (ingress.user_program != 0w16) {
-            resubmit_exec(ingress.user_program);
-        }
-    }
-
-}
+) {}
