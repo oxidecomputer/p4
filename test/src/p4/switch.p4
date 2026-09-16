@@ -99,12 +99,12 @@ control ingress(
             hdr.udp.dst_port: exact;
         }
         actions = {
-            set_user_program;
+            set_user_program_id;
         }
         default_action = NoAction;
 
         const entries = {
-            16w6081 : set_user_program(16w10);
+            16w6081 : set_user_program_id(16w10);
         }
     }
 
@@ -139,4 +139,8 @@ control egress(
     inout headers_t hdr,
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
-) {}
+) {
+    apply {
+        
+    }
+}
