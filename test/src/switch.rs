@@ -1,32 +1,30 @@
 use crate::softnpu::{RxFrame, SoftNpu, TxFrame};
 use crate::{expect_frames, muffins};
 
-p4_macro::use_p4!(p4 = "test/src/p4/hub.p4", pipeline_name = "hub2");
+p4_macro::use_p4!(p4 = "test/src/p4/switch.p4", pipeline_name = "dynamic");
 
 ///
-///                           ~~~~~~~~~~
-///                           ~        ~
-///                           ~   p4   ~
-///                           ~        ~
-///                           ~~~~~~~~~~
-///                               |
-///                               |
-/// *=======*                *==========*                *=======*
-/// |       | --- ( rx ) --> |          | <-- ( rx ) --- |       |
-/// | phy 1 |                | pipeline |                | phy 3 |
-/// |       | <-- ( tx ) --- |          | --- ( tx ) --> |       |
-/// *=======*                *==========*                *=======*
-///                           tx |  |
-///                              |  |   
-///                              |  | rx
-///                           *========*
-///                           |        |
-///                           |        |
-///                           |  phy2  |
-///                           *========*
+///                normal traffic                    geneve traffic (dst_port == 6081)
+///                (port 0 <-> 1 swap)                diverted via resubmit_exec.jump(10)
 ///
+///                    *~~~~~~~~~~~~~~~*                                *~~~~~~~~~~~~~~~~~~~~*
+///                    ~               ~ ------- jump(10) ------------> ~                    ~
+///                    ~   switch.p4   ~                                ~  user_program.p4   ~
+///                    ~   (system)    ~                                ~   (program 10)     ~
+///                    ~               ~                                ~                    ~
+///                    *~~~~~~~~~~~~~~~*                                *~~~~~~~~~~~~~~~~~~~~*
+///                       |         |                                             |
+///           rx |   tx   |         |  tx   | rx                        rx 0,1 -> tx port 2  |
+///               v       |         |       v                                     v
+///  *=======*            |         |             *=======*                  *=======*
+///  |       | -----------+         +-----------  |       |                  |       |
+///  | phy 0 |                                    | phy 1 |                  | phy 2 |
+///  |       | <----------+         +-----------> |       |                  | (tap) |
+///  *=======*                                    *=======*                  *=======*
+///
+
 #[test]
-fn hub2() -> Result<(), anyhow::Error> {
+fn dynamic() -> Result<(), anyhow::Error> {
     let mut npu = SoftNpu::new(3, main_pipeline::new(3), false);
     let phy1 = npu.phy(0);
     let phy2 = npu.phy(1);
