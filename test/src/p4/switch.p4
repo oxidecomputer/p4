@@ -79,6 +79,8 @@ control ingress(
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
+    // Declare extern instance
+    ResubmitExec() rex;
 
     // Set the user program in the ingress metadata to the program id in table
     // action entry.
@@ -127,7 +129,7 @@ control ingress(
         geneve_pkt.apply();
 
         if (ingress.user_program != 0w16) {
-            resubmit_exec(ingress.user_program);
+            rex.jump(ingress.user_program);
         } else {
             tbl.apply();
         }
@@ -141,6 +143,6 @@ control egress(
     inout egress_metadata_t egress,
 ) {
     apply {
-        
+
     }
 }

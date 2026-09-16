@@ -17,3 +17,7 @@ struct egress_metadata_t {
 extern Checksum {
     bit<16> run<T>(in T data);
 }
+
+extern ResubmitExec {
+    void jump(bit<16> program_id);
+}
