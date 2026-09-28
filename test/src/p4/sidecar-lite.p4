@@ -239,7 +239,7 @@ control nat_ingress(
         }
         if (hdr.ipv6.isValid()) {
             hdr.inner_ipv6 = hdr.ipv6;
-            orig_l3_len = hdr.Are.payload_len + 16w40;
+            orig_l3_len = hdr.ipv6.payload_len + 16w40;
             hdr.inner_ipv6.setValid();
         }
 
