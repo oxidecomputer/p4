@@ -128,7 +128,7 @@ control ingress(
     apply {
         geneve_pkt.apply();
 
-        if (ingress.user_program != 0w16) {
+        if (ingress.user_program != 16w0) {
             rex.jump(ingress.user_program);
         } else {
             tbl.apply();

@@ -19,5 +19,6 @@ extern Checksum {
 }
 
 extern ResubmitExec {
-    void jump(bit<16> program_id);
+    void jump(inout egress_metadata_t egress, bit<16> program_id);
 }
+
