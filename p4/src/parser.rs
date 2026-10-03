@@ -286,6 +286,14 @@ impl<'a> Parser<'a> {
                 }]);
             }
             _ => {
+                if let lexer::Kind::Identifier(ref name) = token.kind {
+                    if name == "default" {
+                        return Ok(vec![KeySetElement {
+                            value: KeySetElementValue::Default,
+                            token,
+                        }]);
+                    }
+                }
                 self.backlog.push(token.clone());
                 let mut ep = ExpressionParser::new(self);
                 let expr = ep.run()?;
@@ -318,6 +326,30 @@ impl<'a> Parser<'a> {
                                     "Found {} expected: \
                                     comma or paren close after \
                                     dont-care match",
+                                    token.kind,
+                                ),
+                                source: self.lexer.lines[token.line].into(),
+                            }
+                            .into())
+                        }
+                    }
+                }
+                lexer::Kind::Identifier(ref name) if name == "default" => {
+                    elements.push(KeySetElement {
+                        value: KeySetElementValue::Default,
+                        token: token.clone(),
+                    });
+                    let token = self.next_token()?;
+                    match token.kind {
+                        lexer::Kind::Comma => continue,
+                        lexer::Kind::ParenClose => return Ok(elements),
+                        _ => {
+                            return Err(ParserError {
+                                at: token.clone(),
+                                message: format!(
+                                    "Found {} expected: \
+                                    comma or paren close after \
+                                    default match",
                                     token.kind,
                                 ),
                                 source: self.lexer.lines[token.line].into(),

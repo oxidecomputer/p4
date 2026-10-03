@@ -399,6 +399,14 @@ impl<'a> ControlGenerator<'a> {
                 let a = format_ident!("{}", arg.name);
                 action_fn_args.push(quote! { #a });
             }
+            for var in &control.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let name = format_ident!("{}", var.name);
+                        action_fn_args.push(quote! { #name });
+                    }
+                }
+            }
 
             let action_fn_name =
                 format_ident!("{}_action_{}", control.name, entry.action.name);
@@ -449,6 +457,14 @@ impl<'a> ControlGenerator<'a> {
             for x in &control.parameters {
                 let name = format_ident!("{}", x.name);
                 closure_params.push(quote! { #name });
+            }
+            for var in &control.variables {
+                if let Type::UserDefined(typename) = &var.ty {
+                    if self.ast.get_extern(typename).is_some() {
+                        let name = format_ident!("{}", var.name);
+                        closure_params.push(quote! { #name });
+                    }
+                }
             }
 
             tokens.extend(quote! {

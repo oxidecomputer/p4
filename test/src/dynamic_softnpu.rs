@@ -56,9 +56,9 @@ pub fn do_expect_frames(                         // test helper: block until n f
 }
 
 #[macro_export]
-macro_rules! expect_frames {                     // sugar so tests can write expect_frames!(phy, &[...]) instead of the full call
+macro_rules! dynamic_expect_frames {                     // sugar so tests can write dynamic_expect_frames!(phy, &[...]) instead of the full call
     ($phy:expr, $expected:expr) => {
-        $crate::softnpu::do_expect_frames(
+        $crate::dynamic_softnpu::do_expect_frames(
             stringify!($phy),                    // auto-derive the "name" arg from the variable's own source text
             &$phy,
             $expected,
@@ -66,7 +66,7 @@ macro_rules! expect_frames {                     // sugar so tests can write exp
         )
     };
     ($phy:expr, $expected:expr, $dmac:expr) => {  // second arm: caller supplied a dmac to check
-        $crate::softnpu::do_expect_frames(
+        $crate::dynamic_softnpu::do_expect_frames(
             stringify!($phy),
             &$phy,
             $expected,
@@ -165,7 +165,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                     let mut pkt = packet_in::new(content); // wrap the bytes for the pipeline to parse
 
                     let port = i as u16;           // the ingress port number, as the pipeline expects it
-                    let output = pipeline.process_packet(port, &mut pkt); // the one call into the compiled P4 program
+                    let mut output = pipeline.process_packet(port, &mut pkt); // the one call into the compiled P4 program
 
                     let mut hops = 0u8;
                     while let Some(idx) = output.iter().position(|(_, p)| *p >= RESUBMIT_STACK) {
@@ -325,17 +325,17 @@ impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
     }
 
     pub fn send_udp(
-        &self, 
-        mac: [u8; 6], 
-        ip: Ipv4Addr, 
-        dst_port: u16, 
+        &self,
+        mac: [u8; 6],
+        ip: Ipv4Addr,
+        dst_port: u16,
         payload: &[u8],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Vec<u8>, anyhow::Error> {
         let buf = packet::v4_udp(self.addr, ip, dst_port, payload);
         let mut txf = TxFrame::new(mac, 0x0800, &buf);
         txf.sc_egress = self.sc_egress;
         self.phy.send(&[txf])?;
-        Ok(())
+        Ok(buf)
     }
 
     pub fn send_geneve(
@@ -346,12 +346,45 @@ impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
         inner_src_mac: [u8; 6],
         inner_ether_type: u16,
         payload: &[u8],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Vec<u8>, anyhow::Error> {
         let buf = packet::v4_udp_geneve_eth(self.addr, ip, inner_dst_mac, inner_src_mac, inner_ether_type, payload);
         let mut txf = TxFrame::new(mac, 0x0800, &buf);
         txf.sc_egress = self.sc_egress;
         self.phy.send(&[txf])?;
-        Ok(())
+        Ok(buf)
+    }
+}
+
+pub struct TxFrame<'a> {
+    pub dst: [u8; 6],
+    pub ethertype: u16,
+    pub payload: &'a [u8],
+    pub sc_egress: u16,
+    pub vid: Option<u16>,
+}
+
+pub struct RxFrame<'a> {
+    pub src: [u8; 6],
+    pub ethertype: u16,
+    pub payload: &'a [u8],
+    pub vid: Option<u16>,
+}
+
+impl<'a> RxFrame<'a> {
+    pub fn new(src: [u8; 6], ethertype: u16, payload: &'a [u8]) -> Self {
+        Self { src, ethertype, payload, vid: None }
+    }
+    pub fn newv(src: [u8; 6], ethertype: u16, payload: &'a [u8], vid: u16) -> Self {
+        Self { src, ethertype, payload, vid: Some(vid) }
+    }
+}
+
+impl<'a> TxFrame<'a> {
+    pub fn new(dst: [u8; 6], ethertype: u16, payload: &'a [u8]) -> Self {
+        Self { dst, ethertype, payload, sc_egress: 0, vid: None }
+    }
+    pub fn newv(dst: [u8; 6], ethertype: u16, payload: &'a [u8], vid: u16) -> Self {
+        Self { dst, ethertype, payload, sc_egress: 0, vid: Some(vid) }
     }
 }
 
@@ -421,7 +454,7 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
 
 
 
-    pub fn send_ipv4(&self, frames: &[TxFrame<'_>]) -> Result<(), xfr::Error> {
+    pub fn send(&self, frames: &[TxFrame<'_>]) -> Result<(), xfr::Error> {
         let n = frames.len();                       // how many frames to send in this batch
         let fps = self.rx_p.reserve(n)?;             // reserve n slots on the rx ring (this injects "arriving" traffic)
         for (i, fp) in fps.enumerate() {             // fill in each reserved slot

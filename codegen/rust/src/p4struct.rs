@@ -142,6 +142,16 @@ impl<'a> StructGenerator<'a> {
             })
         }
 
+        if s.name == "egress_metadata_t" {
+            structure.extend(quote! {
+                impl p4rs::externs::EgressPort for #name {
+                    fn set_resubmit_port(&mut self, port: BitVec<u8, Msb0>) {
+                        self.port = port;
+                    }
+                }
+            });
+        }
+
         self.ctx.structs.insert(s.name.clone(), structure);
     }
 }

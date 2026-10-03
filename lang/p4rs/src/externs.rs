@@ -29,3 +29,36 @@ impl Default for Checksum {
         Self::new()
     }
 }
+
+///
+/// 
+
+pub trait EgressPort {
+    fn set_resubmit_port(&mut self, port: BitVec<u8, Msb0>);
+}
+
+pub struct ResubmitExec {}
+
+impl ResubmitExec {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn jump<T: EgressPort>(
+        &self,
+        egress: &mut T,
+        program_id: BitVec<u8, Msb0>,
+    ) {
+        const RESUBMIT_BASE: u16 = 0x8000;
+        let pid: u16 = program_id.load_le();
+        let mut x = bitvec![mut u8, Msb0; 0; 16];
+        x.store_le(RESUBMIT_BASE.wrapping_add(pid));
+        egress.set_resubmit_port(x);
+    }
+}
+
+impl Default for ResubmitExec {
+    fn default() -> Self {
+        Self::new()
+    }
+}

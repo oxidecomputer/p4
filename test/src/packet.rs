@@ -22,7 +22,7 @@ pub fn v4<'a>(
     src: Ipv4Addr,
     dst: Ipv4Addr,
     payload: &[u8],
-    data: &'a mut [u8,]
+    data: &'a mut [u8],
 ) -> MutableIpv4Packet<'a> {
     data.fill(0);
 

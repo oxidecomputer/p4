@@ -1,4 +1,4 @@
-#include <packet.p4>
+#include <core.p4>
 #include <dynamic_softnpu.p4>
 
 SoftNPU(
@@ -48,21 +48,22 @@ parser parse(
 ){
     state start {
         pkt.extract(hdr.ethernet);
-
-        transition select(hdr.ethernet.ether_type) {
-            16w0x0800: parse_ipv4;
-            default: finish;
+        if (hdr.ethernet.ether_type == 16w0x0800) {
+            transition parse_ipv4;
+        } else {
+            transition finish;
         }
     }
 
     state parse_ipv4 {
         pkt.extract(hdr.ipv4);
-
-        transition select(hdr.ipv4.protocol) {
-            8w17: parse_udp;
-            default: finish;
+        if (hdr.ipv4.protocol == 8w17) {
+            transition parse_udp;
+        } else {
+            transition finish;
         }
     }
+
 
     state parse_udp {
         pkt.extract(hdr.udp);
@@ -126,15 +127,15 @@ control ingress(
     }
 
     apply {
+        ingress.user_program = 16w0;
         geneve_pkt.apply();
 
         if (ingress.user_program != 16w0) {
-            rex.jump(ingress.user_program);
+            rex.jump(egress, ingress.user_program);
         } else {
             tbl.apply();
         }
     }
-
 }
 
 control egress(

@@ -2,7 +2,8 @@
 
 use crate::ast::{
     BinOp, Constant, Control, DeclarationInfo, Expression, ExpressionKind,
-    Lvalue, NameInfo, Parser, Statement, StatementBlock, Type, AST,
+    KeySetElementValue, Lvalue, NameInfo, Parser, Statement, StatementBlock,
+    Transition, Type, AST,
 };
 use crate::check::{Diagnostic, Diagnostics, Level};
 use crate::util::resolve_lvalue;
@@ -125,8 +126,31 @@ impl<'a> HlirGenerator<'a> {
                     );
                     self.expression(c.initializer.as_ref(), names);
                 }
-                Statement::Transition(_t) => {
-                    //TODO
+                Statement::Transition(t) => {
+                    if let Transition::Select(sel) = t {
+                        for p in &sel.parameters {
+                            self.expression(p.as_ref(), names);
+                        }
+                        for elem in &sel.elements {
+                            for ks in &elem.keyset {
+                                match &ks.value {
+                                    KeySetElementValue::Expression(xpr) => {
+                                        self.expression(xpr.as_ref(), names);
+                                    }
+                                    KeySetElementValue::Masked(a, b) => {
+                                        self.expression(a.as_ref(), names);
+                                        self.expression(b.as_ref(), names);
+                                    }
+                                    KeySetElementValue::Ranged(a, b) => {
+                                        self.expression(a.as_ref(), names);
+                                        self.expression(b.as_ref(), names);
+                                    }
+                                    KeySetElementValue::Default
+                                    | KeySetElementValue::DontCare => {}
+                                }
+                            }
+                        }
+                    }
                 }
                 Statement::Return(xpr) => {
                     if let Some(xpr) = xpr {

@@ -1,9 +1,9 @@
-use crate::dynamic_softnpu::{Interface4, RxFrame, SoftNpu, TxFrame};
-use crate::{expect_frames, muffins};
+use crate::dynamic_softnpu::{Interface4, RxFrame, SoftNpu};
+use crate::{dynamic_expect_frames as expect_frames, muffins};
 use std::net::Ipv4Addr;
 
 mod switch_program {
-    p4_macro::use_p4!(p4 = "test/src/p4/switch.p4", pipeline_name = "switch");
+    p4_macro::use_p4!(p4 = "test/src/p4/switch.p4", pipeline_name = "main_pipeline");
 }
 
 mod user_program {
@@ -11,17 +11,18 @@ mod user_program {
 }
 
 const BASIC_UDP_PORT: u16 = 4000;
+const ET: u16 = 0x0800;
 
 ///
 ///                basic udp traffic                  geneve traffic (dst_port == 6081)
 ///                (port 0 <-> 1 swap)                diverted to loaded program 10
 ///
-///                    *~~~~~~~~~~~~~~~*                                *~~~~~~~~~~~~~~~~~~~~*
-///                    ~               ~ -----------------------------> ~                    ~
-///                    ~   switch.p4   ~                                ~  user_program.p4   ~
-///                    ~   (system)    ~                                ~   (program 10)     ~
-///                    ~               ~                                ~                    ~
-///                    *~~~~~~~~~~~~~~~*                                *~~~~~~~~~~~~~~~~~~~~*
+///                    *~~~~~~~~~~~~~~~*                                *~~~~~~~~~~~~~~~~~~~*
+///                    ~               ~ -----------------------------> ~                   ~
+///                    ~   switch.p4   ~                                ~  user_program.p4  ~
+///                    ~   (system)    ~                                ~   (program 10)    ~
+///                    ~               ~                                ~                   ~
+///                    *~~~~~~~~~~~~~~~*                                *~~~~~~~~~~~~~~~~~~~*
 ///                       |         |                                             |
 ///           rx  |  tx   |         |  tx  | rx                         rx 0,1 -> | tx port 2
 ///               v       |         |      v                                      v
@@ -47,44 +48,36 @@ fn dynamic_prog() -> Result<(), anyhow::Error> {
     let pkt0 = Interface4::new(phy0.clone(), Ipv4Addr::new(10, 0, 0, 1));
     let pkt1 = Interface4::new(phy1.clone(), Ipv4Addr::new(10, 0, 0, 2));
 
-    // Basic udp traffic: port 0 <-> port 1 swap (Same as hub-style)
-    // Test intended to never hit the resubmit path
-
+    // Basic udp traffic: port 0 <-> port 1 swap (same as hub-style)
     let sent0 = pkt0.send_udp(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), BASIC_UDP_PORT, msg.0)?;
-    expect_frames!(phy1, &[RxFrame::new(phy0.mac, 0x0800, &sent0)]);
+    expect_frames!(phy1, &[RxFrame::new(phy0.mac, ET, &sent0[20..])]);
 
     let sent1 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.1)?;
-    expect_frames!(phy0, &[RxFrame::new(phy1.mac, 0x0800, &sent1)]);
+    expect_frames!(phy0, &[RxFrame::new(phy1.mac, ET, &sent1[20..])]);
 
     let sent2 = pkt0.send_udp(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), BASIC_UDP_PORT, msg.2)?;
-    expect_frames!(phy1, &[RxFrame::new(phy0.mac, 0x0800, &sent2)]);
+    expect_frames!(phy1, &[RxFrame::new(phy0.mac, ET, &sent2[20..])]);
 
-    // Three packets sent back-to-back, port 1 -> port 0
     let sent3 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.3)?;
     let sent4 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.4)?;
     let sent5 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.5)?;
     expect_frames!(
         phy0,
         &[
-            RxFrame::new(phy1.mac, 0x0800, &sent3),
-            RxFrame::new(phy1.mac, 0x0800, &sent4),
-            RxFrame::new(phy1.mac, 0x0800, &sent5),
+            RxFrame::new(phy1.mac, ET, &sent3[20..]),
+            RxFrame::new(phy1.mac, ET, &sent4[20..]),
+            RxFrame::new(phy1.mac, ET, &sent5[20..]),
         ]
     );
 
     // Geneve traffic (dst_port 6081): diverted through user_program.p4
-    // (loaded as program 10) and lands on port 2 regardless of source port.
+    let sent_geneve0 = pkt0.send_geneve(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), phy1.mac, phy0.mac, ET, msg.0)?;
+    expect_frames!(phy2, &[RxFrame::new(phy0.mac, ET, &sent_geneve0[20..])]);
 
-    let sent_geneve0 =
-        pkt0.send_geneve(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), phy1.mac, phy0.mac, 0x0800, msg.0)?;
-    expect_frames!(phy2, &[RxFrame::new(phy0.mac, 0x0800, &sent_geneve0)]);
-
-    let sent_geneve1 =
-        pkt1.send_geneve(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), phy0.mac, phy1.mac, 0x0800, msg.1)?;
-    expect_frames!(phy2, &[RxFrame::new(phy1.mac, 0x0800, &sent_geneve1)]);
+    let sent_geneve1 = pkt1.send_geneve(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), phy0.mac, phy1.mac, ET, msg.1)?;
+    expect_frames!(phy2, &[RxFrame::new(phy1.mac, ET, &sent_geneve1[20..])]);
 
     // Traffic counts
-
     assert_eq!(phy0.tx_count(), 3usize); // sent0, sent2, sent_geneve0
     assert_eq!(phy0.rx_count(), 4usize); // sent1, sent3, sent4, sent5
 

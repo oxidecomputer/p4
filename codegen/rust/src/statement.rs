@@ -5,8 +5,9 @@ use crate::{
     is_rust_reference, rust_type,
 };
 use p4::ast::{
-    Call, Control, DeclarationInfo, Direction, ExpressionKind, NameInfo,
-    Parser, Statement, StatementBlock, Transition, Type, AST,
+    Call, Control, DeclarationInfo, Direction, ExpressionKind,
+    KeySetElementValue, NameInfo, Parser, Statement, StatementBlock,
+    Transition, Type, AST,
 };
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
@@ -197,29 +198,104 @@ impl<'a> StatementGenerator<'a> {
                 };
                 match transition {
                     Transition::Reference(next_state) => {
-                        match next_state.name.as_str() {
-                            "accept" => quote! { return true; },
-                            "reject" => quote! { return false; },
-                            state_ref => {
-                                let state_name = format_ident!(
-                                    "{}_{}",
-                                    parser.name,
-                                    state_ref
-                                );
-                                let mut args = Vec::new();
-                                for arg in &parser.parameters {
-                                    let name = format_ident!("{}", arg.name);
-                                    args.push(quote! { #name });
-                                }
-                                quote! {
-                                    softnpu_provider::parser_transition!(||(#state_ref));
-                                    return #state_name( #(#args),* );
+                        self.generate_transition_target(
+                            parser,
+                            next_state.name.as_str(),
+                        )
+                    }
+                    Transition::Select(sel) => {
+                        let eg = ExpressionGenerator::new(self.hlir);
+                        let param_exprs: Vec<TokenStream> = sel
+                            .parameters
+                            .iter()
+                            .map(|p| eg.generate_expression(p.as_ref()))
+                            .collect();
+
+                        let mut arms = Vec::new();
+                        let mut default_arm: Option<TokenStream> = None;
+
+                        for elem in &sel.elements {
+                            let target = self.generate_transition_target(
+                                parser,
+                                &elem.name,
+                            );
+
+                            let mut conditions: Vec<TokenStream> = Vec::new();
+                            let mut is_default = false;
+
+                            for (ks, pexpr) in
+                                elem.keyset.iter().zip(param_exprs.iter())
+                            {
+                                match &ks.value {
+                                    KeySetElementValue::Default => {
+                                        is_default = true;
+                                    }
+                                    KeySetElementValue::DontCare => {}
+                                    KeySetElementValue::Expression(xpr) => {
+                                        let val = eg.generate_expression(
+                                            xpr.as_ref(),
+                                        );
+                                        conditions.push(quote! {
+                                            #pexpr == #val
+                                        });
+                                    }
+                                    KeySetElementValue::Masked(val, mask) => {
+                                        let v = eg.generate_expression(
+                                            val.as_ref(),
+                                        );
+                                        let m = eg.generate_expression(
+                                            mask.as_ref(),
+                                        );
+                                        conditions.push(quote! {
+                                            (#pexpr.clone() & #m.clone()) == (#v.clone() & #m.clone())
+                                        });
+                                    }
+                                    KeySetElementValue::Ranged(lo, hi) => {
+                                        let l = eg.generate_expression(
+                                            lo.as_ref(),
+                                        );
+                                        let h = eg.generate_expression(
+                                            hi.as_ref(),
+                                        );
+                                        conditions.push(quote! {
+                                            (#pexpr >= #l) && (#pexpr <= #h)
+                                        });
+                                    }
                                 }
                             }
+
+                            if is_default {
+                                default_arm = Some(target);
+                                continue;
+                            }
+
+                            let cond = if conditions.is_empty() {
+                                quote! { true }
+                            } else {
+                                quote! { #(#conditions)&&* }
+                            };
+
+                            arms.push(quote! {
+                                if #cond {
+                                    #target
+                                }
+                            });
                         }
-                    }
-                    Transition::Select(_) => {
-                        todo!();
+
+                        let default_tokens =
+                            default_arm.unwrap_or_else(|| {
+                                quote! {
+                                    panic!(
+                                        "no matching select case and no default case"
+                                    )
+                                }
+                            });
+
+                        quote! {
+                            #(#arms else)* {
+                                #default_tokens
+                            }
+                        }
                     }
                 }
             }
@@ -230,6 +306,30 @@ impl<'a> StatementGenerator<'a> {
                     quote! { return #xp; }
                 } else {
                     quote! { return }
+                }
+            }
+        }
+    }
+
+    fn generate_transition_target(
+        &self,
+        parser: &Parser,
+        name: &str,
+    ) -> TokenStream {
+        match name {
+            "accept" => quote! { return true; },
+            "reject" => quote! { return false; },
+            state_ref => {
+                let state_name =
+                    format_ident!("{}_{}", parser.name, state_ref);
+                let mut args = Vec::new();
+                for arg in &parser.parameters {
+                    let name = format_ident!("{}", arg.name);
+                    args.push(quote! { #name });
+                }
+                quote! {
+                    softnpu_provider::parser_transition!(||(#state_ref));
+                    return #state_name( #(#args),* );
                 }
             }
         }
@@ -364,16 +464,86 @@ impl<'a> StatementGenerator<'a> {
 
     fn generate_control_extern_call(
         &self,
-        _control: &Control,
+        control: &Control,
         c: &Call,
         tokens: &mut TokenStream,
     ) {
         let eg = ExpressionGenerator::new(self.hlir);
-        let mut args = Vec::new();
 
-        for a in &c.args {
-            let arg_xpr = eg.generate_expression(a.as_ref());
-            args.push(arg_xpr);
+        let parts: Vec<&str> = c.lval.name.split('.').collect();
+        let instance_name = parts[0];
+        let method_name = parts[parts.len() - 1];
+
+        // Resolve the extern instance's declared type and look up the
+        // specific method being called, so we know the declared direction
+        // of each of its parameters. Without this, `inout`/`out` extern
+        // parameters would be passed by value instead of by `&mut`.
+        let extern_method = control
+            .variables
+            .iter()
+            .find(|v| v.name == instance_name)
+            .and_then(|v| match &v.ty {
+                Type::UserDefined(typename) => self.ast.get_extern(typename),
+                _ => None,
+            })
+            .and_then(|ext| ext.get_method(method_name));
+
+        let mut args = Vec::new();
+        for (i, a) in c.args.iter().enumerate() {
+            let wants_mut = extern_method
+                .map(|m| {
+                    m.parameters
+                        .get(i)
+                        .map(|p| {
+                            matches!(
+                                p.direction,
+                                Direction::Out | Direction::InOut
+                            )
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+
+            match &a.kind {
+                ExpressionKind::Lvalue(lvarg) if wants_mut => {
+                    let lvref: Vec<TokenStream> = lvarg
+                        .name
+                        .split('.')
+                        .map(|x| format_ident!("{}", x))
+                        .map(|x| quote! { #x })
+                        .collect();
+
+                    // If this lvalue is itself one of the control's own
+                    // inout/out parameters, it is already a `&mut` reference
+                    // in the generated function body -- adding another
+                    // `&mut` here would produce a double reference.
+                    let already_ref = matches!(
+                        self.hlir
+                            .lvalue_decls
+                            .get(lvarg)
+                            .map(|ni| &ni.decl),
+                        Some(DeclarationInfo::Parameter(_))
+                    );
+
+                    if already_ref {
+                        args.push(quote! { #(#lvref).* });
+                    } else {
+                        args.push(quote! { &mut #(#lvref).* });
+                    }
+                }
+                _ => {
+                    let arg_xpr = eg.generate_expression(a.as_ref());
+                    let needs_clone = matches!(
+                        a.kind,
+                        ExpressionKind::Lvalue(_)
+                    );
+                    if needs_clone {
+                        args.push(quote! { #arg_xpr.clone() });
+                    } else {
+                        args.push(arg_xpr);
+                    }
+                }
+            }
         }
 
         let lvref: Vec<TokenStream> = c
