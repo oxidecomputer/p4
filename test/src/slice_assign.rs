@@ -40,7 +40,8 @@ fn slice_assign_mcast_mac() -> Result<(), anyhow::Error> {
 
     // Same-field aliased assignment: ipv4.dst[3:0] = ipv4.dst[31:28].
     // dst IP = 0xEF810203, top nibble = 0xE.
-    // After assignment: bottom nibble becomes 0xE, so last byte = 0x0E.
+    //
+    // After assignment, the bottom nibble becomes 0xE and last byte = 0x0E.
     let dst_ip = &frame.payload[16..20]; // ipv4.dst in the IPv4 header
     assert_eq!(
         dst_ip[3], 0x0E,
@@ -54,6 +55,12 @@ fn slice_assign_mcast_mac() -> Result<(), anyhow::Error> {
         frame.src[5] & 0x01,
         0x01,
         "single-bit set: LSB of src MAC last byte"
+    );
+
+    assert_eq!(
+        &frame.payload[12..16],
+        &[0x0a, 0x05, 0xa0, 0x01],
+        "non-contiguous ipv4.src[19:12] = 0x5a on 10.0.0.1"
     );
 
     Ok(())

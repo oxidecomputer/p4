@@ -47,14 +47,24 @@ control ingress(
         //   reversed_slice_range(23, 20, 32) maps to bitvec [16..20],
         //   which is the top nibble of storage byte 2 (0xAB) = 0xA.
         //
-        // Without reversal, this will generate [20..24], which is the bottom
-        // nibble of storage byte 2 (0xAB) = 0xB.
+        // The incorrect range [20..24] reads the bottom nibble of storage
+        // byte 2 (0xAB), which is 0xB.
+        //
+        // Header writes record slice results without maintaining IPv4 checksums.
         if (hdr.ipv4.dst[23:20] == 4w0xa) {
             hdr.ipv4.identification = 16w42;
         }
 
         if (hdr.ipv4.ttl[3:0] == 4w0x5) {
             hdr.ipv4.protocol = 8w0x5b;
+        }
+
+        if (hdr.ipv4.dst[19:12] == 8w0xb0) {
+            hdr.ipv4.diffserv = 8w0xb0;
+        }
+
+        if (hdr.ipv4.frag_offset[11:4] == 8w0xab) {
+            hdr.ipv4.hdr_checksum = 16w0xab;
         }
 
         egress.port = 16w1;

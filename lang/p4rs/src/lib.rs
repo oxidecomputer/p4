@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 //! This is the runtime support create for `x4c` generated programs.
 //!
@@ -263,23 +263,26 @@ pub fn int_to_bitvec(x: i128) -> BitVec<u8, Msb0> {
     bv
 }
 
-pub fn bitvec_to_bitvec16(mut x: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
-    x.resize(16, false);
-    x
+/// Resize `x` to 16 bits, zero-extending or truncating its value.
+pub fn bitvec_to_bitvec16(x: BitVec<u8, Msb0>) -> BitVec<u8, Msb0> {
+    bitvec_resize(x, 16)
 }
 
-/// Resize a BitVec to the target width, zero-extending or truncating.
+/// Resize `x` to `width` bits.
 ///
-/// Implements P4-16 spec section 8.11.2 implicit width casts between
-/// `bit<W>` types.
+/// Any added high-order bits are zero.
 ///
-/// [P4-16 spec]: https://p4.org/wp-content/uploads/sites/53/2024/10/P4-16-spec-v1.2.5.html#sec-implicit-casts
-pub fn bitvec_resize(
-    mut x: BitVec<u8, Msb0>,
-    width: usize,
-) -> BitVec<u8, Msb0> {
-    x.resize(width, false);
-    x
+/// This backs x4c's implicit `bit<W>` to `bit<V>` widening, which P4-16
+/// expresses as an explicit cast ([8.11.1]).
+///
+/// [8.11.1]: https://p4.org/wp-content/uploads/sites/53/2024/10/P4-16-spec-v1.2.5.html#sec-explicit-casts
+pub fn bitvec_resize(x: BitVec<u8, Msb0>, width: usize) -> BitVec<u8, Msb0> {
+    let value: u128 = if x.is_empty() { 0 } else { x.load_le() };
+    let mut resized = bitvec![u8, Msb0; 0; width];
+    if width > 0 {
+        resized.store_le(value);
+    }
+    resized
 }
 
 pub fn dump_bv(x: &BitVec<u8, Msb0>) -> String {
@@ -399,13 +402,13 @@ pub fn extract_bit_action_parameter(
 
 /// Collect output ports from a bitmap, excluding the ingress port.
 ///
-/// Bits at or above `radix` are ignored. We can't allow a stray bit
-/// to address a port outside the pipeline.
+/// Bits at or above `radix` are ignored, which means that a bitmap cannot
+/// address a port outside the pipeline.
 ///
 /// The bitmap is interpreted as a little-endian integer: bit N
 /// (i.e., the bit with numeric value 2^N) corresponds to port N.
 /// This matches the encoding used by P4 arithmetic (`128w1 << port`)
-/// via `shl_le`.
+/// via [`bitmath::shl_le`].
 pub fn replicate(
     bitmap: &BitVec<u8, Msb0>,
     ingress_port: u16,
@@ -424,6 +427,65 @@ pub fn replicate(
 mod tests {
     use super::*;
     use num::bigint::BigUint;
+
+    #[test]
+    fn bitvec_resize_preserves_value() {
+        for (source_width, target_width, value) in [
+            (4, 8, 1u128),
+            (4, 16, 0xf),
+            (8, 12, 0xab),
+            (12, 16, 0xabc),
+            (12, 24, 0xabc),
+            (16, 128, 0xbeef),
+            (128, 128, u128::MAX),
+        ] {
+            let mut input = bitvec![u8, Msb0; 0; source_width];
+            input.store_le(value);
+
+            let out = bitvec_resize(input, target_width);
+
+            assert_eq!(out.len(), target_width);
+            assert_eq!(
+                out.load_le::<u128>(),
+                value,
+                "{source_width} -> {target_width}",
+            );
+        }
+    }
+
+    #[test]
+    fn bitvec_resize_empty_values() {
+        let out = bitvec_resize(BitVec::new(), 8);
+        assert_eq!(out.len(), 8);
+        assert_eq!(out.load_le::<u8>(), 0);
+        assert!(bitvec_resize(BitVec::new(), 0).is_empty());
+    }
+
+    #[test]
+    fn bitvec_resize_aligns_slices() {
+        for offset in 0..8 {
+            for (source_width, target_width, value) in [
+                (4, 8, 0xbu128),
+                (8, 16, 0xab),
+                (12, 16, 0xabc),
+                (16, 24, 0xbeef),
+                (128, 128, u128::MAX),
+            ] {
+                let storage = bitvec![u8, Msb0; 0; offset + source_width];
+                let mut input = storage[offset..].to_bitvec();
+                input.store_le(value);
+
+                let out = bitvec_resize(input, target_width);
+                let mut expected = bitvec![u8, Msb0; 0; target_width];
+                expected.store_le(value);
+
+                assert_eq!(
+                    out, expected,
+                    "offset {offset}: {source_width} -> {target_width}",
+                );
+            }
+        }
+    }
 
     /// Checks [`bitvec_to_biguint`] is semantically equivalent to `load_le`,
     /// even with non-byte-aligned widths.

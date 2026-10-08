@@ -302,6 +302,11 @@ pub enum Type {
     Bit(usize),
     Varbit(usize),
     Int(usize),
+    /// Arbitrary-precision `int`, which is valid only for compile-time values
+    /// (P4-16 7.1.6.5).
+    ///
+    /// `Int(w)` becomes the fixed-width `int<W>`.
+    ArbitraryInt,
     String,
     UserDefined(String),
     ExternFunction, //TODO actual signature
@@ -359,6 +364,7 @@ impl fmt::Display for Type {
             Type::Bit(size) => write!(f, "bit<{}>", size),
             Type::Varbit(size) => write!(f, "varbit<{}>", size),
             Type::Int(size) => write!(f, "int<{}>", size),
+            Type::ArbitraryInt => write!(f, "int"),
             Type::String => write!(f, "string"),
             Type::UserDefined(name) => write!(f, "{}", name),
             Type::ExternFunction => write!(f, "extern function"),

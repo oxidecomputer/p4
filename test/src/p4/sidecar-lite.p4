@@ -530,10 +530,8 @@ control proxy_arp(
         hdr.arp.sender_mac = mac;
         hdr.arp.opcode = 16w2;
 
-        //TODO compiler broken for this, should be able to do this in one line.
         bit<32> tmp = 0;
         tmp = hdr.arp.sender_ip;
-        /// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         hdr.arp.sender_ip = hdr.arp.target_ip;
         hdr.arp.target_ip = tmp;
@@ -563,7 +561,7 @@ control mcast_ingress(
         key = {
             hdr.ipv6.dst: exact;
         }
-        actions = { set_port_bitmap; }
+        actions = { set_port_bitmap; NoAction; }
         default_action = NoAction;
     }
 
@@ -571,45 +569,6 @@ control mcast_ingress(
         if (hdr.ipv6.isValid()) {
             mcast_replication_v6.apply();
         }
-    }
-}
-
-control mcast_egress(
-    inout headers_t hdr,
-    inout egress_metadata_t egress,
-) {
-    action decap() {
-        if (hdr.geneve.isValid()) {
-            hdr.geneve.setInvalid();
-            hdr.ethernet = hdr.inner_eth;
-            hdr.inner_eth.setInvalid();
-            if (hdr.inner_ipv4.isValid()) {
-                hdr.ipv4 = hdr.inner_ipv4;
-                hdr.ipv4.setValid();
-                hdr.ipv6.setInvalid();
-                hdr.inner_ipv4.setInvalid();
-            }
-            if (hdr.inner_ipv6.isValid()) {
-                hdr.ipv6 = hdr.inner_ipv6;
-                hdr.ipv6.setValid();
-                hdr.inner_ipv6.setInvalid();
-            }
-            hdr.udp.setInvalid();
-        }
-    }
-
-    // Keyed on the egress port. External ports get decapped,
-    // underlay ports pass through encapsulated.
-    table decap_ports {
-        key = {
-            egress.port: exact;
-        }
-        actions = { decap; }
-        default_action = NoAction;
-    }
-
-    apply {
-        decap_ports.apply();
     }
 }
 
@@ -625,7 +584,6 @@ control ingress(
     mac_rewrite() mac;
     proxy_arp() pxarp;
     mcast_ingress() mcast;
-    Replicate() mcast_rep;
 
     apply {
 
@@ -721,9 +679,6 @@ control ingress(
                 hdr.sidecar.sc_payload = 128w0x1701d;
 
                 // scrimlet port
-                // TODO simply stating 0 here causes bad conversion, initializes
-                // egress.port as a 128 bit value due to
-                // StatementGenerator::converter using int_to_bitvec
                 egress.port = 16w0;
             }
             return;
@@ -750,8 +705,6 @@ control ingress(
                 }
             }
         }
-
-        mcast_rep.replicate(egress.port_bitmap);
 
         //
         // Rewrite the mac on the way out the door.

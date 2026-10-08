@@ -13,13 +13,8 @@ struct egress_metadata_t {
     bool broadcast;
     bit<128> port_bitmap;
     bit<128> bitmap_a;
-    bit<128> bitmap_b;
 }
 
 extern Checksum {
     bit<16> run<T>(in T data);
-}
-
-extern Replicate {
-    void replicate(in bit<128> bitmap);
 }

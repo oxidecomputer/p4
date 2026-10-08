@@ -14,6 +14,22 @@ impl<'a> ExpressionGenerator<'a> {
         Self { hlir }
     }
 
+    /// Generate an expression, converting a slice read to an owned `BitVec`.
+    ///
+    /// Without the conversion, a slice read would borrow as a `BitSlice`, which
+    /// the bitmath functions do not take.
+    pub(crate) fn generate_operand(&self, xpr: &Expression) -> TokenStream {
+        let token_stream = self.generate_expression(xpr);
+        match &xpr.kind {
+            ExpressionKind::Index(_, inner)
+                if matches!(inner.kind, ExpressionKind::Slice(..)) =>
+            {
+                quote! { #token_stream.to_bitvec() }
+            }
+            _ => token_stream,
+        }
+    }
+
     pub(crate) fn generate_expression(&self, xpr: &Expression) -> TokenStream {
         match &xpr.kind {
             ExpressionKind::BoolLit(v) => {
@@ -30,9 +46,9 @@ impl<'a> ExpressionGenerator<'a> {
             }
             ExpressionKind::Lvalue(v) => self.generate_lvalue(v),
             ExpressionKind::Binary(lhs, op, rhs) => {
-                let lhs_tks = self.generate_expression(lhs.as_ref());
+                let lhs_tks = self.generate_operand(lhs.as_ref());
                 let op_tks = self.generate_binop(*op);
-                let rhs_tks = self.generate_expression(rhs.as_ref());
+                let rhs_tks = self.generate_operand(rhs.as_ref());
                 let mut ts = TokenStream::new();
                 match op {
                     BinOp::Add => {
@@ -110,44 +126,58 @@ impl<'a> ExpressionGenerator<'a> {
                             }
                         });
                     }
-                    BinOp::Shl => {
-                        ts.extend(quote!{
-                            p4rs::bitmath::shl_le(#lhs_tks.clone(), #rhs_tks.clone())
+                    BinOp::Shl | BinOp::Shr => {
+                        let rhs_tks = match &rhs.kind {
+                            ExpressionKind::IntegerLit(value) => {
+                                self.generate_bit_literal(
+                                    128,
+                                    u128::try_from(*value).expect(
+                                        "negative shift count reached codegen",
+                                    ),
+                                )
+                            }
+                            _ => rhs_tks,
+                        };
+
+                        let shift = match op {
+                            BinOp::Shl => quote! { p4rs::bitmath::shl_le },
+                            BinOp::Shr => quote! { p4rs::bitmath::shr_le },
+                            _ => unreachable!(),
+                        };
+
+                        ts.extend(quote! {
+                            #shift(#lhs_tks.clone(), #rhs_tks.clone())
                         });
                     }
-                    BinOp::Shr => {
-                        ts.extend(quote!{
-                            p4rs::bitmath::shr_le(#lhs_tks.clone(), #rhs_tks.clone())
+                    BinOp::Lt | BinOp::Gt | BinOp::Leq | BinOp::Geq => {
+                        ts.extend(quote! {
+                            p4rs::bitmath::Unsigned(&#lhs_tks)
+                                #op_tks p4rs::bitmath::Unsigned(&#rhs_tks)
                         });
-                    }
-                    _ => {
-                        ts.extend(lhs_tks);
-                        ts.extend(op_tks);
-                        ts.extend(rhs_tks);
                     }
                 }
-                ts
+                quote! { (#ts) }
             }
             ExpressionKind::Index(lval, xpr) => {
                 let mut ts = self.generate_lvalue(lval);
                 // For slices, look up the parent field's bit width
-                // so generate_slice can adjust for header.rs byte
+                // so that generate_slice can adjust for header.rs byte
                 // reversal.
                 if let ExpressionKind::Slice(begin, end) = &xpr.kind {
                     let name_info =
                         self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
-                            panic!("unresolved lvalue {:#?} in slice", lval)
+                            panic!("unresolved lvalue {lval:#?} in slice")
                         });
 
                     let field_width = match &name_info.ty {
-                        p4::ast::Type::Bit(w)
-                        | p4::ast::Type::Varbit(w)
-                        | p4::ast::Type::Int(w) => *w,
-                        ty => panic!(
-                            "slice on non-bit type {:?} reached codegen",
-                            ty,
-                        ),
+                        p4::ast::Type::Bit(w) => *w,
+                        ty => {
+                            panic!(
+                                "slice on non-bit type {ty:?} reached codegen"
+                            )
+                        }
                     };
+
                     let (hi, lo) = Self::slice_bounds(begin, end);
                     if Self::slice_is_contiguous(hi, lo, field_width) {
                         ts.extend(self.generate_slice(begin, end, field_width));
@@ -230,6 +260,11 @@ impl<'a> ExpressionGenerator<'a> {
         reversed_slice_range(hi, lo, field_width).is_some()
     }
 
+    /// Emit a bitvec range index for a contiguous slice `[hi:lo]`.
+    ///
+    /// Callers must check [`Self::slice_is_contiguous`] first and route
+    /// non-contiguous slices to [`Self::generate_slice_read_arith`]; otherwise,
+    /// this panics.
     pub(crate) fn generate_slice(
         &self,
         begin: &Expression,
@@ -238,14 +273,17 @@ impl<'a> ExpressionGenerator<'a> {
     ) -> TokenStream {
         let (hi, lo) = Self::slice_bounds(begin, end);
 
-        let (start, end) = reversed_slice_range(hi, lo, field_width).expect(
+        assert!(
+            Self::slice_is_contiguous(hi, lo, field_width),
             "non-contiguous slice reads must be handled \
-                 by the caller via generate_slice_read_arith",
+             by the caller via generate_slice_read_arith",
         );
+        let (start, end) = reversed_slice_range(hi, lo, field_width).unwrap();
         quote! { [#start..#end] }
     }
 
     /// Emit an arithmetic slice read for non-contiguous slices.
+    ///
     /// This loads the field as an integer, shifts and masks to extract
     /// the requested bits, then packs everything into a new bitvec.
     pub(crate) fn generate_slice_read_arith(
@@ -334,7 +372,7 @@ impl<'a> ExpressionGenerator<'a> {
     }
 }
 
-/// P4 bit position (MSB-first index within a field).
+/// P4 bit position within a field, where bit 0 is the least significant bit.
 type P4Bit = usize;
 
 /// Width of a P4 header field in bits.
@@ -345,6 +383,10 @@ type BitvecRange = (usize, usize);
 
 /// Map a P4 slice `[hi:lo]` to a bitvec range in byte-reversed storage.
 ///
+/// Returns `Some(range)` for single-byte and byte-aligned multi-byte slices,
+/// and `None` when byte reversal splits `[hi:lo]` across non-adjacent
+/// storage, which happens for non-byte-aligned multi-byte slices.
+///
 /// header.rs reverses byte order for fields wider than 8 bits. Bit
 /// positions within each byte are preserved (Msb0). The mapping from
 /// P4 bit positions to storage indices:
@@ -353,50 +395,43 @@ type BitvecRange = (usize, usize);
 /// wire_idx     = W - 1 - b
 /// wire_byte    = wire_idx / 8
 /// bit_in_byte  = wire_idx % 8
-/// storage_byte = W/8 - 1 - wire_byte
+/// storage_byte = ceil(W/8) - 1 - wire_byte
 /// bitvec_idx   = storage_byte * 8 + bit_in_byte
 /// ```
-///
-/// # Returns
-///
-/// `Some(range)` when the slice maps to a contiguous bitvec range
-/// (single-byte slices or byte-aligned multi-byte slices), `None`
-/// for non-byte-aligned multi-byte slices where byte reversal makes
-/// the bits non-contiguous.
 pub(crate) fn reversed_slice_range(
     hi: P4Bit,
     lo: P4Bit,
     field_width: FieldWidth,
 ) -> Option<BitvecRange> {
     // Wire byte indices for the slice endpoints. P4 bit W-1 is in wire
-    // byte 0 (MSB-first), so higher bit numbers map to lower byte indices.
+    // byte 0 (MSB-first), and higher bit numbers map to lower byte indices.
     let storage_bytes = field_width.div_ceil(8);
-    let wire_byte_hi = (field_width - 1 - hi) / 8;
-    let wire_byte_lo = (field_width - 1 - lo) / 8;
+    let wire_idx = |bit_pos: P4Bit| field_width - 1 - bit_pos;
+    let storage_byte = |wire_byte: usize| storage_bytes - 1 - wire_byte;
+    let bitvec_idx = |bit_pos: P4Bit| {
+        let idx = wire_idx(bit_pos);
+        storage_byte(idx / 8) * 8 + idx % 8
+    };
 
-    if wire_byte_hi == wire_byte_lo {
+    let wire_byte_hi = wire_idx(hi) / 8;
+    let wire_byte_lo = wire_idx(lo) / 8;
+    let byte_aligned = (hi + 1).is_multiple_of(8) && lo.is_multiple_of(8);
+
+    match (wire_byte_hi == wire_byte_lo, byte_aligned) {
         // Single-byte slice: map each endpoint individually.
-        let map_bit = |bit_pos: usize| -> usize {
-            let wire_idx = field_width - 1 - bit_pos;
-            let wire_byte = wire_idx / 8;
-            let bit_in_byte = wire_idx % 8;
-            let storage_byte = storage_bytes - 1 - wire_byte;
-            storage_byte * 8 + bit_in_byte
-        };
-
-        let mapped_hi = map_bit(hi);
-        let mapped_lo = map_bit(lo);
-        Some((mapped_hi.min(mapped_lo), mapped_hi.max(mapped_lo) + 1))
-    } else if (hi + 1).is_multiple_of(8) && lo.is_multiple_of(8) {
+        (true, _) => {
+            let (a, b) = (bitvec_idx(hi), bitvec_idx(lo));
+            Some((a.min(b), a.max(b) + 1))
+        }
         // Multi-byte byte-aligned slice: reversed bytes form a
         // contiguous block.
-        let storage_byte_start = storage_bytes - 1 - wire_byte_lo;
-        let storage_byte_end = storage_bytes - 1 - wire_byte_hi;
-        Some((storage_byte_start * 8, (storage_byte_end + 1) * 8))
-    } else {
+        (false, true) => Some((
+            storage_byte(wire_byte_lo) * 8,
+            (storage_byte(wire_byte_hi) + 1) * 8,
+        )),
         // Non-byte-aligned multi-byte slice: byte reversal makes the
         // bits non-contiguous, so there is no single bitvec range.
-        None
+        (false, false) => None,
     }
 }
 
@@ -516,5 +551,13 @@ mod tests {
     fn slice_non_contiguous_returns_none() {
         assert_eq!(reversed_slice_range(11, 4, 32), None);
         assert_eq!(reversed_slice_range(22, 0, 32), None);
+    }
+
+    #[test]
+    fn slice_contiguity() {
+        assert!(ExpressionGenerator::slice_is_contiguous(15, 8, 16));
+        assert!(!ExpressionGenerator::slice_is_contiguous(7, 0, 12));
+        assert!(!ExpressionGenerator::slice_is_contiguous(11, 4, 13));
+        assert!(!ExpressionGenerator::slice_is_contiguous(19, 12, 32));
     }
 }

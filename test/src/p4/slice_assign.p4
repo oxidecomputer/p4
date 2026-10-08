@@ -45,10 +45,14 @@ control ingress(
 
         // Copy ipv4.dst top nibble into its own bottom nibble,
         // exercising same-field aliased slice assignment.
+        //
+        // Later IP writes do not update the multicast MAC or IPv4 checksum.
         hdr.ipv4.dst[3:0] = hdr.ipv4.dst[31:28];
 
         // Set a single bit to exercise [n:n] = 1w1.
         hdr.ethernet.src[0:0] = 1w1;
+
+        hdr.ipv4.src[19:12] = 8w0x5a;
 
         egress.port = 16w1;
     }

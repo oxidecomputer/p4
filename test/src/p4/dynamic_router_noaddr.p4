@@ -172,7 +172,7 @@ control ingress(
         else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.
-            if (ingress.port == 8w1) {
+            if (ingress.port == 16w1) {
                 hdr.sidecar.setInvalid();
             }
             router.apply(hdr, ingress, egress);

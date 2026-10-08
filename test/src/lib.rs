@@ -27,11 +27,15 @@ mod mac_rewrite;
 #[cfg(test)]
 mod mcast;
 #[cfg(test)]
+mod metadata_names;
+#[cfg(test)]
 mod range;
 #[cfg(test)]
 mod shift;
 #[cfg(test)]
 mod slice_assign;
+#[cfg(test)]
+mod slice_assign_empty;
 #[cfg(test)]
 mod slice_read;
 #[cfg(test)]

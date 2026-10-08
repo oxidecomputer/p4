@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 //! The [`use_p4!`] macro allows for P4 programs to be directly integrated into
 //! Rust programs.
@@ -177,47 +177,9 @@ fn check(
 mod tests {
     use super::*;
 
-    #[test]
-    fn macro_rejects_replication_outside_ingress() {
-        let source = r#"
-extern Replicate {
-    void replicate(in bit<128> bitmap);
-}
-struct meta_t {
-    bit<128> bitmap;
-}
-parser parse(inout meta_t m) {
-    state start {
-        transition accept;
-    }
-}
-control ingress(inout meta_t m) {
-    apply { }
-}
-control egress(inout meta_t m) {
-    Replicate() rep;
-    apply {
-        rep.replicate(m.bitmap);
-    }
-}
-SoftNPU(parse(), ingress(), egress()) main;
-"#;
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("egress.p4");
-        fs::write(&path, source).unwrap();
-
-        let error = generate_rs(
-            path.to_str().unwrap().into(),
-            GenerationSettings::default(),
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(error.contains(
-            "Replicate may only be instantiated in the ingress control"
-        ));
-        assert!(error.contains("Replicate() rep;"));
-        assert!(error.contains(path.to_str().unwrap()));
+    fn generate(path: &Path) -> Result<proc_macro2::TokenStream, syn::Error> {
+        let settings = GenerationSettings::default();
+        generate_rs(path.to_str().unwrap().into(), settings)
     }
 
     #[test]
@@ -226,12 +188,7 @@ SoftNPU(parse(), ingress(), egress()) main;
         let path = dir.path().join("wide.p4");
         fs::write(&path, "header wide_t {\n    bit<129> field;\n}\n").unwrap();
 
-        let error = generate_rs(
-            path.to_str().unwrap().into(),
-            GenerationSettings::default(),
-        )
-        .unwrap_err()
-        .to_string();
+        let error = generate(&path).expect_err("bit<129> accepted").to_string();
 
         assert!(error.contains("Width 129 exceeds the 128-bit compiler limit"));
         assert!(error.contains("bit<129> field;"));
@@ -249,12 +206,7 @@ SoftNPU(parse(), ingress(), egress()) main;
         )
         .unwrap();
 
-        let error = generate_rs(
-            path.to_str().unwrap().into(),
-            GenerationSettings::default(),
-        )
-        .unwrap_err()
-        .to_string();
+        let error = generate(&path).expect_err("bit<129> accepted").to_string();
 
         assert!(error.contains("Width 129 exceeds the 128-bit compiler limit"));
         assert!(error.contains("bit<129> included_field;"));
@@ -276,10 +228,6 @@ SoftNPU(parse(), ingress(), egress()) main;
         )
         .unwrap();
 
-        generate_rs(
-            path.to_str().unwrap().into(),
-            GenerationSettings::default(),
-        )
-        .unwrap();
+        generate(&path).expect("complete program rejected");
     }
 }

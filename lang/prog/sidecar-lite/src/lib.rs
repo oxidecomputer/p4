@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 #![allow(clippy::too_many_arguments)]
 
@@ -31,5 +31,40 @@ mod tests {
         let out = pipeline.process_packet(0, &mut pkt);
         let ports: Vec<u16> = out.iter().map(|(_, p)| *p).collect();
         assert_eq!(ports, Vec::<u16>::new(), "routing miss must drop");
+    }
+
+    #[test]
+    fn mcast_group_replicates_to_bitmap_ports() {
+        let mut pipeline = main_pipeline::new(4);
+
+        let group: std::net::Ipv6Addr = "ff0e::1".parse().unwrap();
+        let bitmap: u128 = (1 << 1) | (1 << 2) | (1 << 3);
+        pipeline.add_ingress_mcast_mcast_replication_v6_entry(
+            "set_port_bitmap",
+            &u128::from(group).to_le_bytes(),
+            &bitmap.to_le_bytes(),
+            0,
+        );
+
+        let mut buf = v6_packet();
+        buf[..6].copy_from_slice(&[0x33, 0x33, 0x00, 0x00, 0x00, 0x01]);
+        buf[38..54].copy_from_slice(&group.octets());
+
+        let mut pkt = packet_in::new(&buf);
+        let packet_ports: Vec<u16> = pipeline
+            .process_packet(1, &mut pkt)
+            .iter()
+            .map(|(_, port)| *port)
+            .collect();
+
+        let mut pkt = packet_in::new(&buf);
+        let header_ports: Vec<u16> = pipeline
+            .process_packet_headers(1, &mut pkt)
+            .iter()
+            .map(|(_, port)| *port)
+            .collect();
+
+        assert_eq!(packet_ports, [2, 3], "packet");
+        assert_eq!(header_ports, [2, 3], "headers");
     }
 }
