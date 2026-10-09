@@ -1,5 +1,9 @@
 use pnet::packet::ipv4::MutableIpv4Packet;
 use pnet::packet::ipv6::MutableIpv6Packet;
+use pnet::packet::ip::{IpNextHeaderProtocol, IpNextHeaderProtocols};
+use pnet::packet::udp::MutableUdpPacket;
+use pnet::packet::ethernet::{EtherType, MutableEthernetPacket};
+use pnet::util::MacAddr;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 pub fn v6<'a>(
@@ -18,15 +22,22 @@ pub fn v6<'a>(
     pkt
 }
 
+
 pub fn v4<'a>(
     src: Ipv4Addr,
     dst: Ipv4Addr,
+    protocol: IpNextHeaderProtocol,
     payload: &[u8],
     data: &'a mut [u8],
 ) -> MutableIpv4Packet<'a> {
     data.fill(0);
 
     let mut pkt = MutableIpv4Packet::new(data).unwrap();
+    pkt.set_version(4);
+    pkt.set_header_length(5);
+    pkt.set_ttl(64);
+    //pkt.set_protocol(protocol);
+    pkt.set_next_level_protocol(protocol);
     pkt.set_source(src);
     pkt.set_destination(dst);
     pkt.set_total_length(20 + payload.len() as u16);
@@ -34,78 +45,75 @@ pub fn v4<'a>(
     pkt
 }
 
-/// Builds ipv4 (protocol = UDP) + udp + payload -- the "eth/ipv4/udp/payload"
-/// shape, minus the ethernet header itself (TxFrame/Interface4::send adds
-/// that separately, same as every other packet in this file).
-pub fn v4_udp(src: Ipv4Addr, dst: Ipv4Addr, dst_port: u16, payload: &[u8]) -> Vec<u8> {
-    let mut buf = Vec::new();
 
-    // ipv4 (20 bytes)
-    buf.push(0x45); // version = 4, ihl = 5
-    buf.push(0x00); // diffserv
-    buf.extend_from_slice(&[0x00, 0x00]); // total_len
-    buf.extend_from_slice(&[0x00, 0x00]); // identification
-    buf.extend_from_slice(&[0x00, 0x00]); // flags/frag_offset
-    buf.push(0x40); // ttl
-    buf.push(17); // protocol = UDP
-    buf.extend_from_slice(&[0x00, 0x00]); // header checksum
-    buf.extend_from_slice(&src.octets());
-    buf.extend_from_slice(&dst.octets());
+pub fn v4_udp(
+    src: Ipv4Addr, 
+    dst: Ipv4Addr, 
+    dst_port: u16, 
+    payload: &[u8]) -> Vec<u8> {
 
-    // udp (8 bytes)
-    buf.extend_from_slice(&0u16.to_be_bytes()); // src_port
-    buf.extend_from_slice(&dst_port.to_be_bytes()); // dst_port
-    buf.extend_from_slice(&0u16.to_be_bytes()); // len
-    buf.extend_from_slice(&0u16.to_be_bytes()); // checksum
+    let mut udp = vec![0u8; 8 + payload.len()];
+    {
+        let mut udp_pkt = MutableUdpPacket::new(&mut udp).unwrap();
+        udp_pkt.set_source(0);
+        udp_pkt.set_destination(dst_port);
+        udp_pkt.set_length(8 + payload.len() as u16);
+        udp_pkt.set_checksum(0);
+        udp_pkt.set_payload(payload);
+    }
 
-    buf.extend_from_slice(payload);
-    buf
+    let mut ipv4_udp = vec![0u8; 20 + udp.len()];
+    v4(src, dst, IpNextHeaderProtocols::Udp, &udp, &mut ipv4_udp);
+    ipv4_udp
 }
 
-/// Builds ipv4 (protocol = UDP) + udp (dst_port = 6081) + geneve + inner
-/// ethernet + payload -- the "eth/ipv4/udp/geneve/eth/payload" shape, minus
-/// the OUTER ethernet header. Written independently of `v4_udp` so each
-/// function fully describes one packet shape on its own.
+
 pub fn v4_udp_geneve_eth(
     src: Ipv4Addr,
     dst: Ipv4Addr,
     inner_dst_mac: [u8; 6],
     inner_src_mac: [u8; 6],
     inner_ether_type: u16,
-    payload: &[u8],
-) -> Vec<u8> {
-    let mut buf = Vec::new();
+    payload: &[u8]) -> Vec<u8> {
 
-    // ipv4 (20 bytes)
-    buf.push(0x45);
-    buf.push(0x00);
-    buf.extend_from_slice(&[0x00, 0x00]); // total_len
-    buf.extend_from_slice(&[0x00, 0x00]); // identification
-    buf.extend_from_slice(&[0x00, 0x00]); // flags/frag_offset
-    buf.push(0x40); // ttl
-    buf.push(17); // protocol = UDP
-    buf.extend_from_slice(&[0x00, 0x00]); // header checksum
-    buf.extend_from_slice(&src.octets());
-    buf.extend_from_slice(&dst.octets());
+    // inner ethernet (14 bytes) + payload -- pnet has a type for this one
+    let mut inner_eth = vec![0u8; 14 + payload.len()];
+    {
+        let mut eth_pkt = MutableEthernetPacket::new(&mut inner_eth).unwrap();
+        eth_pkt.set_destination(MacAddr::new(
+            inner_dst_mac[0], inner_dst_mac[1], inner_dst_mac[2],
+            inner_dst_mac[3], inner_dst_mac[4], inner_dst_mac[5],
+        ));
+        eth_pkt.set_source(MacAddr::new(
+            inner_src_mac[0], inner_src_mac[1], inner_src_mac[2],
+            inner_src_mac[3], inner_src_mac[4], inner_src_mac[5],
+        ));
+        eth_pkt.set_ethertype(EtherType::new(inner_ether_type));
+        eth_pkt.set_payload(payload);
+    }
 
-    // udp (8 bytes) -- dst_port fixed to the standard geneve port
-    buf.extend_from_slice(&0u16.to_be_bytes()); // src_port
-    buf.extend_from_slice(&6081u16.to_be_bytes()); // dst_port
-    buf.extend_from_slice(&0u16.to_be_bytes()); // len
-    buf.extend_from_slice(&0u16.to_be_bytes()); // checksum
+    // geneve (8 bytes, no options) -- no pnet type exists for this has to be manually built
+    let mut geneve = Vec::with_capacity(8 + inner_eth.len());
+    geneve.push(0x00); // version/opt_len
+    geneve.push(0x00); // ctrl/crit/reserved
+    geneve.extend_from_slice(&0x6558u16.to_be_bytes()); // transparent ethernet bridging
+    geneve.extend_from_slice(&[0x00, 0x00, 0x00]); // vni
+    geneve.push(0x00); // reserved2
+    geneve.extend_from_slice(&inner_eth);
 
-    // geneve (8 bytes)
-    buf.push(0x00); // version/opt_len
-    buf.push(0x00); // ctrl/crit/reserved
-    buf.extend_from_slice(&0x6558u16.to_be_bytes()); // protocol: transparent ethernet bridging
-    buf.extend_from_slice(&[0x00, 0x00, 0x00]); // vni
-    buf.push(0x00); // reserved2
+    // udp (8 bytes) -- dst_port fixed to the standard geneve port, 6081
+    let udp_len = 8 + geneve.len();
+    let mut udp = vec![0u8; udp_len];
+    {
+        let mut udp_pkt = MutableUdpPacket::new(&mut udp).unwrap();
+        udp_pkt.set_source(0);
+        udp_pkt.set_destination(6081);
+        udp_pkt.set_length(udp_len as u16);
+        udp_pkt.set_checksum(0);
+        udp_pkt.set_payload(&geneve);
+    }
 
-    // inner ethernet (14 bytes)
-    buf.extend_from_slice(&inner_dst_mac);
-    buf.extend_from_slice(&inner_src_mac);
-    buf.extend_from_slice(&inner_ether_type.to_be_bytes());
-
-    buf.extend_from_slice(payload);
-    buf
+    let mut ipv4_udp = vec![0u8; 20 + udp.len()];
+    v4(src, dst, IpNextHeaderProtocols::Udp, &udp, &mut ipv4_udp);
+    ipv4_udp
 }

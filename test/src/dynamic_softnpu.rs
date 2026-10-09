@@ -8,6 +8,7 @@ use std::sync::Arc;                              // shared ownership handle, nee
 use std::thread::spawn;                          // spawns the background thread that runs the packet-processing loop
 use std::collections::HashMap;
 use xfr::{ring, FrameBuffer, RingConsumer, RingProducer}; // the ring-buffer library backing every port's rx/tx queues
+use pnet::packet::ip::IpNextHeaderProtocols;
 
 pub fn do_expect_frames(                         // test helper: block until n frames arrive, then assert they match
     name: &str,                                  // label for log output (usually the phy variable's own name via stringify!)
@@ -36,12 +37,34 @@ pub fn do_expect_frames(                         // test helper: block until n f
                     payload = &payload[40..];     // skip the 40-byte IPv6 header too
                 }
                 if et == 0x0800 {                 // inner frame is IPv4
-                    payload = &payload[20..];     // skip the 20-byte IPv4 header too
+                    let ip_protocol = payload[9];                 // IPv4 "protocol" field, byte 9 of the 20-byte header
+                    payload = &payload[20..];                      // skip the 20-byte IPv4 header too
+                    if ip_protocol == 17 {                          // 17 == UDP
+                        let dst_port = u16::from_be_bytes([payload[2], payload[3]]); // UDP dst_port field
+                        payload = &payload[8..];                    // skip the 8-byte UDP header
+                        if dst_port == 6081 {                        // fixed geneve UDP port -> tunneled shape
+                            payload = &payload[8..];                 // skip the 8-byte geneve header
+                            payload = &payload[14..];                // skip the 14-byte inner ethernet header
+                        }
+                    }
                 }
                 payload
             }
             0x86dd => &frames[i].payload[40..],   // plain IPv6: skip fixed 40-byte header
-            0x0800 => &frames[i].payload[20..],   // plain IPv4: skip minimum 20-byte header
+            0x0800 => {                            // plain IPv4: skip ipv4(20) + udp(8) [+ geneve(8) + inner eth(14)] if present
+                let mut payload = &frames[i].payload[..];
+                let ip_protocol = payload[9];                 // IPv4 "protocol" field, byte 9 of the 20-byte header
+                payload = &payload[20..];                      // skip the 20-byte IPv4 header
+                if ip_protocol == 17 {                          // 17 == UDP (IpNextHeaderProtocols::Udp)
+                    let dst_port = u16::from_be_bytes([payload[2], payload[3]]); // UDP dst_port field
+                    payload = &payload[8..];                    // skip the 8-byte UDP header
+                    if dst_port == 6081 {                        // fixed geneve UDP port -> tunneled shape
+                        payload = &payload[8..];                 // skip the 8-byte geneve header
+                        payload = &payload[14..];                // skip the 14-byte inner ethernet header
+                    }
+                }
+                payload
+            }
             _ => &frames[i].payload[..],          // unknown ethertype: don't strip anything
         };
         let m = String::from_utf8_lossy(payload).to_string(); // best-effort render payload as text, for logging
@@ -317,7 +340,8 @@ impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
     ) -> Result<(), anyhow::Error> {
         let n = 20 + payload.len();
         let mut buf = [0u8; F];
-        packet::v4(self.addr, ip, payload, &mut buf);
+        //packet::v4(self.addr, ip, payload, &mut buf);
+        packet::v4(self.addr, ip, IpNextHeaderProtocols::Test1, payload, &mut buf);
         let mut txf = TxFrame::new(mac, 0x0800, &buf[..n]);
         txf.sc_egress = self.sc_egress;
         self.phy.send(&[txf])?;

@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::spawn;
 use xfr::{ring, FrameBuffer, RingConsumer, RingProducer};
+use pnet::packet::ip::IpNextHeaderProtocols;
 
 pub fn do_expect_frames(
     name: &str,
@@ -280,7 +281,8 @@ impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
     ) -> Result<(), anyhow::Error> {
         let n = 20 + payload.len();
         let mut buf = [0u8; F];
-        packet::v4(self.addr, ip, payload, &mut buf);
+        //packet::v4(self.addr, ip, payload, &mut buf);
+        packet::v4(self.addr, ip, IpNextHeaderProtocols::Test1, payload, &mut buf);
         let mut txf = TxFrame::new(mac, 0x0800, &buf[..n]);
         txf.sc_egress = self.sc_egress;
         self.phy.send(&[txf])?;

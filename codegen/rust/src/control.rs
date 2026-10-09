@@ -458,6 +458,7 @@ impl<'a> ControlGenerator<'a> {
                 let name = format_ident!("{}", x.name);
                 closure_params.push(quote! { #name });
             }
+            
             for var in &control.variables {
                 if let Type::UserDefined(typename) = &var.ty {
                     if self.ast.get_extern(typename).is_some() {

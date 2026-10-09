@@ -50,13 +50,13 @@ fn dynamic_prog() -> Result<(), anyhow::Error> {
 
     // Basic udp traffic: port 0 <-> port 1 swap (same as hub-style)
     let sent0 = pkt0.send_udp(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), BASIC_UDP_PORT, msg.0)?;
-    expect_frames!(phy1, &[RxFrame::new(phy0.mac, ET, &sent0[20..])]);
+    expect_frames!(phy1, &[RxFrame::new(phy0.mac, ET, &sent0[28..])]);
 
     let sent1 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.1)?;
-    expect_frames!(phy0, &[RxFrame::new(phy1.mac, ET, &sent1[20..])]);
+    expect_frames!(phy0, &[RxFrame::new(phy1.mac, ET, &sent1[28..])]);
 
     let sent2 = pkt0.send_udp(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), BASIC_UDP_PORT, msg.2)?;
-    expect_frames!(phy1, &[RxFrame::new(phy0.mac, ET, &sent2[20..])]);
+    expect_frames!(phy1, &[RxFrame::new(phy0.mac, ET, &sent2[28..])]);
 
     let sent3 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.3)?;
     let sent4 = pkt1.send_udp(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), BASIC_UDP_PORT, msg.4)?;
@@ -64,18 +64,18 @@ fn dynamic_prog() -> Result<(), anyhow::Error> {
     expect_frames!(
         phy0,
         &[
-            RxFrame::new(phy1.mac, ET, &sent3[20..]),
-            RxFrame::new(phy1.mac, ET, &sent4[20..]),
-            RxFrame::new(phy1.mac, ET, &sent5[20..]),
+            RxFrame::new(phy1.mac, ET, &sent3[28..]),
+            RxFrame::new(phy1.mac, ET, &sent4[28..]),
+            RxFrame::new(phy1.mac, ET, &sent5[28..]),
         ]
     );
 
     // Geneve traffic (dst_port 6081): diverted through user_program.p4
     let sent_geneve0 = pkt0.send_geneve(phy1.mac, Ipv4Addr::new(10, 0, 0, 2), phy1.mac, phy0.mac, ET, msg.0)?;
-    expect_frames!(phy2, &[RxFrame::new(phy0.mac, ET, &sent_geneve0[20..])]);
+    expect_frames!(phy2, &[RxFrame::new(phy0.mac, ET, &sent_geneve0[50..])]);
 
     let sent_geneve1 = pkt1.send_geneve(phy0.mac, Ipv4Addr::new(10, 0, 0, 1), phy0.mac, phy1.mac, ET, msg.1)?;
-    expect_frames!(phy2, &[RxFrame::new(phy1.mac, ET, &sent_geneve1[20..])]);
+    expect_frames!(phy2, &[RxFrame::new(phy1.mac, ET, &sent_geneve1[50..])]);
 
     // Traffic counts
     assert_eq!(phy0.tx_count(), 3usize); // sent0, sent2, sent_geneve0
