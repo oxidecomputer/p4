@@ -54,7 +54,7 @@ control local(
         is_local = false;
     }
 
-    action local() {
+    action set_local() {
         is_local = true;
     }
 
@@ -63,7 +63,7 @@ control local(
             hdr.ipv6.dst: exact;
         }
         actions = {
-            local;
+            set_local;
             nonlocal;
         }
         default_action = nonlocal;
@@ -172,7 +172,7 @@ control ingress(
         else {
             // if the packet came from the scrimlet invalidate the header
             // sidecar header so.
-            if (ingress.port == 8w1) {
+            if (ingress.port == 16w1) {
                 hdr.sidecar.setInvalid();
             }
             router.apply(hdr, ingress, egress);

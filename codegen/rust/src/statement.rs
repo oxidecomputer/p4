@@ -1,12 +1,12 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::{
     expression::ExpressionGenerator, is_header, is_header_member,
     is_rust_reference, rust_type,
 };
 use p4::ast::{
-    Call, Control, DeclarationInfo, Direction, ExpressionKind, NameInfo,
-    Parser, Statement, StatementBlock, Transition, Type, AST,
+    Call, Control, DeclarationInfo, Direction, Expression, ExpressionKind,
+    NameInfo, Parser, Statement, StatementBlock, Transition, Type, AST,
 };
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
@@ -73,21 +73,33 @@ impl<'a> StatementGenerator<'a> {
                         panic!("codegen name not resolved for {:#?}", lval)
                     });
 
-                if is_header_member(lval, self.hlir) {
-                    return quote! { #lhs = #rhs.clone(); };
-                }
-
-                let rhs = if rhs_ty != &name_info.ty {
+                let converted = rhs_ty != &name_info.ty;
+                let rhs = if converted {
                     let converter = self.converter(rhs_ty, &name_info.ty);
+                    let rhs = if matches!(rhs_ty, Type::Bit(_)) {
+                        quote! { (#rhs).to_owned() }
+                    } else {
+                        rhs
+                    };
                     quote!( #converter(#rhs) )
                 } else {
                     rhs
                 };
 
-                let rhs = if let Type::Bit(_) = rhs_ty {
+                if is_header_member(lval, self.hlir) {
+                    return if converted {
+                        quote! { #lhs = #rhs; }
+                    } else {
+                        quote! { #lhs = #rhs.clone(); }
+                    };
+                }
+
+                let rhs = if converted {
+                    rhs
+                } else if let Type::Bit(_) = rhs_ty {
                     // TODO eww, to better to figure out precisely when to_owned
                     // and clone are needed
-                    quote! { #rhs.to_owned().clone() }
+                    quote! { #rhs.to_owned() }
                 } else if let Type::UserDefined(_) = rhs_ty {
                     quote! { #rhs.clone() }
                 } else {
@@ -98,6 +110,88 @@ impl<'a> StatementGenerator<'a> {
                     quote! { *#lhs = #rhs; }
                 } else {
                     quote! { #lhs = #rhs; }
+                }
+            }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                let eg = ExpressionGenerator::new(self.hlir);
+                let lhs = eg.generate_lvalue(lval);
+                let mut rhs = eg.generate_expression(xpr.as_ref());
+
+                let name_info =
+                    self.hlir.lvalue_decls.get(lval).unwrap_or_else(|| {
+                        panic!(
+                            "unresolved lvalue {lval:#?} in slice assignment"
+                        )
+                    });
+                let field_width = match &name_info.ty {
+                    Type::Bit(w) => *w,
+                    ty => panic!(
+                        "slice assignment on non-bit type {ty:?} reached codegen"
+                    ),
+                };
+
+                let (hi_val, lo_val) =
+                    ExpressionGenerator::slice_bounds(hi, lo);
+
+                let slice_ty = Type::Bit(hi_val - lo_val + 1);
+                let rhs_ty = self
+                    .hlir
+                    .expression_types
+                    .get(xpr.as_ref())
+                    .unwrap_or_else(|| panic!("type for {xpr:#?}"));
+
+                let converted = rhs_ty != &slice_ty;
+                if converted {
+                    let converter = self.converter(rhs_ty, &slice_ty);
+                    if matches!(rhs_ty, Type::Bit(_)) {
+                        rhs = quote! { (#rhs).to_owned() };
+                    }
+                    rhs = quote! { #converter(#rhs) };
+                }
+                let snapshot = if converted {
+                    rhs.clone()
+                } else {
+                    quote! { #rhs.to_owned() }
+                };
+
+                if ExpressionGenerator::slice_is_contiguous(
+                    hi_val,
+                    lo_val,
+                    field_width,
+                ) {
+                    let slice = eg.generate_slice(hi, lo, field_width);
+
+                    // Temporary prevents overlapping borrows when
+                    // LHS and RHS alias (e.g. `x[7:4] = x[3:0]`).
+                    quote! {
+                        {
+                            let __slice_rhs = #snapshot;
+                            if #lhs.is_empty() {
+                                #lhs.resize(#field_width, false);
+                            }
+                            #lhs #slice .copy_from_bitslice(&__slice_rhs);
+                        }
+                    }
+                } else {
+                    // Non-contiguous after byte reversal; instead, use
+                    // arithmetic (load, mask, shift, store). Fields fit
+                    // in the u128 loads because the checker rejects
+                    // widths over 128.
+                    let slice_width = hi_val - lo_val + 1;
+                    let mask_val = (1u128 << slice_width) - 1;
+                    quote! {
+                        {
+                            let __rhs_val: u128 = #rhs.load_le();
+                            if #lhs.is_empty() {
+                                #lhs.resize(#field_width, false);
+                            }
+                            let __lhs_val: u128 = #lhs.load_le();
+                            let __mask: u128 = #mask_val << #lo_val;
+                            let __new = (__lhs_val & !__mask)
+                                | ((__rhs_val & #mask_val) << #lo_val);
+                            #lhs.store_le(__new);
+                        }
+                    }
                 }
             }
             Statement::Call(c) => match &self.context {
@@ -135,24 +229,11 @@ impl<'a> StatementGenerator<'a> {
                 let name = format_ident!("{}", v.name);
                 let ty = rust_type(&v.ty);
                 let initializer = match &v.initializer {
-                    Some(xpr) => {
-                        let eg = ExpressionGenerator::new(self.hlir);
-                        let mut ini = eg.generate_expression(xpr.as_ref());
-                        if let ExpressionKind::Lvalue(_) = xpr.kind {
-                            ini = quote! { #ini.clone() };
-                        }
-                        let ini_ty =
-                            self.hlir.expression_types.get(xpr).unwrap_or_else(
-                                || panic!("type for expression {:#?}", xpr),
-                            );
-                        if ini_ty != &v.ty {
-                            let converter = self.converter(ini_ty, &v.ty);
-                            quote! { #converter(#ini) }
-                        } else {
-                            ini
-                        }
-                    }
-                    None => quote! { #ty::default() },
+                    Some(xpr) => self.initializer(xpr, &v.ty),
+                    None => match &v.ty {
+                        Type::Bit(w) => quote! { bitvec![u8, Msb0; 0; #w] },
+                        _ => quote! { #ty::default() },
+                    },
                 };
                 names.insert(
                     v.name.clone(),
@@ -178,9 +259,7 @@ impl<'a> StatementGenerator<'a> {
             Statement::Constant(c) => {
                 let name = format_ident!("{}", c.name);
                 let ty = rust_type(&c.ty);
-                let eg = ExpressionGenerator::new(self.hlir);
-                let initializer =
-                    eg.generate_expression(c.initializer.as_ref());
+                let initializer = self.initializer(&c.initializer, &c.ty);
                 quote! {
                     let #name: #ty = #initializer;
                 }
@@ -329,25 +408,15 @@ impl<'a> StatementGenerator<'a> {
         let eg = ExpressionGenerator::new(self.hlir);
         let mut args = Vec::new();
 
-        for a in &c.args {
-            let arg_xpr = eg.generate_expression(a.as_ref());
-            args.push(arg_xpr);
-        }
-
-        let lvref: Vec<TokenStream> = c
-            .lval
-            .name
-            .split('.')
-            .map(|x| format_ident!("{}_action_{}", control.name, x))
-            .map(|x| quote! { #x })
-            .collect();
-
+        // Control parameters come first in the action function signature
+        // (@see generate_control_action in control.rs), followed by
+        // extern references, and then action-specific parameters.
         for a in &control.parameters {
             let arg = format_ident!("{}", a.name);
             args.push(quote! { #arg });
         }
 
-        // pass externs instantiated at control scope to actions
+        // Pass externs instantiated at control scope to actions.
         for x in &control.variables {
             if let Type::UserDefined(typename) = &x.ty {
                 if self.ast.get_extern(typename).is_some() {
@@ -356,6 +425,25 @@ impl<'a> StatementGenerator<'a> {
                 }
             }
         }
+
+        // Action-specific arguments come last. We clone lvalue args to avoid
+        // moving out from mutable references.
+        for a in &c.args {
+            let arg_xpr = eg.generate_expression(a.as_ref());
+            if matches!(a.kind, ExpressionKind::Lvalue(_)) {
+                args.push(quote! { #arg_xpr.clone() });
+            } else {
+                args.push(arg_xpr);
+            }
+        }
+
+        let lvref: Vec<TokenStream> = c
+            .lval
+            .name
+            .split('.')
+            .map(|x| format_ident!("{}_action_{x}", control.name))
+            .map(|x| quote! { #x })
+            .collect();
 
         tokens.extend(quote! {
             #(#lvref).*(#(#args),*);
@@ -427,11 +515,28 @@ impl<'a> StatementGenerator<'a> {
                 let arg_xpr = eg.generate_expression(a.as_ref());
                 let et = self.hlir.expression_types.get(a.as_ref()).unwrap();
                 let local_name = format_ident!("arg{}", i);
+                let param_ty = &control_instance.parameters[i].ty;
+
+                if et != param_ty {
+                    let converter = self.converter(et, param_ty);
+                    let arg_xpr = if matches!(et, Type::Bit(_)) {
+                        quote! { (#arg_xpr).to_owned() }
+                    } else {
+                        arg_xpr
+                    };
+                    locals.push(quote! {
+                        let mut #local_name = #converter(#arg_xpr);
+                    });
+                    args.push(quote! { &#local_name });
+                    continue;
+                }
+
                 if let ExpressionKind::BitLit(_, _) = a.as_ref().kind {
                     locals.push(quote! {
                         let mut #local_name = #arg_xpr;
                     })
                 }
+
                 match control_instance.parameters[i].direction {
                     Direction::Out | Direction::InOut => {
                         match &a.as_ref().kind {
@@ -639,15 +744,56 @@ impl<'a> StatementGenerator<'a> {
         });
     }
 
+    /// Generate the value bound by a declaration like `bit<W> x = e;` or
+    /// `const bit<W> c = e;`.
+    ///
+    /// Slice reads get owned through `ExpressionGenerator::generate_operand`,
+    /// lvalues are cloned, and the `converter` fn applies when the expression's
+    /// type differs from the declared one.
+    fn initializer(&self, xpr: &Expression, ty: &Type) -> TokenStream {
+        let eg = ExpressionGenerator::new(self.hlir);
+        let mut ini = eg.generate_operand(xpr);
+        if let ExpressionKind::Lvalue(_) = xpr.kind {
+            ini = quote! { #ini.clone() };
+        }
+
+        let ini_ty = self
+            .hlir
+            .expression_types
+            .get(xpr)
+            .unwrap_or_else(|| panic!("type for expression {xpr:#?}"));
+
+        if ini_ty != ty {
+            let converter = self.converter(ini_ty, ty);
+            quote! { #converter(#ini) }
+        } else {
+            ini
+        }
+    }
+
+    /// Generate a closure converting a value of type `from` to `to`.
+    ///
+    /// Integer literals are truncated to `bit<W>` as specified in P4-16
+    /// 8.11.1. Implicit bit widening is an x4c extension implemented through
+    /// `p4rs::bitvec_resize`.
     fn converter(&self, from: &Type, to: &Type) -> TokenStream {
         match (from, to) {
-            (Type::Int(_), Type::Bit(_)) => {
-                quote! { p4rs::int_to_bitvec }
+            (Type::Int(_), Type::Bit(0)) => {
+                quote! { (|_: i128| BitVec::<u8, Msb0>::new()) }
             }
-            (Type::Bit(x), Type::Bit(16)) if *x <= 16 => {
-                quote! { p4rs::bitvec_to_bitvec16 }
+            (Type::Int(_), Type::Bit(w)) => {
+                quote! {
+                    (|__v: i128| {
+                        let mut __x = bitvec![u8, Msb0; 0; #w];
+                        __x.store_le(__v as u128);
+                        __x
+                    })
+                }
             }
-            _ => todo!("type converter for {} to {}", from, to),
+            (Type::Bit(_), Type::Bit(w)) => {
+                quote! { (|__bv| p4rs::bitvec_resize(__bv, #w)) }
+            }
+            _ => unreachable!("hlir rejects converting {from} to {to}"),
         }
     }
 }

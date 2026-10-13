@@ -1,5 +1,5 @@
 #include <core.p4>
-#include <softnpu.p4>
+#include <softnpu_mcast.p4>
 #include <headers.p4>
 
 SoftNPU(
@@ -306,7 +306,7 @@ control nat_ingress(
             hdr.ipv4.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -315,7 +315,7 @@ control nat_ingress(
             hdr.ipv6.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -324,7 +324,7 @@ control nat_ingress(
             hdr.ipv6.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -333,7 +333,7 @@ control nat_ingress(
             hdr.ipv4.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -507,7 +507,7 @@ control mac_rewrite(
 
     table mac_rewrite {
         key = { egress.port: exact; }
-        actions = { rewrite; }
+        actions = { rewrite; NoAction; }
         default_action = NoAction;
     }
 
@@ -530,10 +530,8 @@ control proxy_arp(
         hdr.arp.sender_mac = mac;
         hdr.arp.opcode = 16w2;
 
-        //TODO compiler broken for this, should be able to do this in one line.
         bit<32> tmp = 0;
         tmp = hdr.arp.sender_ip;
-        /// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
         hdr.arp.sender_ip = hdr.arp.target_ip;
         hdr.arp.target_ip = tmp;
@@ -541,12 +539,36 @@ control proxy_arp(
 
     table proxy_arp {
         key = { hdr.arp.target_ip: range; }
-        actions = { proxy_arp_reply; }
+        actions = { proxy_arp_reply; NoAction; }
         default_action = NoAction;
     }
 
     apply {
         proxy_arp.apply();
+    }
+}
+
+control mcast_ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    action set_port_bitmap(bit<128> bitmap) {
+        egress.port_bitmap = bitmap;
+    }
+
+    table mcast_replication_v6 {
+        key = {
+            hdr.ipv6.dst: exact;
+        }
+        actions = { set_port_bitmap; NoAction; }
+        default_action = NoAction;
+    }
+
+    apply {
+        if (hdr.ipv6.isValid()) {
+            mcast_replication_v6.apply();
+        }
     }
 }
 
@@ -561,6 +583,7 @@ control ingress(
     resolver() resolver;
     mac_rewrite() mac;
     proxy_arp() pxarp;
+    mcast_ingress() mcast;
 
     apply {
 
@@ -633,7 +656,10 @@ control ingress(
                     hdr.inner_udp.setInvalid();
                 }
                 router.apply(hdr, ingress, egress);
-                if (egress.port != 16w0) {
+                if (egress.nexthop_v4 != 32w0) {
+                    resolver.apply(hdr, egress);
+                }
+                if (egress.nexthop_v6 != 128w0) {
                     resolver.apply(hdr, egress);
                 }
             }
@@ -653,9 +679,6 @@ control ingress(
                 hdr.sidecar.sc_payload = 128w0x1701d;
 
                 // scrimlet port
-                // TODO simply stating 0 here causes bad conversion, initializes
-                // egress.port as a 128 bit value due to
-                // StatementGenerator::converter using int_to_bitvec
                 egress.port = 16w0;
             }
             return;
@@ -669,9 +692,17 @@ control ingress(
             // check for ingress nat
             nat.apply(hdr, ingress, egress);
 
-            router.apply(hdr, ingress, egress);
-            if (egress.port != 16w0) {
-                resolver.apply(hdr, egress);
+            // check for multicast replication before unicast routing
+            mcast.apply(hdr, ingress, egress);
+
+            if (egress.port_bitmap == 128w0) {
+                router.apply(hdr, ingress, egress);
+                if (egress.nexthop_v4 != 32w0) {
+                    resolver.apply(hdr, egress);
+                }
+                if (egress.nexthop_v6 != 128w0) {
+                    resolver.apply(hdr, egress);
+                }
             }
         }
 

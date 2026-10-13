@@ -1,13 +1,13 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::collections::HashMap;
 
 use crate::ast::{
-    Call, Control, DeclarationInfo, Expression, ExpressionKind, Header, Lvalue,
-    NameInfo, Parser, State, Statement, StatementBlock, Struct, Table,
-    Transition, Type, VisitorMut, AST,
+    Call, Control, ControlParameter, DeclarationInfo, Direction, Expression,
+    ExpressionKind, Header, Lvalue, NameInfo, Parser, State, Statement,
+    StatementBlock, Struct, Table, Transition, Type, VisitorMut, AST,
 };
-use crate::hlir::{Hlir, HlirGenerator};
+use crate::hlir::{implicitly_converts, Hlir, HlirGenerator};
 use crate::lexer::Token;
 use colored::Colorize;
 
@@ -77,7 +77,57 @@ pub fn all(ast: &AST) -> (Hlir, Diagnostics) {
     for h in &ast.headers {
         diags.extend(&HeaderChecker::check(h, ast));
     }
+
+    check_port_bitmap(ast, &mut diags);
+
     (hg.hlir, diags)
+}
+
+/// The egress port bitmap, e.g. for multicast replication.
+///
+/// Bit N (the bit set by `1 << N`) selects port N. The pipeline reads this
+/// field after ingress.
+///
+/// A non-zero value takes precedence over `broadcast` and `port`. If filtering
+/// excludes every selected port, the packet is dropped.
+pub const PORT_BITMAP_FIELD: &str = "port_bitmap";
+
+/// If declared, require `PORT_BITMAP_FIELD` in SoftNPU egress metadata to be a
+/// `bit<N>`.
+fn check_port_bitmap(ast: &AST, diags: &mut Diagnostics) {
+    let Some(egress_struct) = ast
+        .package_instance
+        .as_ref()
+        // SoftNPU(parser, ingress, egress) -> the egress control.
+        .and_then(|inst| inst.parameters.get(2))
+        .and_then(|name| ast.get_control(name))
+        // Control parameters are (headers, ingress_meta, egress_meta).
+        .and_then(|egress| egress.parameters.get(2))
+        .and_then(|meta| match &meta.ty {
+            Type::UserDefined(name) => ast.get_struct(name),
+            _ => None,
+        })
+    else {
+        return;
+    };
+
+    diags.0.extend(
+        egress_struct
+            .members
+            .iter()
+            .filter(|m| {
+                m.name == PORT_BITMAP_FIELD && !matches!(m.ty, Type::Bit(_))
+            })
+            .map(|m| Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "{PORT_BITMAP_FIELD} in egress metadata {} must be a \
+                     bit<N>, found {}",
+                    egress_struct.name, m.ty,
+                ),
+                token: m.token.clone(),
+            }),
+    );
 }
 
 pub struct ControlChecker {}
@@ -96,6 +146,8 @@ impl ControlChecker {
 
     pub fn check_params(c: &Control, ast: &AST, diags: &mut Diagnostics) {
         for p in &c.parameters {
+            check_type_width(&p.ty, &p.ty_token, diags);
+            check_parameter_type(p, diags);
             if let Type::UserDefined(typename) = &p.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
@@ -135,23 +187,50 @@ impl ControlChecker {
                 message: "Table must have a default action".into(),
                 token: t.token.clone(),
             });
+        } else if !t
+            .actions
+            .iter()
+            .any(|action| action.name == t.default_action)
+        {
+            // P4-16 14.2.1.3: the default action must be one of the actions
+            // that appear in the actions list.
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "default action {} is not in the actions of table {}",
+                    t.default_action, t.name,
+                ),
+                token: t.token.clone(),
+            });
         }
     }
 
     pub fn check_variables(c: &Control, ast: &AST, diags: &mut Diagnostics) {
         for v in &c.variables {
-            if let Type::UserDefined(typename) = &v.ty {
-                if ast.get_user_defined_type(typename).is_some() {
-                    continue;
+            match &v.ty {
+                Type::Bit(w) | Type::Varbit(w) | Type::Int(w) if *w > 128 => {
+                    check_type_width(&v.ty, &v.token, diags);
                 }
-                if ast.get_control(typename).is_some() {
-                    continue;
+                Type::UserDefined(typename)
+                    if ast.get_extern(typename).is_some()
+                        || ast.get_control(typename).is_some() => {}
+                Type::UserDefined(typename)
+                    if ast.get_user_defined_type(typename).is_none() =>
+                {
+                    diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!("Typename {typename} not found"),
+                        token: v.token.clone(),
+                    });
                 }
-                diags.push(Diagnostic {
+                _ => diags.push(Diagnostic {
                     level: Level::Error,
-                    message: format!("Typename {} not found", typename),
+                    message: format!(
+                        "control-scope data variable {} is not supported",
+                        v.name,
+                    ),
                     token: v.token.clone(),
-                })
+                }),
             }
         }
     }
@@ -166,6 +245,10 @@ impl ControlChecker {
             Self::check_table_action_reference(c, t, ast, diags);
         }
         for a in &c.actions {
+            for p in &a.parameters {
+                check_type_width(&p.ty, &p.ty_token, diags);
+                check_runtime_type(&p.ty, &p.ty_token, diags);
+            }
             check_statement_block(&a.statement_block, hlir, diags, ast, true);
         }
     }
@@ -177,7 +260,7 @@ impl ControlChecker {
         diags: &mut Diagnostics,
     ) {
         for a in &t.actions {
-            if c.get_action(&a.name).is_none() {
+            if a.name != "NoAction" && c.get_action(&a.name).is_none() {
                 diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
@@ -217,64 +300,12 @@ fn check_statement_block(
 ) {
     for s in &block.statements {
         match s {
-            Statement::Assignment(lval, xpr) => {
-                let name_info = match hlir.lvalue_decls.get(lval) {
-                    Some(info) => info,
-                    None => {
-                        diags.push(Diagnostic {
-                            level: Level::Error,
-                            message: format!(
-                                "Could not resolve lvalue {}",
-                                &lval.name,
-                            ),
-                            token: lval.token.clone(),
-                        });
-                        return;
-                    }
-                };
-
-                let expression_type =
-                    match hlir.expression_types.get(xpr.as_ref()) {
-                        Some(ty) => ty,
-                        None => {
-                            diags.push(Diagnostic {
-                                level: Level::Error,
-                                message: "Could not determine expression type"
-                                    .to_owned(),
-                                token: xpr.token.clone(),
-                            });
-                            return;
-                        }
-                    };
-
-                if &name_info.ty != expression_type {
-                    diags.push(Diagnostic {
-                        level: Level::Error,
-                        message: format!(
-                            "Cannot assign {} to {}",
-                            expression_type, &name_info.ty,
-                        ),
-                        token: xpr.token.clone(),
-                    });
-                }
-            }
             Statement::Empty => {}
             Statement::Call(c) if in_action => {
-                let lval = c.lval.pop_right();
-                let name_info = match hlir.lvalue_decls.get(&lval) {
-                    Some(info) => info,
-                    None => {
-                        diags.push(Diagnostic {
-                            level: Level::Error,
-                            message: format!(
-                                "Could not resolve lvalue {}",
-                                &c.lval.name,
-                            ),
-                            token: c.lval.token.clone(),
-                        });
-                        return;
-                    }
-                };
+                let name_info = hlir
+                    .lvalue_decls
+                    .get(&c.lval.pop_right())
+                    .expect("call lvalue resolved by hlir");
                 match &name_info.ty {
                     Type::Table => {
                         diags.push(Diagnostic {
@@ -299,9 +330,22 @@ fn check_statement_block(
                     _ => {}
                 }
             }
-            _ => {
-                // TODO
+            Statement::Variable(v) => {
+                check_type_width(&v.ty, &v.token, diags);
+                check_runtime_type(&v.ty, &v.token, diags);
             }
+            Statement::If(ifb) => {
+                check_statement_block(&ifb.block, hlir, diags, ast, in_action);
+                for ei in &ifb.else_ifs {
+                    check_statement_block(
+                        &ei.block, hlir, diags, ast, in_action,
+                    );
+                }
+                if let Some(eb) = &ifb.else_block {
+                    check_statement_block(eb, hlir, diags, ast, in_action);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -317,16 +361,8 @@ impl VisitorMut for ApplyCallChecker<'_> {
     fn call(&mut self, call: &Call) {
         let name = call.lval.root();
         let names = self.c.names();
-        let name_info = match names.get(name) {
-            Some(info) => info,
-            None => {
-                self.diags.push(Diagnostic {
-                    level: Level::Error,
-                    message: format!("{} is undefined", name),
-                    token: call.lval.token.clone(),
-                });
-                return;
-            }
+        let Some(name_info) = names.get(name) else {
+            return;
         };
 
         match &name_info.ty {
@@ -383,7 +419,11 @@ impl ApplyCallChecker<'_> {
                 None => panic!("bug: no type for expression {:?}", arg),
             };
             let param = &ctl.parameters[i];
-            if arg_t != &param.ty {
+            let compatible = match param.direction {
+                Direction::Out | Direction::InOut => arg_t == &param.ty,
+                _ => implicitly_converts(arg, arg_t, &param.ty),
+            };
+            if !compatible {
                 self.diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
@@ -407,6 +447,10 @@ pub struct ParserChecker {}
 impl ParserChecker {
     pub fn check(p: &Parser, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
+
+        for param in &p.parameters {
+            check_parameter_type(param, &mut diags);
+        }
 
         if !p.decl_only {
             Self::start_state(p, &mut diags);
@@ -484,6 +528,8 @@ impl StructChecker {
     pub fn check(s: &Struct, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
         for m in &s.members {
+            check_type_width(&m.ty, &m.token, &mut diags);
+            check_runtime_type(&m.ty, &m.token, &mut diags);
             if let Type::UserDefined(typename) = &m.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
@@ -507,6 +553,8 @@ impl HeaderChecker {
     pub fn check(h: &Header, ast: &AST) -> Diagnostics {
         let mut diags = Diagnostics::new();
         for m in &h.members {
+            check_type_width(&m.ty, &m.token, &mut diags);
+            check_runtime_type(&m.ty, &m.token, &mut diags);
             if let Type::UserDefined(typename) = &m.ty {
                 if ast.get_user_defined_type(typename).is_none() {
                     diags.push(Diagnostic {
@@ -521,6 +569,60 @@ impl HeaderChecker {
             }
         }
         diags
+    }
+}
+
+/// Rust represents bit values as u128 for literals, shifts, and arithmetic
+/// slice operations.
+///
+/// Control and action parameters, locals, and struct and header members wider
+/// than 128 bits are rejected.
+///
+/// TODO: parser parameters and constants are not yet checked.
+fn check_type_width(ty: &Type, token: &Token, diags: &mut Diagnostics) {
+    if let Type::Bit(w) | Type::Varbit(w) | Type::Int(w) = ty {
+        if *w > 128 {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "Width {w} exceeds the 128-bit compiler limit",
+                ),
+                token: token.clone(),
+            });
+        }
+    }
+}
+
+/// Reject directional `int` parameters (P4-16 7.1.6.5) and directionless ones,
+/// which SoftNPU cannot bind.
+fn check_parameter_type(p: &ControlParameter, diags: &mut Diagnostics) {
+    match (p.direction, &p.ty) {
+        (Direction::Unspecified, Type::ArbitraryInt) => {
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: "directionless int parameters are not supported by \
+                          SoftNPU"
+                    .into(),
+                token: p.ty_token.clone(),
+            })
+        }
+        (_, Type::ArbitraryInt) => diags.push(Diagnostic {
+            level: Level::Error,
+            message: "int parameters must be directionless".into(),
+            token: p.ty_token.clone(),
+        }),
+        _ => {}
+    }
+}
+
+/// Reject `int` in positions that hold runtime values (P4-16 7.1.6.5).
+fn check_runtime_type(ty: &Type, token: &Token, diags: &mut Diagnostics) {
+    if let Type::ArbitraryInt = ty {
+        diags.push(Diagnostic {
+            level: Level::Error,
+            message: "int is only valid for compile-time known values".into(),
+            token: token.clone(),
+        });
     }
 }
 
@@ -559,6 +661,8 @@ fn check_statement_lvalues(
     match stmt {
         Statement::Empty => {}
         Statement::Variable(v) => {
+            check_type_width(&v.ty, &v.token, &mut diags);
+            check_runtime_type(&v.ty, &v.token, &mut diags);
             if let Some(expr) = &v.initializer {
                 diags.extend(&check_expression_lvalues(
                     expr.as_ref(),
@@ -582,6 +686,10 @@ fn check_statement_lvalues(
             ));
         }
         Statement::Assignment(lval, expr) => {
+            diags.extend(&check_lvalue(lval, ast, names, None));
+            diags.extend(&check_expression_lvalues(expr, ast, names));
+        }
+        Statement::SliceAssignment(lval, _hi, _lo, expr) => {
             diags.extend(&check_lvalue(lval, ast, names, None));
             diags.extend(&check_expression_lvalues(expr, ast, names));
         }
@@ -798,6 +906,19 @@ fn check_lvalue(
                 });
             }
         }
+        Type::ArbitraryInt => {
+            if parts.len() > 1 {
+                diags.push(Diagnostic {
+                    level: Level::Error,
+                    message: format!(
+                        "type {} does not have a member {}",
+                        "int".bright_blue(),
+                        parts[1].bright_blue(),
+                    ),
+                    token: lval.token.clone(),
+                });
+            }
+        }
         Type::String => {
             if parts.len() > 1 {
                 diags.push(Diagnostic {
@@ -952,124 +1073,329 @@ fn check_lvalue(
     diags
 }
 
-pub struct ExpressionTypeChecker {
-    //ast: &'a mut AST,
-    //ast: RefCell::<AST>,
+#[cfg(test)]
+mod tests {
+    use crate::ast::AST;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+    use std::sync::Arc;
+
+    fn check_p4(source: &str) -> super::Diagnostics {
+        let lines: Vec<&str> = source.lines().collect();
+        let filename = Arc::new("test.p4".to_string());
+        let lexer = Lexer::new(lines, filename);
+        let mut parser = Parser::new(lexer);
+        let mut ast = AST::default();
+        parser.run(&mut ast).expect("parse failed");
+        let (_hlir, diags) = crate::check::all(&ast);
+        diags
+    }
+
+    #[test]
+    fn width_128_accepted() {
+        let source = r#"
+header h_t {
+    bit<128> f;
 }
-
-impl ExpressionTypeChecker {
-    pub fn run(&self) -> (HashMap<Expression, Type>, Diagnostics) {
-        // These iterations may seem a bit odd. The reason I'm using numeric
-        // indices here is that I cannot borrow a mutable node of the AST and
-        // the AST itself at the same time, and then pass them separately into a
-        // handler function. So instead I just pass along the mutable AST
-        // together with the index of the thing I'm going to mutate within the
-        // AST. Then in the handler function, a mutable reference to the node of
-        // interest is acquired based on the index.
-        /*
-        let mut diags = Diagnostics::new();
-        for i in 0..self.ast.constants.len() {
-            diags.extend(&self.check_constant(i));
-        }
-        for i in 0..self.ast.controls.len() {
-            diags.extend(&self.check_control(i));
-        }
-        for i in 0..self.ast.parsers.len() {
-            diags.extend(&self.check_parser(i));
-        }
-        diags
-        */
-
-        todo!();
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr) {
+    apply {
+        bit<128> x = hdr.h.f;
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
     }
 
-    pub fn check_constant(&self, _index: usize) -> Diagnostics {
-        todo!("global constant expression type check");
-    }
+    #[test]
+    fn control_data_variables_rejected() {
+        let source =
+            include_str!("../examples/bad/checker/control-data-variables.p4");
 
-    pub fn check_control(&self, _index: usize) -> Diagnostics {
-        /*
-        let c = &mut self.ast.controls[index];
-        let mut diags = Diagnostics::new();
-        let names = c.names();
-        for a in &mut c.actions {
-            diags.extend(
-                &self.check_statement_block(&mut a.statement_block, &names)
-            )
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        let expected = [
+            "selected",
+            "scratch",
+            "signed_value",
+            "enabled",
+            "h",
+            "data",
+        ];
+        assert_eq!(
+            errors.len(),
+            expected.len(),
+            "{:?}",
+            errors.iter().map(|diag| &diag.message).collect::<Vec<_>>(),
+        );
+
+        for (error, name) in errors.iter().zip(expected) {
+            assert_eq!(
+                error.message,
+                format!("control-scope data variable {name} is not supported"),
+            );
         }
-        diags
-        */
-        todo!();
     }
 
-    pub fn check_statement_block(
-        &self,
-        _sb: &mut StatementBlock,
-        _names: &HashMap<String, NameInfo>,
-    ) -> Diagnostics {
-        todo!();
+    #[test]
+    fn control_instances_and_block_locals_accepted() {
+        let source = include_str!("../examples/control-instances.p4");
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "{:?}",
+            errors.iter().map(|diag| &diag.message).collect::<Vec<_>>(),
+        );
+    }
 
-        /*
-        let mut diags = Diagnostics::new();
-        for stmt in &mut sb.statements {
-            match stmt {
-                Statement::Empty => {}
-                Statement::Assignment(_, xpr) => {
-                    diags.extend(&self.check_expression(xpr, names));
-                    todo!()
-                }
-                Statement::Call(c) => { todo!() }
-                Statement::If(ifb) => { todo!() }
-                Statement::Variable(v) => { todo!() }
-                Statement::Constant(c) => { todo!() }
-            }
+    #[test]
+    fn width_over_128_rejected() {
+        let source = r#"
+header h_t {
+    bit<129> f;
+}
+struct metadata_t {
+    bit<130> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr, in bit<131> parameter) {
+    bit<132> control_variable;
+    action a(bit<133> action_parameter) {
+        bit<134> action_variable;
+    }
+    apply {
+        bit<135> apply_variable;
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors = diags.errors();
+        assert_eq!(
+            errors.len(),
+            7,
+            "expected an error for each declaration site: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+        let messages: Vec<_> =
+            errors.iter().map(|error| &error.message).collect();
+        for width in 129..=135 {
+            assert!(
+                messages.iter().any(|message| message
+                    .contains(&format!("Width {width} exceeds"))),
+                "missing diagnostic for width {width}: {messages:?}",
+            );
         }
-        diags
-        */
     }
 
-    pub fn check_expression(
-        &self,
-        _xpr: &mut Expression,
-        _names: &HashMap<String, NameInfo>,
-    ) -> Diagnostics {
-        /*
-        let mut diags = Diagnostics::new();
-        match &mut xpr.kind {
-            ExpressionKind::BoolLit(_) => {
-                xpr.ty = Some(Type::Bool)
-            }
-            //TODO P4 spec section 8.9.1/8.9.2
-            ExpressionKind::IntegerLit(_) => {
-                xpr.ty = Some(Type::Int(128))
-            }
-            ExpressionKind::BitLit(width, _) => {
-                xpr.ty = Some(Type::Bit(*width as usize))
-            }
-            ExpressionKind::SignedLit(width, _) => {
-                xpr.ty = Some(Type::Int(*width as usize))
-            }
-            ExpressionKind::Lvalue(lval) => {
-                //let ty = lvalue_type(lval, ast, names)
-                todo!();
-            }
-            ExpressionKind::Binary(lhs, _, rhs) => {
-                todo!();
-            }
-            ExpressionKind::Index(lval, xpr) => {
-                todo!();
-            }
-            ExpressionKind::Slice(begin, end) => {
-                todo!();
-            }
+    const PORT_BITMAP_PIPELINE: &str = r#"
+struct headers_t {
+    bit<8> f;
+}
+struct ingress_metadata_t {
+    bit<16> port;
+}
+struct egress_metadata_t {
+    PORT_BITMAP_TYPE port_bitmap;
+}
+parser parse(inout headers_t hdr) {
+    state start {
+        transition accept;
+    }
+}
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    apply { }
+}
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    apply { }
+}
+SoftNPU(parse(), ingress(), egress()) main;
+"#;
 
+    #[test]
+    fn control_checks_follow_hlir() {
+        let source = r#"
+header h_t {
+    bit<8> f;
+}
+struct headers_t {
+    h_t h;
+}
+control child(in bool valid, in bit<8> value) {
+    apply { }
+}
+control ingress(inout headers_t hdr) {
+    child() c;
+    table t {
+        key = { hdr.h.f: exact; }
+        actions = { NoAction; }
+        default_action = NoAction;
+    }
+    action nested() {
+        if (true) {
+            t.apply();
         }
-        diags
-        */
-        todo!();
+    }
+    apply {
+        c.apply(hdr.h.isValid(), 5);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors: Vec<_> =
+            diags.errors().iter().map(|d| d.message.clone()).collect();
+        assert_eq!(errors, ["Cannot apply table within action"]);
     }
 
-    pub fn check_parser(&self, _index: usize) -> Diagnostics {
-        todo!("parser expression type check");
+    #[test]
+    fn control_out_parameter_rejects_literal() {
+        let source = r#"
+control child(out bit<8> value) {
+    apply { }
+}
+control ingress() {
+    child() c;
+    apply {
+        c.apply(5);
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors: Vec<_> =
+            diags.errors().iter().map(|d| d.message.clone()).collect();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(
+            errors[0].starts_with("wrong argument type for"),
+            "{errors:?}",
+        );
+    }
+
+    #[test]
+    fn default_action_must_be_listed() {
+        let source = r#"
+header h_t {
+    bit<8> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr) {
+    action hit() { }
+    table arp {
+        key = { hdr.h.f: exact; }
+        actions = { hit; NoAction; }
+        default_action = NoAction;
+    }
+    table routes {
+        key = { hdr.h.f: exact; }
+        actions = { hit; }
+        default_action = NoAction;
+    }
+    apply {
+        arp.apply();
+        routes.apply();
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors: Vec<_> =
+            diags.errors().iter().map(|d| d.message.clone()).collect();
+        assert_eq!(
+            errors,
+            ["default action NoAction is not in the actions of table routes"],
+        );
+    }
+
+    #[test]
+    fn arbitrary_int_rejected_at_runtime() {
+        let source = r#"
+header h_t {
+    int a;
+    int<8> b;
+}
+struct s_t {
+    int c;
+}
+parser parse(packet_in pkt, in int d, int j) {
+    state start {
+        transition accept;
+    }
+}
+control ingress(in int e, int i) {
+    action act(int f) {
+        int g;
+    }
+    apply {
+        int h;
+    }
+}
+"#;
+        let runtime = "int is only valid for compile-time known values";
+        let directional = "int parameters must be directionless";
+        let directionless =
+            "directionless int parameters are not supported by SoftNPU";
+        let diags = check_p4(source);
+        let errors: Vec<_> =
+            diags.errors().iter().map(|d| d.message.clone()).collect();
+        assert_eq!(
+            errors,
+            [
+                directional,
+                directionless,
+                directional,
+                directionless,
+                runtime,
+                runtime,
+                runtime,
+                runtime,
+                runtime,
+            ],
+        );
+    }
+
+    #[test]
+    fn port_bitmap_accepts_bit_type() {
+        let source =
+            PORT_BITMAP_PIPELINE.replace("PORT_BITMAP_TYPE", "bit<128>");
+        let diags = check_p4(&source);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "unexpected errors: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn port_bitmap_rejects_non_bit_type() {
+        let source = PORT_BITMAP_PIPELINE.replace("PORT_BITMAP_TYPE", "bool");
+        let diags = check_p4(&source);
+        let errors = diags.errors();
+        assert!(
+            errors.iter().any(|d| d.message.contains(
+                "port_bitmap in egress metadata egress_metadata_t must be a \
+                 bit<N>"
+            )),
+            "missing port_bitmap type diagnostic: {:?}",
+            errors.iter().map(|d| &d.message).collect::<Vec<_>>(),
+        );
     }
 }

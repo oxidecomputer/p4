@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::lexer::{Kind, Lexer, Token};
 use colored::Colorize;
@@ -165,12 +165,24 @@ fn carat_line(line: &str, at: &Token) -> String {
             carat_line.push(' ');
         }
     }
-    for x in line[at.col..].chars() {
-        if x.is_whitespace() || (Lexer::is_separator(x) && x != '.') {
-            break;
+
+    let rst = &line[at.col..];
+    let on_op = rst.chars().next().is_some_and(|x| {
+        !x.is_whitespace() && Lexer::is_separator(x) && x != '.'
+    });
+
+    for x in rst.chars() {
+        let end = if on_op {
+            x.is_whitespace() || x.is_alphanumeric() || x == '_'
         } else {
-            carat_line.push('^');
+            x.is_whitespace() || (Lexer::is_separator(x) && x != '.')
+        };
+
+        if end {
+            break;
         }
+
+        carat_line.push('^');
     }
     carat_line
 }
@@ -204,4 +216,32 @@ fn fmt_common(
 
     let carat_line = carat_line(source, at);
     write!(f, "  {}", carat_line.bright_red())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::carat_line;
+    use crate::lexer::{Kind, Token};
+    use std::sync::Arc;
+
+    fn token(kind: Kind, col: usize) -> Token {
+        Token {
+            kind,
+            line: 0,
+            col,
+            file: Arc::new(String::new()),
+        }
+    }
+
+    #[test]
+    fn carat_marks_operators() {
+        assert_eq!(carat_line("x + 16w1;", &token(Kind::Plus, 2)), "  ^");
+        assert_eq!(carat_line("x << y;", &token(Kind::Shl, 2)), "  ^^");
+    }
+
+    #[test]
+    fn carat_marks_lvalues() {
+        let field = Kind::Identifier("hdr.f".into());
+        assert_eq!(carat_line("\thdr.f + y;", &token(field, 1)), "\t^^^^^");
+    }
 }
