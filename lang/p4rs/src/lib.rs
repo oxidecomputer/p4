@@ -385,19 +385,34 @@ pub fn extract_bool_action_parameter(
     parameter_data[offset] == 1
 }
 
+/// Extract a `bit<size>` action parameter from the control-plane action data.
+///
+/// Action data lays out each parameter in declaration order as
+/// `size.div_ceil(8)` little-endian bytes, starting at `offset`. x4c keeps
+/// every numeric value little-endian inside a program (header fields are
+/// byte-reversed on parse and once again on deparse), so the control plane
+/// passes these values into this representation with no conversion necessary;
+/// the same is true for `exact` and `range` keys.
+///
+/// The returned vector has the same layout as [`bitvec_resize`] output and
+/// header fields of the same width, so `load_le` recovers the value whenever
+/// the width fits the target integer (up to 128 bits for `u128`).
 pub fn extract_bit_action_parameter(
     parameter_data: &[u8],
     offset: usize,
     size: usize,
 ) -> BitVec<u8, Msb0> {
-    let mut byte_size = size >> 3;
-    if !size.is_multiple_of(8) {
-        byte_size += 1;
+    let byte_size = size.div_ceil(8);
+    let mut bytes = parameter_data[offset..offset + byte_size].to_vec();
+    let rem = size % 8;
+    // Msb0 keeps a partial last byte in its high bits, so the value's top
+    // `rem` bits move up before the vector is truncated to `size`.
+    if rem != 0 {
+        bytes[byte_size - 1] <<= 8 - rem;
     }
-    let mut b: BitVec<u8, Msb0> =
-        BitVec::from_slice(&parameter_data[offset..offset + byte_size]);
-    b.resize(size, false);
-    b
+    let mut bv = BitVec::<u8, Msb0>::from_vec(bytes);
+    bv.resize(size, false);
+    bv
 }
 
 /// Collect output ports from a bitmap, excluding the ingress port.
@@ -451,6 +466,49 @@ mod tests {
                 "{source_width} -> {target_width}",
             );
         }
+    }
+
+    #[test]
+    fn extract_bit_action_parameter_sub_byte_widths() {
+        for (width, value) in [
+            (12, 100u16),
+            (12, 256),
+            (12, 300),
+            (12, 4094),
+            (4, 0xa),
+            (9, 0x1ab),
+            (10, 0x2ab),
+            (11, 0x5ab),
+            (13, 0x1abc),
+            (14, 0x2abc),
+            (15, 0x5abc),
+            (16, 0xbeef),
+        ] {
+            let mut data = vec![0xffu8];
+            data.extend_from_slice(&value.to_le_bytes());
+
+            let out = extract_bit_action_parameter(&data, 1, width);
+
+            assert_eq!(out.len(), width);
+            assert_eq!(out.load_le::<u16>(), value, "bit<{width}> = {value}");
+
+            let mut expected = bitvec![u8, Msb0; 0; width];
+            expected.store_le(value);
+            assert_eq!(out, expected, "bit<{width}> layout");
+        }
+    }
+
+    #[test]
+    fn extract_bit_action_parameter_wide_unaligned() {
+        let mut data = vec![0xa5u8; 16];
+        data.push(0x0f);
+
+        let out = extract_bit_action_parameter(&data, 0, 132);
+
+        assert_eq!(out.len(), 132);
+        let mut expected = vec![0xa5u8; 16];
+        expected.push(0xf0);
+        assert_eq!(out.as_raw_slice(), expected.as_slice());
     }
 
     #[test]

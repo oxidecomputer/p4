@@ -854,7 +854,7 @@ impl<'a> PipelineGenerator<'a> {
                             );
                         });
                         parameter_refs.push(quote! { #pname.clone() });
-                        offset += n >> 3;
+                        offset += n.div_ceil(8);
                     }
                     Type::Varbit(_n) => {
                         todo!();
@@ -934,6 +934,17 @@ impl<'a> PipelineGenerator<'a> {
             let tname = format_ident!("{}", qtfn);
             action_match_body.extend(quote! {
                 #aname => {
+                    if parameter_data.len() < #offset {
+                        println!(
+                            "add {} entry: action {} expects {} parameter \
+                             bytes, found {}, ignoring",
+                            #qtfn,
+                            #aname,
+                            #offset,
+                            parameter_data.len(),
+                        );
+                        return;
+                    }
                     #(#parameter_tokens)*
                     let action: std::sync::Arc<dyn Fn(
                         #(#control_param_types),*

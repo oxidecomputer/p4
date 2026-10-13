@@ -3,6 +3,8 @@
 #![allow(clippy::too_many_arguments)]
 
 #[cfg(test)]
+mod action_param_offset;
+#[cfg(test)]
 mod arithmetic;
 #[cfg(test)]
 mod basic_router;
