@@ -187,6 +187,21 @@ impl ControlChecker {
                 message: "Table must have a default action".into(),
                 token: t.token.clone(),
             });
+        } else if !t
+            .actions
+            .iter()
+            .any(|action| action.name == t.default_action)
+        {
+            // P4-16 14.2.1.3: the default action must be one of the actions
+            // that appear in the actions list.
+            diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!(
+                    "default action {} is not in the actions of table {}",
+                    t.default_action, t.name,
+                ),
+                token: t.token.clone(),
+            });
         }
     }
 
@@ -1270,6 +1285,42 @@ control ingress() {
         assert!(
             errors[0].starts_with("wrong argument type for"),
             "{errors:?}",
+        );
+    }
+
+    #[test]
+    fn default_action_must_be_listed() {
+        let source = r#"
+header h_t {
+    bit<8> f;
+}
+struct headers_t {
+    h_t h;
+}
+control ingress(inout headers_t hdr) {
+    action hit() { }
+    table arp {
+        key = { hdr.h.f: exact; }
+        actions = { hit; NoAction; }
+        default_action = NoAction;
+    }
+    table routes {
+        key = { hdr.h.f: exact; }
+        actions = { hit; }
+        default_action = NoAction;
+    }
+    apply {
+        arp.apply();
+        routes.apply();
+    }
+}
+"#;
+        let diags = check_p4(source);
+        let errors: Vec<_> =
+            diags.errors().iter().map(|d| d.message.clone()).collect();
+        assert_eq!(
+            errors,
+            ["default action NoAction is not in the actions of table routes"],
         );
     }
 

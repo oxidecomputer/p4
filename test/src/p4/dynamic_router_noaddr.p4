@@ -54,7 +54,7 @@ control local(
         is_local = false;
     }
 
-    action local() {
+    action set_local() {
         is_local = true;
     }
 
@@ -63,7 +63,7 @@ control local(
             hdr.ipv6.dst: exact;
         }
         actions = {
-            local;
+            set_local;
             nonlocal;
         }
         default_action = nonlocal;

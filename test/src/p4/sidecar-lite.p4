@@ -306,7 +306,7 @@ control nat_ingress(
             hdr.ipv4.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -315,7 +315,7 @@ control nat_ingress(
             hdr.ipv6.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -324,7 +324,7 @@ control nat_ingress(
             hdr.ipv6.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -333,7 +333,7 @@ control nat_ingress(
             hdr.ipv4.dst: exact;
             ingress.nat_id: range;
         }
-        actions = { forward_to_sled; }
+        actions = { forward_to_sled; NoAction; }
         default_action = NoAction;
     }
 
@@ -507,7 +507,7 @@ control mac_rewrite(
 
     table mac_rewrite {
         key = { egress.port: exact; }
-        actions = { rewrite; }
+        actions = { rewrite; NoAction; }
         default_action = NoAction;
     }
 
@@ -539,7 +539,7 @@ control proxy_arp(
 
     table proxy_arp {
         key = { hdr.arp.target_ip: range; }
-        actions = { proxy_arp_reply; }
+        actions = { proxy_arp_reply; NoAction; }
         default_action = NoAction;
     }
 

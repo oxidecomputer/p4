@@ -17,6 +17,8 @@ mod dload;
 #[cfg(test)]
 mod dynamic_router;
 #[cfg(test)]
+mod dynamic_router_noaddr;
+#[cfg(test)]
 mod headers;
 #[cfg(test)]
 mod hub;
