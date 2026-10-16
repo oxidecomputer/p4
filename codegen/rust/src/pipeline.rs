@@ -118,6 +118,8 @@ impl<'a> PipelineGenerator<'a> {
             self.add_table_entry_method(ingress, egress);
         let remove_table_entry_method =
             self.remove_table_entry_method(ingress, egress);
+        let clear_table_entries_method =
+            self.clear_table_entries_method(ingress, egress);
         let get_table_entries_method =
             self.get_table_entries_method(ingress, egress);
         let get_table_ids_method = self.get_table_ids_method(ingress, egress);
@@ -155,6 +157,7 @@ impl<'a> PipelineGenerator<'a> {
                 #pipeline_impl_process_packet
                 #add_table_entry_method
                 #remove_table_entry_method
+                #clear_table_entries_method
                 #get_table_entries_method
                 #get_table_ids_method
             }
@@ -598,6 +601,39 @@ impl<'a> PipelineGenerator<'a> {
         }
     }
 
+    fn clear_table_entries_method(
+        &mut self,
+        ingress: &Control,
+        egress: &Control,
+    ) -> TokenStream {
+        let mut body = TokenStream::new();
+
+        for control in &[ingress, egress] {
+            let tables = control.tables(self.ast);
+            for (cs, table) in tables.iter() {
+                let qtn = qualified_table_name(Some(control), cs, table);
+                let qtfn =
+                    qualified_table_function_name(Some(control), cs, table);
+                let call = format_ident!("clear_{qtfn}_entries");
+                body.extend(quote! {
+                    #qtn => self.#call(),
+                });
+            }
+        }
+
+        body.extend(quote! {
+            x => println!("clear table entries: unknown table id {x}, ignoring"),
+        });
+
+        quote! {
+            fn clear_table_entries(&mut self, table_id: &str) {
+                match table_id {
+                    #body
+                }
+            }
+        }
+    }
+
     fn get_table_ids_method(
         &mut self,
         ingress: &Control,
@@ -684,6 +720,7 @@ impl<'a> PipelineGenerator<'a> {
                 table_control,
                 &qtfn,
             ));
+            tokens.extend(self.clear_table_entries_function(&qtfn));
             tokens.extend(self.get_table_entries_function(
                 table,
                 table_control,
@@ -1016,6 +1053,17 @@ impl<'a> PipelineGenerator<'a> {
                         }
                     );
 
+            }
+        }
+    }
+
+    fn clear_table_entries_function(&mut self, qtfn: &str) -> TokenStream {
+        let name = format_ident!("clear_{qtfn}_entries");
+        let tname = format_ident!("{qtfn}");
+
+        quote! {
+            pub fn #name(&mut self) {
+                self.#tname.entries.clear();
             }
         }
     }
