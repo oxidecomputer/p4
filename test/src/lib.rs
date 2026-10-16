@@ -25,6 +25,8 @@ mod mac_rewrite;
 #[cfg(test)]
 mod range;
 #[cfg(test)]
+mod table_clear;
+#[cfg(test)]
 mod table_in_egress_and_ingress;
 #[cfg(test)]
 mod vlan;

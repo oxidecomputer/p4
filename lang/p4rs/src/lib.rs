@@ -179,6 +179,11 @@ pub trait Pipeline: Send {
     /// Remove an entry from a table identified by table_id.
     fn remove_table_entry(&mut self, table_id: &str, keyset_data: &[u8]);
 
+    /// Remove all entries from a table identified by table_id.
+    // NOTE: This maps to dendrite's SoftNPU `TableOps::clear` implementation,
+    // which is the analogue of `bf_rt_table_clear` on Tofino, for example.
+    fn clear_table_entries(&mut self, table_id: &str);
+
     /// Get all the entries in a table.
     fn get_table_entries(&self, table_id: &str) -> Option<Vec<TableEntry>>;
 
