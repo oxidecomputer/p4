@@ -424,7 +424,7 @@ pub fn extract_bit_action_parameter(
 /// (i.e., the bit with numeric value 2^N) corresponds to port N.
 /// This matches the encoding used by P4 arithmetic (`128w1 << port`)
 /// via [`bitmath::shl_le`].
-pub fn replicate(
+pub fn bitmap_to_port_list(
     bitmap: &BitVec<u8, Msb0>,
     ingress_port: u16,
     radix: u16,
@@ -600,13 +600,13 @@ mod tests {
         let mut bitmap = bitvec![u8, Msb0; 0; 128];
         bitmap.store_le(1u128 << 127);
 
-        assert_eq!(replicate(&bitmap, 0, u16::MAX), vec![127]);
+        assert_eq!(bitmap_to_port_list(&bitmap, 0, u16::MAX), vec![127]);
     }
 
     #[test]
     fn replication_of_empty_bitmap_yields_no_ports() {
         let bitmap: BitVec<u8, Msb0> = BitVec::new();
 
-        assert_eq!(replicate(&bitmap, 0, 4), Vec::<u16>::new());
+        assert_eq!(bitmap_to_port_list(&bitmap, 0, 4), Vec::<u16>::new());
     }
 }

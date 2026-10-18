@@ -235,7 +235,7 @@ impl<'a> PipelineGenerator<'a> {
                     (
                         quote! { #egress_meta_var.#port_bitmap.any() },
                         quote! {
-                            p4rs::replicate(
+                            p4rs::bitmap_to_port_list(
                                 &#egress_meta_var.#port_bitmap,
                                 port,
                                 self.radix,

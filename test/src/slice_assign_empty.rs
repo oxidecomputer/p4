@@ -46,7 +46,7 @@ fn uninitialized_local_is_zero() {
 }
 
 #[test]
-fn noncontiguous_egress_port() {
+fn cross_byte_egress_port() {
     assert_outputs(2, &[(2, 0)]);
 }
 

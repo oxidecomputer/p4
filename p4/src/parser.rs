@@ -103,12 +103,19 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_lvalue(&mut self, what: &str) -> Result<Lvalue, Error> {
+    /// Parse a dotted lvalue, e.g., `hdr.ipv4.ttl`.
+    ///
+    /// The returned token spans from the first identifier to the last one
+    /// when they share a line. Diagnostics then mark the whole dotted name.
+    pub(crate) fn parse_lvalue(&mut self, what: &str) -> Result<Lvalue, Error> {
         let mut name = String::new();
-        let mut first_token = None;
+        let mut first_token: Option<Token> = None;
         loop {
             let (ident, tk) = self.parse_identifier(what)?;
-            match first_token {
+            match &mut first_token {
+                Some(first) if first.line == tk.line => {
+                    first.len = tk.col + tk.len - first.col;
+                }
                 Some(_) => {}
                 None => first_token = Some(tk),
             }
@@ -1599,10 +1606,13 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Box<Expression>, Error> {
-        self.parse_binary(0)
+        self.parse_with_precedence(0)
     }
 
-    fn parse_binary(&mut self, min_prec: u8) -> Result<Box<Expression>, Error> {
+    fn parse_with_precedence(
+        &mut self,
+        min_prec: u8,
+    ) -> Result<Box<Expression>, Error> {
         let mut lhs = self.parse_primary()?;
         while let Some((op, token)) = self.parser.try_parse_binop()? {
             let prec = Self::prec(op);
@@ -1610,7 +1620,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 self.parser.backlog.push(token);
                 break;
             }
-            let rhs = self.parse_binary(prec + 1)?;
+            let rhs = self.parse_with_precedence(prec + 1)?;
             lhs = Expression::new(token, ExpressionKind::Binary(lhs, op, rhs));
         }
         Ok(lhs)
@@ -1660,7 +1670,6 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 self.parser.backlog.push(token.clone());
                 let lval = self.parser.parse_lvalue("identifier")?;
 
-                let this_token = token.clone();
                 let token = self.parser.next_token()?;
 
                 // check for index
@@ -1701,7 +1710,10 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 // if it's not an index and it's not a call, it's an lvalue
                 else {
                     self.parser.backlog.push(token);
-                    Expression::new(this_token, ExpressionKind::Lvalue(lval))
+                    Expression::new(
+                        lval.token.clone(),
+                        ExpressionKind::Lvalue(lval),
+                    )
                 }
             }
             lexer::Kind::CurlyOpen => {

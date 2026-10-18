@@ -116,7 +116,7 @@ fn slice_reads(frag_offset: u16) -> SliceReads {
 }
 
 #[test]
-fn slice_read_sub_byte_field() {
+fn slice_read_low_nibble() {
     let reads = slice_reads(0);
     assert_eq!(reads.port, 1);
     assert_eq!(
@@ -127,7 +127,7 @@ fn slice_read_sub_byte_field() {
 }
 
 #[test]
-fn slice_read_non_contiguous() {
+fn slice_read_across_bytes() {
     let reads = slice_reads(0x0ab5);
     assert_eq!(
         reads.diffserv, 0xb0,

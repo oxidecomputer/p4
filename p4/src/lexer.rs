@@ -253,6 +253,9 @@ pub struct Token {
     /// Column number of the first character in this token.
     pub col: usize,
 
+    /// Length of the source text this token covers, in bytes.
+    pub len: usize,
+
     /// The file this token came from.
     pub file: Arc<String>,
 }
@@ -313,6 +316,7 @@ impl<'a> Lexer<'a> {
             return Ok(Token {
                 kind: Kind::Eof,
                 col: self.col,
+                len: 0,
                 line: self.line,
                 file: self.file.clone(),
             });
@@ -324,6 +328,7 @@ impl<'a> Lexer<'a> {
             return Ok(Token {
                 kind: Kind::Eof,
                 col: self.col,
+                len: 0,
                 line: self.line,
                 file: self.file.clone(),
             });
@@ -431,7 +436,7 @@ impl<'a> Lexer<'a> {
             return Ok(t);
         }
 
-        if let Some(t) = self.match_token(">=", Kind::LessThanEquals) {
+        if let Some(t) = self.match_token("<=", Kind::LessThanEquals) {
             return Ok(t);
         }
 
@@ -649,6 +654,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: Kind::Identifier(tok.into()),
             col: self.col,
+            len,
             line: self.line,
             file: self.file.clone(),
         };
@@ -685,6 +691,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: ctor(bits, value),
             col: self.col,
+            len: tok.len(),
             line: self.line,
             file: self.file.clone(),
         };
@@ -717,6 +724,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: ctor(bits, value),
             col: self.col,
+            len: tok.len(),
             line: self.line,
             file: self.file.clone(),
         };
@@ -794,6 +802,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: Kind::IntLiteral(value),
             col: self.col,
+            len,
             line: self.line,
             file: self.file.clone(),
         };
@@ -934,6 +943,7 @@ impl<'a> Lexer<'a> {
             let token = Token {
                 kind,
                 col: self.col,
+                len,
                 line: self.line,
                 file: self.file.clone(),
             };

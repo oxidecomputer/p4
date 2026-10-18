@@ -1983,30 +1983,34 @@ impl Lvalue {
     }
     pub fn pop_left(&self) -> Self {
         let parts = self.parts();
+        let name = parts[1..].join(".");
         Lvalue {
-            name: parts[1..].join("."),
             token: Token {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col + parts[0].len() + 1,
+                len: name.len(),
                 file: self.token.file.clone(),
             },
+            name,
         }
     }
     pub fn pop_right(&self) -> Self {
         let parts = self.parts();
+        let name = if parts.len() == 1 {
+            parts[0].to_owned()
+        } else {
+            parts[..parts.len() - 1].join(".")
+        };
         Lvalue {
-            name: if parts.len() == 1 {
-                parts[0].to_owned()
-            } else {
-                parts[..parts.len() - 1].join(".")
-            },
             token: Token {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col,
+                len: name.len(),
                 file: self.token.file.clone(),
             },
+            name,
         }
     }
     fn accept<V: Visitor>(&self, v: &V) {

@@ -1,8 +1,8 @@
 // Copyright 2026 Oxide Computer Company
 
 use crate::{
-    expression::ExpressionGenerator, is_header, is_header_member,
-    is_rust_reference, rust_type,
+    expression::{slice_mask, ExpressionGenerator},
+    is_header, is_header_member, is_rust_reference, rust_type,
 };
 use p4::ast::{
     Call, Control, DeclarationInfo, Direction, Expression, ExpressionKind,
@@ -148,49 +148,19 @@ impl<'a> StatementGenerator<'a> {
                     }
                     rhs = quote! { #converter(#rhs) };
                 }
-                let snapshot = if converted {
-                    rhs.clone()
-                } else {
-                    quote! { #rhs.to_owned() }
-                };
 
-                if ExpressionGenerator::slice_is_contiguous(
-                    hi_val,
-                    lo_val,
-                    field_width,
-                ) {
-                    let slice = eg.generate_slice(hi, lo, field_width);
-
-                    // Temporary prevents overlapping borrows when
-                    // LHS and RHS alias (e.g. `x[7:4] = x[3:0]`).
-                    quote! {
-                        {
-                            let __slice_rhs = #snapshot;
-                            if #lhs.is_empty() {
-                                #lhs.resize(#field_width, false);
-                            }
-                            #lhs #slice .copy_from_bitslice(&__slice_rhs);
+                let mask_val = slice_mask(hi_val - lo_val + 1);
+                quote! {
+                    {
+                        let __rhs_val: u128 = #rhs.load_le();
+                        if #lhs.is_empty() {
+                            #lhs.resize(#field_width, false);
                         }
-                    }
-                } else {
-                    // Non-contiguous after byte reversal; instead, use
-                    // arithmetic (load, mask, shift, store). Fields fit
-                    // in the u128 loads because the checker rejects
-                    // widths over 128.
-                    let slice_width = hi_val - lo_val + 1;
-                    let mask_val = (1u128 << slice_width) - 1;
-                    quote! {
-                        {
-                            let __rhs_val: u128 = #rhs.load_le();
-                            if #lhs.is_empty() {
-                                #lhs.resize(#field_width, false);
-                            }
-                            let __lhs_val: u128 = #lhs.load_le();
-                            let __mask: u128 = #mask_val << #lo_val;
-                            let __new = (__lhs_val & !__mask)
-                                | ((__rhs_val & #mask_val) << #lo_val);
-                            #lhs.store_le(__new);
-                        }
+                        let __lhs_val: u128 = #lhs.load_le();
+                        let __mask: u128 = #mask_val << #lo_val;
+                        let __new = (__lhs_val & !__mask)
+                            | ((__rhs_val & #mask_val) << #lo_val);
+                        #lhs.store_le(__new);
                     }
                 }
             }
@@ -409,7 +379,7 @@ impl<'a> StatementGenerator<'a> {
         let mut args = Vec::new();
 
         // Control parameters come first in the action function signature
-        // (@see generate_control_action in control.rs), followed by
+        // (see `generate_control_action` in control.rs), followed by
         // extern references, and then action-specific parameters.
         for a in &control.parameters {
             let arg = format_ident!("{}", a.name);
@@ -747,12 +717,11 @@ impl<'a> StatementGenerator<'a> {
     /// Generate the value bound by a declaration like `bit<W> x = e;` or
     /// `const bit<W> c = e;`.
     ///
-    /// Slice reads get owned through `ExpressionGenerator::generate_operand`,
-    /// lvalues are cloned, and the `converter` fn applies when the expression's
+    /// Lvalues are cloned, and the `converter` fn applies when the expression's
     /// type differs from the declared one.
     fn initializer(&self, xpr: &Expression, ty: &Type) -> TokenStream {
         let eg = ExpressionGenerator::new(self.hlir);
-        let mut ini = eg.generate_operand(xpr);
+        let mut ini = eg.generate_expression(xpr);
         if let ExpressionKind::Lvalue(_) = xpr.kind {
             ini = quote! { #ini.clone() };
         }

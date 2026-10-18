@@ -60,7 +60,7 @@ fn slice_assign_mcast_mac() -> Result<(), anyhow::Error> {
     assert_eq!(
         &frame.payload[12..16],
         &[0x0a, 0x05, 0xa0, 0x01],
-        "non-contiguous ipv4.src[19:12] = 0x5a on 10.0.0.1"
+        "cross-byte ipv4.src[19:12] = 0x5a on 10.0.0.1"
     );
 
     Ok(())

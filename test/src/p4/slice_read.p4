@@ -43,12 +43,9 @@ control ingress(
         // dst IP = 239.171.2.3 = 0xEFAB0203.
         // ipv4.dst[23:20] = top nibble of second wire byte = 0xA.
         //
-        // Correctly reversed: storage is [0x03, 0x02, 0xAB, 0xEF].
-        //   reversed_slice_range(23, 20, 32) maps to bitvec [16..20],
-        //   which is the top nibble of storage byte 2 (0xAB) = 0xA.
-        //
-        // The incorrect range [20..24] reads the bottom nibble of storage
-        // byte 2 (0xAB), which is 0xB.
+        // Storage is byte-reversed: [0x03, 0x02, 0xAB, 0xEF]. A little-endian
+        // load recovers 0xEFAB0203. [23:20] is then the top nibble of storage
+        // byte 2 (0xAB) = 0xA. Reading its bottom nibble instead gives 0xB.
         //
         // Header writes record slice results without maintaining IPv4 checksums.
         if (hdr.ipv4.dst[23:20] == 4w0xa) {

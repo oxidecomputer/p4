@@ -17,6 +17,8 @@ mod disag_router;
 #[cfg(test)]
 mod dload;
 #[cfg(test)]
+mod double_instantiation;
+#[cfg(test)]
 mod dynamic_router;
 #[cfg(test)]
 mod dynamic_router_noaddr;

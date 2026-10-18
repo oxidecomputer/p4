@@ -226,8 +226,9 @@ impl ControlChecker {
                 _ => diags.push(Diagnostic {
                     level: Level::Error,
                     message: format!(
-                        "control-scope data variable {} is not supported",
-                        v.name,
+                        "A variable of type {} cannot be declared at control \
+                         scope.",
+                        v.ty,
                     ),
                     token: v.token.clone(),
                 }),
@@ -302,10 +303,19 @@ fn check_statement_block(
         match s {
             Statement::Empty => {}
             Statement::Call(c) if in_action => {
-                let name_info = hlir
-                    .lvalue_decls
-                    .get(&c.lval.pop_right())
-                    .expect("call lvalue resolved by hlir");
+                let Some(name_info) =
+                    hlir.lvalue_decls.get(&c.lval.pop_right())
+                else {
+                    diags.push(Diagnostic {
+                        level: Level::Error,
+                        message: format!(
+                            "Could not resolve lvalue {}",
+                            &c.lval.name,
+                        ),
+                        token: c.lval.token.clone(),
+                    });
+                    continue;
+                };
                 match &name_info.ty {
                     Type::Table => {
                         diags.push(Diagnostic {
@@ -345,7 +355,10 @@ fn check_statement_block(
                     check_statement_block(eb, hlir, diags, ast, in_action);
                 }
             }
-            _ => {}
+            _ => {
+                // TODO: constants skip the width and int checks applied to
+                // variables.
+            }
         }
     }
 }
@@ -362,6 +375,11 @@ impl VisitorMut for ApplyCallChecker<'_> {
         let name = call.lval.root();
         let names = self.c.names();
         let Some(name_info) = names.get(name) else {
+            self.diags.push(Diagnostic {
+                level: Level::Error,
+                message: format!("{name} is undefined"),
+                token: call.lval.token.clone(),
+            });
             return;
         };
 
@@ -996,12 +1014,7 @@ fn check_lvalue(
                 if parts.len() > 1 {
                     let mut struct_names = names.clone();
                     struct_names.extend(parent.names());
-                    let mut token = lval.token.clone();
-                    token.col += parts[0].len() + 1;
-                    let sub_lval = Lvalue {
-                        name: parts[1..].join("."),
-                        token,
-                    };
+                    let sub_lval = lval.pop_left();
                     let sub_diags = check_lvalue(
                         &sub_lval,
                         ast,
@@ -1014,12 +1027,7 @@ fn check_lvalue(
                 if parts.len() > 1 {
                     let mut header_names = names.clone();
                     header_names.extend(parent.names());
-                    let mut token = lval.token.clone();
-                    token.col += parts[0].len() + 1;
-                    let sub_lval = Lvalue {
-                        name: parts[1..].join("."),
-                        token,
-                    };
+                    let sub_lval = lval.pop_left();
                     let sub_diags = check_lvalue(
                         &sub_lval,
                         ast,
@@ -1032,12 +1040,7 @@ fn check_lvalue(
                 if parts.len() > 1 {
                     let mut extern_names = names.clone();
                     extern_names.extend(parent.names());
-                    let mut token = lval.token.clone();
-                    token.col += parts[0].len() + 1;
-                    let sub_lval = Lvalue {
-                        name: parts[1..].join("."),
-                        token,
-                    };
+                    let sub_lval = lval.pop_left();
                     let sub_diags = check_lvalue(
                         &sub_lval,
                         ast,
@@ -1122,14 +1125,7 @@ control ingress(inout headers_t hdr) {
 
         let diags = check_p4(source);
         let errors = diags.errors();
-        let expected = [
-            "selected",
-            "scratch",
-            "signed_value",
-            "enabled",
-            "h",
-            "data",
-        ];
+        let expected = ["bit<16>", "bit<8>", "int<8>", "bool", "h_t", "data_t"];
         assert_eq!(
             errors.len(),
             expected.len(),
@@ -1137,10 +1133,13 @@ control ingress(inout headers_t hdr) {
             errors.iter().map(|diag| &diag.message).collect::<Vec<_>>(),
         );
 
-        for (error, name) in errors.iter().zip(expected) {
+        for (error, ty) in errors.iter().zip(expected) {
             assert_eq!(
                 error.message,
-                format!("control-scope data variable {name} is not supported"),
+                format!(
+                    "A variable of type {ty} cannot be declared at control \
+                     scope."
+                ),
             );
         }
     }
