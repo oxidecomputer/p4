@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::{
     qualified_table_function_name, qualified_table_name, rust_type,
@@ -7,6 +7,7 @@ use crate::{
 use p4::ast::{
     Control, Direction, MatchKind, PackageInstance, Parser, Table, Type, AST,
 };
+use p4::check::PORT_BITMAP_FIELD;
 use p4::hlir::Hlir;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -176,6 +177,17 @@ impl<'a> PipelineGenerator<'a> {
         self.ctx.pipelines.insert(inst.name.clone(), pipeline);
     }
 
+    /// Whether egress metadata declares `PORT_BITMAP_FIELD` for port selection.
+    fn has_port_bitmap(&self, egress_meta: &Type) -> bool {
+        let Type::UserDefined(name) = egress_meta else {
+            return false;
+        };
+
+        self.ast.get_struct(name).is_some_and(|s| {
+            s.members.iter().any(|m| m.name == PORT_BITMAP_FIELD)
+        })
+    }
+
     fn pipeline_impl_process_packet(
         &mut self,
         parser: &Parser,
@@ -183,6 +195,21 @@ impl<'a> PipelineGenerator<'a> {
         egress: &Control,
     ) -> (TokenStream, TokenStream) {
         let parsed_type = rust_type(&parser.parameters[1].ty);
+
+        let [_, ingress_meta, _] = ingress.parameters.as_slice() else {
+            panic!("SoftNPU ingress control must take 3 parameters");
+        };
+        let [_, _, egress_meta] = egress.parameters.as_slice() else {
+            panic!("SoftNPU egress control must take 3 parameters");
+        };
+
+        // This metadata uses fixed names so P4 parameter names cannot shadow
+        // the pipeline's own locals (parsed, port, pkt).
+        let ingress_meta_var = format_ident!("__ingress_metadata");
+        let egress_meta_var = format_ident!("__egress_metadata");
+        let ingress_meta_type = rust_type(&ingress_meta.ty);
+        let egress_meta_type = rust_type(&egress_meta.ty);
+
         // determine table arguments
         let ingress_tables = ingress.tables(self.ast);
         //TODO(dry)
@@ -204,6 +231,123 @@ impl<'a> PipelineGenerator<'a> {
             });
         }
 
+        let egress_ports = {
+            let (bitmap_set, replicated) =
+                if self.has_port_bitmap(&egress_meta.ty) {
+                    let port_bitmap = format_ident!("{PORT_BITMAP_FIELD}");
+                    (
+                        quote! { #egress_meta_var.#port_bitmap.any() },
+                        quote! {
+                            p4rs::bitmap_to_port_list(
+                                &#egress_meta_var.#port_bitmap,
+                                port,
+                                self.radix,
+                            )
+                        },
+                    )
+                } else {
+                    (quote! { false }, quote! { Vec::new() })
+                };
+            // A non-zero bitmap takes precedence, even if filtering excludes
+            // every selected port. A zero bitmap falls back to broadcast/unicast
+            // handling.
+            quote! {
+                let ports: Vec<u16> = if #egress_meta_var.drop {
+                    Vec::new()
+                } else if #bitmap_set {
+                    #replicated
+                } else if #egress_meta_var.broadcast {
+                    (0..self.radix)
+                        .filter(|&p| p != port)
+                        .collect()
+                } else if #egress_meta_var.port.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![#egress_meta_var.port.load_le()]
+                };
+            }
+        };
+
+        let egress_loop = quote! {
+            ports.into_iter()
+                .filter_map(|eport| {
+                    let mut igm = #ingress_meta_var.clone();
+                    let mut egm = #egress_meta_var.clone();
+                    let mut parsed_ = parsed.clone();
+
+                    //
+                    // Run the egress block
+                    //
+
+                    egm.port = {
+                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        x.store_le(eport);
+                        x
+                    };
+
+                    (self.egress)(
+                        &mut parsed_,
+                        &mut igm,
+                        &mut egm,
+                        #(#egress_tbl_args),*
+                    );
+
+                    if egm.drop {
+                        return None;
+                    }
+
+                    //
+                    // Create the packet output.
+                    //
+
+                    let bv = parsed_.to_bitvec();
+                    let buf = bv.as_raw_slice();
+                    let out = packet_out{
+                        header_data: buf.to_owned(),
+                        payload_data: &pkt.data[parsed_size..],
+                    };
+                    Some((out, eport))
+                })
+                .collect()
+        };
+
+        let egress_loop_headers = quote! {
+            ports.into_iter()
+                .filter_map(|eport| {
+                    let mut igm = #ingress_meta_var.clone();
+                    let mut egm = #egress_meta_var.clone();
+                    let mut parsed_ = parsed.clone();
+
+                    //
+                    // Run the egress block
+                    //
+
+                    egm.port = {
+                        let mut x = bitvec![mut u8, Msb0; 0; 16];
+                        x.store_le(eport);
+                        x
+                    };
+
+                    (self.egress)(
+                        &mut parsed_,
+                        &mut igm,
+                        &mut egm,
+                        #(#egress_tbl_args),*
+                    );
+
+                    if egm.drop {
+                        return None;
+                    }
+
+                    //
+                    // Create the packet output.
+                    //
+
+                    Some((parsed_, eport))
+                })
+                .collect()
+        };
+
         let process_packet = quote! {
             fn process_packet<'a>(
                 &mut self,
@@ -220,7 +364,7 @@ impl<'a> PipelineGenerator<'a> {
                 // Instantiate ingress/egress metadata
                 //
 
-                let mut ingress_metadata = ingress_metadata_t{
+                let mut #ingress_meta_var = #ingress_meta_type {
                     port: {
                         let mut x = bitvec![mut u8, Msb0; 0; 16];
                         x.store_le(port);
@@ -228,15 +372,17 @@ impl<'a> PipelineGenerator<'a> {
                     },
                     ..Default::default()
                 };
-                let mut egress_metadata = egress_metadata_t::default();
+                let mut #egress_meta_var = #egress_meta_type::default();
+                #egress_meta_var.port = BitVec::new();
 
                 //
                 // Run the parser block
                 //
 
-                let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
+                let accept = (self.parse)(
+                    pkt, &mut parsed, &mut #ingress_meta_var,
+                );
                 if !accept {
-                    // drop the packet
                     softnpu_provider::parser_dropped!(||());
                     return Vec::new();
                 }
@@ -255,8 +401,8 @@ impl<'a> PipelineGenerator<'a> {
 
                 (self.ingress)(
                     &mut parsed,
-                    &mut ingress_metadata,
-                    &mut egress_metadata,
+                    &mut #ingress_meta_var,
+                    &mut #egress_meta_var,
                     #(#ingress_tbl_args),*
                 );
 
@@ -264,78 +410,27 @@ impl<'a> PipelineGenerator<'a> {
                 // Determine egress ports
                 //
 
-                let ports = if egress_metadata.broadcast {
-                    let mut ports = Vec::new();
-                    for p in 0..self.radix {
-                        if p == port {
-                            continue;
-                        }
-                        ports.push(p);
-                    }
-                    ports
-                } else {
-                    if egress_metadata.port.is_empty() || egress_metadata.drop {
-                        Vec::new()
-                    } else {
-                        vec![egress_metadata.port.load_le()]
-                    }
-                };
+                #egress_ports
 
-                let dump = parsed.dump();
+                let dump = format!(
+                    "{}\negress:\n{}",
+                    parsed.dump(),
+                    #egress_meta_var.dump(),
+                );
 
                 if ports.is_empty() {
                     softnpu_provider::ingress_dropped!(||(&dump));
                     return Vec::new();
                 }
 
-                let dump = format!("\n{}", parsed.dump());
+                let dump = format!("\n{dump}");
                 softnpu_provider::ingress_accepted!(||(&dump));
 
                 //
                 // Run output of ingress block through egress block on each
                 // egress port.
                 //
-                let mut result = Vec::new();
-                for eport in ports {
-
-                    let mut egm = egress_metadata.clone();
-                    let mut parsed_ = parsed.clone();
-
-                    //
-                    // Run the egress block
-                    //
-
-                    egm.port = {
-                        let mut x = bitvec![mut u8, Msb0; 0; 16];
-                        x.store_le(eport);
-                        x
-                    };
-
-                    (self.egress)(
-                        &mut parsed_,
-                        &mut ingress_metadata,
-                        &mut egm,
-                        #(#egress_tbl_args),*
-                    );
-
-                    if egm.drop {
-                        continue;
-                    }
-
-                    //
-                    // Create the packet output.
-                    //
-
-                    let bv = parsed_.to_bitvec();
-                    let buf = bv.as_raw_slice();
-                    let out = packet_out{
-                        header_data: buf.to_owned(),
-                        payload_data: &pkt.data[parsed_size..],
-                    };
-                    result.push((out, eport))
-
-                }
-                result
+                #egress_loop
             }
         };
 
@@ -356,7 +451,7 @@ impl<'a> PipelineGenerator<'a> {
                 // Instantiate ingress/egress metadata
                 //
 
-                let mut ingress_metadata = ingress_metadata_t{
+                let mut #ingress_meta_var = #ingress_meta_type {
                     port: {
                         let mut x = bitvec![mut u8, Msb0; 0; 16];
                         x.store_le(port);
@@ -364,15 +459,17 @@ impl<'a> PipelineGenerator<'a> {
                     },
                     ..Default::default()
                 };
-                let mut egress_metadata = egress_metadata_t::default();
+                let mut #egress_meta_var = #egress_meta_type::default();
+                #egress_meta_var.port = BitVec::new();
 
                 //
                 // Run the parser block
                 //
 
-                let accept = (self.parse)(pkt, &mut parsed, &mut ingress_metadata);
+                let accept = (self.parse)(
+                    pkt, &mut parsed, &mut #ingress_meta_var,
+                );
                 if !accept {
-                    // drop the packet
                     softnpu_provider::parser_dropped!(||());
                     return Vec::new();
                 }
@@ -391,8 +488,8 @@ impl<'a> PipelineGenerator<'a> {
 
                 (self.ingress)(
                     &mut parsed,
-                    &mut ingress_metadata,
-                    &mut egress_metadata,
+                    &mut #ingress_meta_var,
+                    &mut #egress_meta_var,
                     #(#ingress_tbl_args),*
                 );
 
@@ -400,72 +497,27 @@ impl<'a> PipelineGenerator<'a> {
                 // Determine egress ports
                 //
 
-                let ports = if egress_metadata.broadcast {
-                    let mut ports = Vec::new();
-                    for p in 0..self.radix {
-                        if p == port {
-                            continue;
-                        }
-                        ports.push(p);
-                    }
-                    ports
-                } else {
-                    if egress_metadata.port.is_empty() || egress_metadata.drop {
-                        Vec::new()
-                    } else {
-                        vec![egress_metadata.port.load_le()]
-                    }
-                };
+                #egress_ports
 
-                let dump = parsed.dump();
+                let dump = format!(
+                    "{}\negress:\n{}",
+                    parsed.dump(),
+                    #egress_meta_var.dump(),
+                );
 
                 if ports.is_empty() {
                     softnpu_provider::ingress_dropped!(||(&dump));
                     return Vec::new();
                 }
 
-                let dump = format!("\n{}", parsed.dump());
+                let dump = format!("\n{dump}");
                 softnpu_provider::ingress_accepted!(||(&dump));
 
                 //
                 // Run output of ingress block through egress block on each
                 // egress port.
                 //
-                let mut result = Vec::new();
-                for eport in ports {
-
-                    let mut egm = egress_metadata.clone();
-                    let mut parsed_ = parsed.clone();
-
-                    //
-                    // Run the egress block
-                    //
-
-                    egm.port = {
-                        let mut x = bitvec![mut u8, Msb0; 0; 16];
-                        x.store_le(eport);
-                        x
-                    };
-
-                    (self.egress)(
-                        &mut parsed_,
-                        &mut ingress_metadata,
-                        &mut egm,
-                        #(#egress_tbl_args),*
-                    );
-
-                    if egm.drop {
-                        continue;
-                    }
-
-                    //
-                    // Create the packet output.
-                    //
-
-                    result.push((parsed_, eport))
-
-                }
-                result
+                #egress_loop_headers
             }
         };
 
@@ -839,13 +891,16 @@ impl<'a> PipelineGenerator<'a> {
                             );
                         });
                         parameter_refs.push(quote! { #pname.clone() });
-                        offset += n >> 3;
+                        offset += n.div_ceil(8);
                     }
                     Type::Varbit(_n) => {
                         todo!();
                     }
                     Type::Int(_n) => {
                         todo!();
+                    }
+                    Type::ArbitraryInt => {
+                        unreachable!("int rejected by the checker");
                     }
                     Type::String => {
                         todo!();
@@ -916,6 +971,17 @@ impl<'a> PipelineGenerator<'a> {
             let tname = format_ident!("{}", qtfn);
             action_match_body.extend(quote! {
                 #aname => {
+                    if parameter_data.len() < #offset {
+                        println!(
+                            "add {} entry: action {} expects {} parameter \
+                             bytes, found {}, ignoring",
+                            #qtfn,
+                            #aname,
+                            #offset,
+                            parameter_data.len(),
+                        );
+                        return;
+                    }
                     #(#parameter_tokens)*
                     let action: std::sync::Arc<dyn Fn(
                         #(#control_param_types),*

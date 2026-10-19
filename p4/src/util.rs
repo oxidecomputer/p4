@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::ast::{Lvalue, NameInfo, Type, AST};
 use std::collections::HashMap;
@@ -18,6 +18,7 @@ pub fn resolve_lvalue(
         Type::Bit(_) => root.clone(),
         Type::Varbit(_) => root.clone(),
         Type::Int(_) => root.clone(),
+        Type::ArbitraryInt => root.clone(),
         Type::String => root.clone(),
         Type::ExternFunction => root.clone(),
         Type::HeaderMethod => root.clone(),

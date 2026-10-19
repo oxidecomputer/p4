@@ -1,5 +1,6 @@
 use crate::softnpu::{RxFrame, SoftNpu, TxFrame};
 use crate::{expect_frames, muffins};
+use p4rs::{packet_in, Pipeline};
 
 p4_macro::use_p4!(p4 = "test/src/p4/hub.p4", pipeline_name = "hub2");
 
@@ -79,4 +80,33 @@ fn hub2() -> Result<(), anyhow::Error> {
     assert_eq!(phy3.rx_count(), 6usize);
 
     Ok(())
+}
+
+fn assert_dropped(ingress: u16) {
+    let mut pipeline = main_pipeline::new(3);
+    let data = [0u8; 64];
+
+    let mut pkt = packet_in::new(&data);
+    assert!(
+        pipeline.process_packet(ingress, &mut pkt).is_empty(),
+        "packet"
+    );
+
+    let mut pkt = packet_in::new(&data);
+    assert!(
+        pipeline
+            .process_packet_headers(ingress, &mut pkt)
+            .is_empty(),
+        "headers"
+    );
+}
+
+#[test]
+fn drop_precedes_broadcast() {
+    assert_dropped(2);
+}
+
+#[test]
+fn drop_precedes_unicast() {
+    assert_dropped(3);
 }

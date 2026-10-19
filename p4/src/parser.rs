@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::ast::{
     self, Action, ActionParameter, ActionRef, BinOp, Call, ConstTableEntry,
@@ -103,12 +103,19 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_lvalue(&mut self, what: &str) -> Result<Lvalue, Error> {
+    /// Parse a dotted lvalue, e.g., `hdr.ipv4.ttl`.
+    ///
+    /// The returned token spans from the first identifier to the last one
+    /// when they share a line. Diagnostics then mark the whole dotted name.
+    pub(crate) fn parse_lvalue(&mut self, what: &str) -> Result<Lvalue, Error> {
         let mut name = String::new();
-        let mut first_token = None;
+        let mut first_token: Option<Token> = None;
         loop {
             let (ident, tk) = self.parse_identifier(what)?;
-            match first_token {
+            match &mut first_token {
+                Some(first) if first.line == tk.line => {
+                    first.len = tk.col + tk.len - first.col;
+                }
                 Some(_) => {}
                 None => first_token = Some(tk),
             }
@@ -144,7 +151,15 @@ impl<'a> Parser<'a> {
                 }
 
                 lexer::Kind::Int => {
-                    Type::Int(self.parse_optional_width_parameter()?)
+                    let next = self.next_token()?;
+                    let has_width = next.kind == lexer::Kind::AngleOpen;
+                    self.backlog.push(next);
+
+                    if has_width {
+                        Type::Int(self.parse_optional_width_parameter()?)
+                    } else {
+                        Type::ArbitraryInt
+                    }
                 }
 
                 lexer::Kind::Identifier(name) => {
@@ -432,29 +447,32 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn try_parse_binop(&mut self) -> Result<Option<BinOp>, Error> {
+    fn try_parse_binop(&mut self) -> Result<Option<(BinOp, Token)>, Error> {
         let token = self.next_token()?;
-        match token.kind {
-            lexer::Kind::GreaterThanEquals => Ok(Some(BinOp::Geq)),
-            lexer::Kind::AngleClose => Ok(Some(BinOp::Gt)),
-            lexer::Kind::LessThanEquals => Ok(Some(BinOp::Leq)),
-            lexer::Kind::AngleOpen => Ok(Some(BinOp::Lt)),
-            lexer::Kind::NotEquals => Ok(Some(BinOp::NotEq)),
-            lexer::Kind::DoubleEquals => Ok(Some(BinOp::Eq)),
-            lexer::Kind::Plus => Ok(Some(BinOp::Add)),
-            lexer::Kind::Minus => Ok(Some(BinOp::Subtract)),
-            lexer::Kind::Mod => Ok(Some(BinOp::Mod)),
-            lexer::Kind::Mask => Ok(Some(BinOp::Mask)),
-            lexer::Kind::And => Ok(Some(BinOp::BitAnd)),
-            lexer::Kind::Pipe => Ok(Some(BinOp::BitOr)),
-            lexer::Kind::Carat => Ok(Some(BinOp::Xor)),
+        let op = match token.kind {
+            lexer::Kind::GreaterThanEquals => BinOp::Geq,
+            lexer::Kind::AngleClose => BinOp::Gt,
+            lexer::Kind::LessThanEquals => BinOp::Leq,
+            lexer::Kind::AngleOpen => BinOp::Lt,
+            lexer::Kind::NotEquals => BinOp::NotEq,
+            lexer::Kind::DoubleEquals => BinOp::Eq,
+            lexer::Kind::Plus => BinOp::Add,
+            lexer::Kind::Minus => BinOp::Subtract,
+            lexer::Kind::Mod => BinOp::Mod,
+            lexer::Kind::Mask => BinOp::Mask,
+            lexer::Kind::And => BinOp::BitAnd,
+            lexer::Kind::Pipe => BinOp::BitOr,
+            lexer::Kind::Carat => BinOp::Xor,
+            lexer::Kind::Shl => BinOp::Shl,
+            lexer::Kind::Shr => BinOp::Shr,
 
             // TODO other binops
             _ => {
                 self.backlog.push(token);
-                Ok(None)
+                return Ok(None);
             }
-        }
+        };
+        Ok(Some((op, token)))
     }
 
     pub fn parse_statement_block(&mut self) -> Result<StatementBlock, Error> {
@@ -1034,7 +1052,13 @@ impl<'a, 'b> ControlParser<'a, 'b> {
                     let c = self.parser.parse_constant()?;
                     control.constants.push(c);
                 }
-                lexer::Kind::Identifier(_) => {
+                lexer::Kind::Bool
+                | lexer::Kind::Error
+                | lexer::Kind::Bit
+                | lexer::Kind::Varbit
+                | lexer::Kind::Int
+                | lexer::Kind::String
+                | lexer::Kind::Identifier(_) => {
                     self.parser.backlog.push(token);
                     let v = self.parser.parse_variable()?;
                     control.variables.push(v);
@@ -1454,6 +1478,7 @@ impl<'a, 'b> StatementParser<'a, 'b> {
         let token = self.parser.next_token()?;
         let statement = match token.kind {
             lexer::Kind::Equals => self.parse_assignment(lval)?,
+            lexer::Kind::SquareOpen => self.parse_slice_assignment(lval)?,
             lexer::Kind::ParenOpen => {
                 self.parser.backlog.push(token);
                 self.parse_call(lval)?
@@ -1483,6 +1508,25 @@ impl<'a, 'b> StatementParser<'a, 'b> {
         let mut ep = ExpressionParser::new(self.parser);
         let expression = ep.run()?;
         Ok(Statement::Assignment(lval, expression))
+    }
+
+    /// Parse `lval[hi:lo] = expr`.
+    ///
+    /// The opening `[` has already been consumed by this point.
+    pub fn parse_slice_assignment(
+        &mut self,
+        lval: Lvalue,
+    ) -> Result<Statement, Error> {
+        let mut ep = ExpressionParser::new(self.parser);
+        let hi = ep.run()?;
+        self.parser.expect_token(lexer::Kind::Colon)?;
+        let mut ep = ExpressionParser::new(self.parser);
+        let lo = ep.run()?;
+        self.parser.expect_token(lexer::Kind::SquareClose)?;
+        self.parser.expect_token(lexer::Kind::Equals)?;
+        let mut ep = ExpressionParser::new(self.parser);
+        let rhs = ep.run()?;
+        Ok(Statement::SliceAssignment(lval, hi, lo, rhs))
     }
 
     pub fn parse_call(&mut self, lval: Lvalue) -> Result<Statement, Error> {
@@ -1562,8 +1606,43 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
     }
 
     pub fn run(&mut self) -> Result<Box<Expression>, Error> {
+        self.parse_with_precedence(0)
+    }
+
+    fn parse_with_precedence(
+        &mut self,
+        min_prec: u8,
+    ) -> Result<Box<Expression>, Error> {
+        let mut lhs = self.parse_primary()?;
+        while let Some((op, token)) = self.parser.try_parse_binop()? {
+            let prec = Self::prec(op);
+            if prec < min_prec {
+                self.parser.backlog.push(token);
+                break;
+            }
+            let rhs = self.parse_with_precedence(prec + 1)?;
+            lhs = Expression::new(token, ExpressionKind::Binary(lhs, op, rhs));
+        }
+        Ok(lhs)
+    }
+
+    fn prec(op: BinOp) -> u8 {
+        match op {
+            BinOp::Mask => 1,
+            BinOp::Eq | BinOp::NotEq => 2,
+            BinOp::Lt | BinOp::Leq | BinOp::Gt | BinOp::Geq => 3,
+            BinOp::BitOr => 4,
+            BinOp::Xor => 5,
+            BinOp::BitAnd => 6,
+            BinOp::Shl | BinOp::Shr => 7,
+            BinOp::Add | BinOp::Subtract => 8,
+            BinOp::Mod => 9,
+        }
+    }
+
+    fn parse_primary(&mut self) -> Result<Box<Expression>, Error> {
         let token = self.parser.next_token()?;
-        let lhs = match token.kind {
+        let expression = match token.kind {
             lexer::Kind::TrueLiteral => {
                 Expression::new(token.clone(), ExpressionKind::BoolLit(true))
             }
@@ -1582,11 +1661,15 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 token.clone(),
                 ExpressionKind::SignedLit(width, value),
             ),
+            lexer::Kind::ParenOpen => {
+                let expression = self.run()?;
+                self.parser.expect_token(lexer::Kind::ParenClose)?;
+                expression
+            }
             lexer::Kind::Identifier(_) => {
                 self.parser.backlog.push(token.clone());
                 let lval = self.parser.parse_lvalue("identifier")?;
 
-                let this_token = token.clone();
                 let token = self.parser.next_token()?;
 
                 // check for index
@@ -1610,7 +1693,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                             ),
                         )
                     } else {
-                        self.parser.backlog.push(token.clone());
+                        self.parser.backlog.push(slice_token);
                         self.parser.expect_token(lexer::Kind::SquareClose)?;
                         Expression::new(token, ExpressionKind::Index(lval, xpr))
                     }
@@ -1627,7 +1710,10 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
                 // if it's not an index and it's not a call, it's an lvalue
                 else {
                     self.parser.backlog.push(token);
-                    Expression::new(this_token, ExpressionKind::Lvalue(lval))
+                    Expression::new(
+                        lval.token.clone(),
+                        ExpressionKind::Lvalue(lval),
+                    )
                 }
             }
             lexer::Kind::CurlyOpen => {
@@ -1660,16 +1746,7 @@ impl<'a, 'b> ExpressionParser<'a, 'b> {
             }
         };
 
-        // check for binary operator
-        match self.parser.try_parse_binop()? {
-            Some(op) => {
-                // recurse to rhs
-                let mut ep = ExpressionParser::new(self.parser);
-                let rhs = ep.run()?;
-                Ok(Expression::new(token, ExpressionKind::Binary(lhs, op, rhs)))
-            }
-            None => Ok(lhs),
-        }
+        Ok(expression)
     }
 }
 
@@ -1871,5 +1948,56 @@ impl<'a, 'b> SelectParser<'a, 'b> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Parser;
+    use crate::ast::{BinOp, ExpressionKind, Statement, Type, AST};
+    use crate::lexer::{Kind, Lexer};
+    use std::sync::Arc;
+
+    #[test]
+    fn nested_binary_types_are_distinct() {
+        let source = include_str!("../examples/expressions.p4");
+        let lexer = Lexer::new(
+            source.lines().collect(),
+            Arc::new("expressions.p4".into()),
+        );
+        let mut parser = Parser::new(lexer);
+        let mut ast = AST::default();
+        parser.run(&mut ast).unwrap();
+        let Statement::Variable(result) =
+            ast.controls[0].apply.statements.last().unwrap()
+        else {
+            panic!("expected result declaration");
+        };
+        let result = result.initializer.as_deref().unwrap();
+        let ExpressionKind::Binary(shift, BinOp::Eq, rhs) = &result.kind else {
+            panic!("expected comparison");
+        };
+        let ExpressionKind::Binary(lhs, BinOp::Shl, count) = &shift.kind else {
+            panic!("expected shift");
+        };
+        assert_eq!(result.token.kind, Kind::DoubleEquals);
+        assert_eq!(shift.token.kind, Kind::Shl);
+
+        let (hlir, diags) = crate::check::all(&ast);
+        let errors = diags.errors();
+        assert!(
+            errors.is_empty(),
+            "{:?}",
+            errors.iter().map(|diag| &diag.message).collect::<Vec<_>>(),
+        );
+        for (expression, ty) in [
+            (result, Type::Bool),
+            (shift.as_ref(), Type::Bit(8)),
+            (lhs.as_ref(), Type::Bit(8)),
+            (count.as_ref(), Type::Int(128)),
+            (rhs.as_ref(), Type::Bit(8)),
+        ] {
+            assert_eq!(hlir.expression_types.get(expression), Some(&ty));
+        }
     }
 }

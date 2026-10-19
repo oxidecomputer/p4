@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::cmp::{Eq, PartialEq};
 use std::collections::HashMap;
@@ -302,6 +302,11 @@ pub enum Type {
     Bit(usize),
     Varbit(usize),
     Int(usize),
+    /// Arbitrary-precision `int`, which is valid only for compile-time values
+    /// (P4-16 7.1.6.5).
+    ///
+    /// `Int(w)` becomes the fixed-width `int<W>`.
+    ArbitraryInt,
     String,
     UserDefined(String),
     ExternFunction, //TODO actual signature
@@ -359,6 +364,7 @@ impl fmt::Display for Type {
             Type::Bit(size) => write!(f, "bit<{}>", size),
             Type::Varbit(size) => write!(f, "varbit<{}>", size),
             Type::Int(size) => write!(f, "int<{}>", size),
+            Type::ArbitraryInt => write!(f, "int"),
             Type::String => write!(f, "string"),
             Type::UserDefined(name) => write!(f, "{}", name),
             Type::ExternFunction => write!(f, "extern function"),
@@ -657,6 +663,8 @@ pub enum BinOp {
     BitAnd,
     BitOr,
     Xor,
+    Shl,
+    Shr,
 }
 
 impl BinOp {
@@ -673,6 +681,8 @@ impl BinOp {
             BinOp::BitAnd => "bitwise and",
             BinOp::BitOr => "bitwise or",
             BinOp::Xor => "xor",
+            BinOp::Shl => "shift left",
+            BinOp::Shr => "shift right",
         }
     }
 
@@ -1674,6 +1684,8 @@ impl MatchKind {
 pub enum Statement {
     Empty,
     Assignment(Lvalue, Box<Expression>),
+    /// `lval[hi:lo] = expr` (P4-16 spec 8.6).
+    SliceAssignment(Lvalue, Box<Expression>, Box<Expression>, Box<Expression>),
     //TODO get rid of this in favor of ExpressionKind::Call ???
     Call(Call),
     If(IfBlock),
@@ -1691,6 +1703,12 @@ impl Statement {
             Statement::Empty => {}
             Statement::Assignment(lval, xpr) => {
                 lval.accept(v);
+                xpr.accept(v);
+            }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.accept(v);
+                hi.accept(v);
+                lo.accept(v);
                 xpr.accept(v);
             }
             Statement::Call(call) => call.accept(v),
@@ -1714,6 +1732,12 @@ impl Statement {
                 lval.accept_mut(v);
                 xpr.accept_mut(v);
             }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.accept_mut(v);
+                hi.accept_mut(v);
+                lo.accept_mut(v);
+                xpr.accept_mut(v);
+            }
             Statement::Call(call) => call.accept_mut(v),
             Statement::If(if_block) => if_block.accept_mut(v),
             Statement::Variable(var) => var.accept_mut(v),
@@ -1735,6 +1759,12 @@ impl Statement {
                 lval.mut_accept(v);
                 xpr.mut_accept(v);
             }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.mut_accept(v);
+                hi.mut_accept(v);
+                lo.mut_accept(v);
+                xpr.mut_accept(v);
+            }
             Statement::Call(call) => call.mut_accept(v),
             Statement::If(if_block) => if_block.mut_accept(v),
             Statement::Variable(var) => var.mut_accept(v),
@@ -1754,6 +1784,12 @@ impl Statement {
             Statement::Empty => {}
             Statement::Assignment(lval, xpr) => {
                 lval.mut_accept_mut(v);
+                xpr.mut_accept_mut(v);
+            }
+            Statement::SliceAssignment(lval, hi, lo, xpr) => {
+                lval.mut_accept_mut(v);
+                hi.mut_accept_mut(v);
+                lo.mut_accept_mut(v);
                 xpr.mut_accept_mut(v);
             }
             Statement::Call(call) => call.mut_accept_mut(v),
@@ -1947,30 +1983,34 @@ impl Lvalue {
     }
     pub fn pop_left(&self) -> Self {
         let parts = self.parts();
+        let name = parts[1..].join(".");
         Lvalue {
-            name: parts[1..].join("."),
             token: Token {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col + parts[0].len() + 1,
+                len: name.len(),
                 file: self.token.file.clone(),
             },
+            name,
         }
     }
     pub fn pop_right(&self) -> Self {
         let parts = self.parts();
+        let name = if parts.len() == 1 {
+            parts[0].to_owned()
+        } else {
+            parts[..parts.len() - 1].join(".")
+        };
         Lvalue {
-            name: if parts.len() == 1 {
-                parts[0].to_owned()
-            } else {
-                parts[..parts.len() - 1].join(".")
-            },
             token: Token {
                 kind: self.token.kind.clone(),
                 line: self.token.line,
                 col: self.token.col,
+                len: name.len(),
                 file: self.token.file.clone(),
             },
+            name,
         }
     }
     fn accept<V: Visitor>(&self, v: &V) {

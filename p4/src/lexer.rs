@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use crate::error::TokenError;
 use std::fmt;
@@ -89,6 +89,7 @@ pub enum Kind {
     Bang,
     Tilde,
     Shl,
+    Shr,
     Pipe,
     Carat,
     GreaterThanEquals,
@@ -217,6 +218,7 @@ impl fmt::Display for Kind {
             Kind::Bang => write!(f, "operator !"),
             Kind::Tilde => write!(f, "operator ~"),
             Kind::Shl => write!(f, "operator <<"),
+            Kind::Shr => write!(f, "operator >>"),
             Kind::Pipe => write!(f, "operator |"),
             Kind::Carat => write!(f, "operator ^"),
             Kind::GreaterThanEquals => write!(f, "operator >="),
@@ -250,6 +252,9 @@ pub struct Token {
 
     /// Column number of the first character in this token.
     pub col: usize,
+
+    /// Length of the source text this token covers, in bytes.
+    pub len: usize,
 
     /// The file this token came from.
     pub file: Arc<String>,
@@ -311,6 +316,7 @@ impl<'a> Lexer<'a> {
             return Ok(Token {
                 kind: Kind::Eof,
                 col: self.col,
+                len: 0,
                 line: self.line,
                 file: self.file.clone(),
             });
@@ -322,6 +328,7 @@ impl<'a> Lexer<'a> {
             return Ok(Token {
                 kind: Kind::Eof,
                 col: self.col,
+                len: 0,
                 line: self.line,
                 file: self.file.clone(),
             });
@@ -417,6 +424,10 @@ impl<'a> Lexer<'a> {
             return Ok(t);
         }
 
+        if let Some(t) = self.match_token(">>", Kind::Shr) {
+            return Ok(t);
+        }
+
         if let Some(t) = self.match_token(">", Kind::AngleClose) {
             return Ok(t);
         }
@@ -425,7 +436,7 @@ impl<'a> Lexer<'a> {
             return Ok(t);
         }
 
-        if let Some(t) = self.match_token(">=", Kind::LessThanEquals) {
+        if let Some(t) = self.match_token("<=", Kind::LessThanEquals) {
             return Ok(t);
         }
 
@@ -643,6 +654,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: Kind::Identifier(tok.into()),
             col: self.col,
+            len,
             line: self.line,
             file: self.file.clone(),
         };
@@ -679,6 +691,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: ctor(bits, value),
             col: self.col,
+            len: tok.len(),
             line: self.line,
             file: self.file.clone(),
         };
@@ -711,6 +724,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: ctor(bits, value),
             col: self.col,
+            len: tok.len(),
             line: self.line,
             file: self.file.clone(),
         };
@@ -788,6 +802,7 @@ impl<'a> Lexer<'a> {
         let token = Token {
             kind: Kind::IntLiteral(value),
             col: self.col,
+            len,
             line: self.line,
             file: self.file.clone(),
         };
@@ -928,6 +943,7 @@ impl<'a> Lexer<'a> {
             let token = Token {
                 kind,
                 col: self.col,
+                len,
                 line: self.line,
                 file: self.file.clone(),
             };
@@ -972,6 +988,7 @@ impl<'a> Lexer<'a> {
             },
             Some('>') => match chars.next() {
                 Some('=') => return &self.cursor[..2],
+                Some('>') => return &self.cursor[..2],
                 _ => return &self.cursor[..1],
             },
             Some('<') => match chars.next() {

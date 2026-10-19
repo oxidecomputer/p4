@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use std::collections::HashMap;
 use std::fs;
@@ -216,6 +216,9 @@ fn rust_type(ty: &Type) -> TokenStream {
             quote! { BitVec::<u8, Msb0> }
         }
         Type::Int(_size) => todo!("generate int type"),
+        Type::ArbitraryInt => {
+            unreachable!("arbitrary-precision int reached Rust type generation")
+        }
         Type::Varbit(_size) => todo!("generate varbit type"),
         Type::String => quote! { String },
         Type::UserDefined(name) => {
@@ -250,6 +253,11 @@ fn type_size(ty: &Type, ast: &AST) -> usize {
         Type::Error => todo!("generate error size"),
         Type::Bit(size) => *size,
         Type::Int(size) => *size,
+        Type::ArbitraryInt => {
+            unreachable!(
+                "arbitrary-precision int reached type-size calculation"
+            )
+        }
         Type::Varbit(size) => *size,
         Type::String => todo!("generate string size"),
         Type::UserDefined(name) => {

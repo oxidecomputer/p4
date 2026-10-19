@@ -53,9 +53,11 @@ control ingress(
     table power_ranger {
         key = {
             hdr.ipv4.dst: range;
+            hdr.ethernet.ether_type: exact;
         }
         actions = {
             forward;
+            NoAction;
         }
         default_action = NoAction;
     }
