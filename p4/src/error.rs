@@ -1,6 +1,6 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
-use crate::lexer::{Kind, Lexer, Token};
+use crate::lexer::{Kind, Token};
 use colored::Colorize;
 use std::fmt;
 use std::sync::Arc;
@@ -69,6 +69,7 @@ impl fmt::Display for TokenError {
             kind: Kind::Eof,
             line: self.line,
             col: self.col,
+            len: self.len,
             file: Arc::new(self.source.clone()),
         };
         fmt_common(&at, "unrecognized token", &self.source, f)
@@ -165,13 +166,9 @@ fn carat_line(line: &str, at: &Token) -> String {
             carat_line.push(' ');
         }
     }
-    for x in line[at.col..].chars() {
-        if x.is_whitespace() || (Lexer::is_separator(x) && x != '.') {
-            break;
-        } else {
-            carat_line.push('^');
-        }
-    }
+
+    let end = (at.col + at.len).min(line.len());
+    carat_line.push_str(&"^".repeat(end - at.col));
     carat_line
 }
 
@@ -204,4 +201,57 @@ fn fmt_common(
 
     let carat_line = carat_line(source, at);
     write!(f, "  {}", carat_line.bright_red())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::carat_line;
+    use crate::lexer::{Kind, Token};
+    use std::sync::Arc;
+
+    fn token(kind: Kind, col: usize, len: usize) -> Token {
+        Token {
+            kind,
+            line: 0,
+            col,
+            len,
+            file: Arc::new(String::new()),
+        }
+    }
+
+    #[test]
+    fn carat_marks_operators() {
+        assert_eq!(carat_line("x + 16w1;", &token(Kind::Plus, 2, 1)), "  ^");
+        assert_eq!(carat_line("x << y;", &token(Kind::Shl, 2, 2)), "  ^^");
+    }
+
+    #[test]
+    fn carat_marks_lvalues() {
+        let field = Kind::Identifier("hdr.f".into());
+        assert_eq!(carat_line("\thdr.f + y;", &token(field, 1, 5)), "\t^^^^^");
+    }
+
+    #[test]
+    fn carat_stops_at_line_end() {
+        assert_eq!(carat_line("x", &token(Kind::Eof, 1, 0)), " ");
+        assert_eq!(carat_line("ab", &token(Kind::Plus, 1, 4)), " ^");
+    }
+
+    #[test]
+    fn carat_spans_parsed_lvalues() {
+        use crate::lexer::Lexer;
+        use crate::parser::Parser;
+
+        let source = "    hdr.ipv4.ttl = 8w1;";
+        let lexer = Lexer::new(vec![source], Arc::new("t.p4".into()));
+        let mut parser = Parser::new(lexer);
+        let lval = parser.parse_lvalue("lvalue").unwrap();
+
+        assert_eq!(carat_line(source, &lval.token), "    ^^^^^^^^^^^^");
+        assert_eq!(
+            carat_line(source, &lval.pop_left().token),
+            "        ^^^^^^^^"
+        );
+        assert_eq!(carat_line(source, &lval.pop_right().token), "    ^^^^^^^^");
+    }
 }

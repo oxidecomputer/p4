@@ -1,4 +1,4 @@
-// Copyright 2022 Oxide Computer Company
+// Copyright 2026 Oxide Computer Company
 
 use p4::ast::{BinOp, DeclarationInfo, Expression, ExpressionKind, Lvalue};
 use p4::hlir::Hlir;
@@ -101,32 +101,61 @@ impl<'a> ExpressionGenerator<'a> {
                         ts.extend(op_tks);
                         ts.extend(rhs_tks_);
                     }
-                    _ => {
-                        ts.extend(lhs_tks);
-                        ts.extend(op_tks);
-                        ts.extend(rhs_tks);
+                    BinOp::BitOr | BinOp::BitAnd | BinOp::Xor | BinOp::Mask => {
+                        ts.extend(quote! {
+                            {
+                                let __lhs = #lhs_tks.clone();
+                                let __rhs = #rhs_tks.clone();
+                                __lhs #op_tks __rhs
+                            }
+                        });
+                    }
+                    BinOp::Shl | BinOp::Shr => {
+                        let rhs_tks = match &rhs.kind {
+                            ExpressionKind::IntegerLit(value) => {
+                                self.generate_bit_literal(
+                                    128,
+                                    u128::try_from(*value).expect(
+                                        "negative shift count reached codegen",
+                                    ),
+                                )
+                            }
+                            _ => rhs_tks,
+                        };
+
+                        let shift = match op {
+                            BinOp::Shl => quote! { p4rs::bitmath::shl_le },
+                            BinOp::Shr => quote! { p4rs::bitmath::shr_le },
+                            _ => unreachable!(),
+                        };
+
+                        ts.extend(quote! {
+                            #shift(#lhs_tks.clone(), #rhs_tks.clone())
+                        });
+                    }
+                    BinOp::Lt | BinOp::Gt | BinOp::Leq | BinOp::Geq => {
+                        ts.extend(quote! {
+                            p4rs::bitmath::Unsigned(&#lhs_tks)
+                                #op_tks p4rs::bitmath::Unsigned(&#rhs_tks)
+                        });
                     }
                 }
-                ts
+                quote! { (#ts) }
             }
             ExpressionKind::Index(lval, xpr) => {
                 let mut ts = self.generate_lvalue(lval);
+                if let ExpressionKind::Slice(begin, end) = &xpr.kind {
+                    let (hi, lo) = Self::slice_bounds(begin, end);
+                    return Self::generate_slice_read_arith(&ts, hi, lo);
+                }
                 ts.extend(self.generate_expression(xpr.as_ref()));
                 ts
             }
-            ExpressionKind::Slice(begin, end) => {
-                let l = match &begin.kind {
-                    ExpressionKind::IntegerLit(v) => *v as usize,
-                    _ => panic!("slice ranges can only be integer literals"),
-                };
-                let l = l + 1;
-                let r = match &end.kind {
-                    ExpressionKind::IntegerLit(v) => *v as usize,
-                    _ => panic!("slice ranges can only be integer literals"),
-                };
-                quote! {
-                    [#r..#l]
-                }
+            ExpressionKind::Slice(_begin, _end) => {
+                // The HLIR rejects bare slices outside an Index
+                // expression, so this is unreachable for well-typed
+                // programs.
+                unreachable!("bare Slice reached codegen");
             }
             ExpressionKind::Call(call) => {
                 let lv: Vec<TokenStream> = call
@@ -154,6 +183,44 @@ impl<'a> ExpressionGenerator<'a> {
                 quote! {
                     &[ #(&#parts),* ]
                 }
+            }
+        }
+    }
+
+    /// Extract compile-time hi and lo from slice bound expressions.
+    pub(crate) fn slice_bounds(
+        begin: &Expression,
+        end: &Expression,
+    ) -> (P4Bit, P4Bit) {
+        let hi: P4Bit = match &begin.kind {
+            ExpressionKind::IntegerLit(v) => *v as usize,
+            _ => panic!("slice ranges can only be integer literals"),
+        };
+        let lo: P4Bit = match &end.kind {
+            ExpressionKind::IntegerLit(v) => *v as usize,
+            _ => panic!("slice ranges can only be integer literals"),
+        };
+        (hi, lo)
+    }
+
+    /// Emit an arithmetic slice read.
+    ///
+    /// This loads the field as an integer, shifts and masks to extract
+    /// the requested bits, then packs everything into a new bitvec.
+    pub(crate) fn generate_slice_read_arith(
+        lhs: &TokenStream,
+        hi: P4Bit,
+        lo: P4Bit,
+    ) -> TokenStream {
+        let slice_width = hi - lo + 1;
+        let mask_val = slice_mask(slice_width);
+        quote! {
+            {
+                let __v: u128 = #lhs.load_le();
+                let __extracted = (__v >> #lo) & #mask_val;
+                let mut __out = bitvec![u8, Msb0; 0; #slice_width];
+                __out.store_le(__extracted);
+                __out
             }
         }
     }
@@ -191,6 +258,8 @@ impl<'a> ExpressionGenerator<'a> {
             BinOp::BitAnd => quote! { & },
             BinOp::BitOr => quote! { | },
             BinOp::Xor => quote! { ^ },
+            BinOp::Shl => quote! { << },
+            BinOp::Shr => quote! { >> },
         }
     }
 
@@ -221,5 +290,27 @@ impl<'a> ExpressionGenerator<'a> {
             */
             _ => lvalue,
         }
+    }
+}
+
+/// P4 bit position within a field, where bit 0 is the least significant bit.
+type P4Bit = usize;
+
+/// Return a mask of the low `width` bits, for `width` in `1..=128`.
+pub(crate) fn slice_mask(width: usize) -> u128 {
+    u128::MAX >> (128 - width)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slice_mask_widths() {
+        assert_eq!(slice_mask(1), 0b1);
+        assert_eq!(slice_mask(4), 0xf);
+        assert_eq!(slice_mask(12), 0xfff);
+        assert_eq!(slice_mask(127), u128::MAX >> 1);
+        assert_eq!(slice_mask(128), u128::MAX);
     }
 }

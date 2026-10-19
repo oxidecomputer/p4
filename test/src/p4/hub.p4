@@ -45,6 +45,16 @@ control ingress(
         egress.broadcast = true;
     }
 
+    action broadcast_drop() {
+        egress.broadcast = true;
+        egress.drop = true;
+    }
+
+    action unicast_drop() {
+        egress.port = 16w1;
+        egress.drop = true;
+    }
+
     table tbl {
         key = {
             ingress.port: exact;
@@ -52,11 +62,15 @@ control ingress(
         actions = {
             drop;
             forward;
+            broadcast_drop;
+            unicast_drop;
         }
         default_action = drop;
         const entries = {
             16w0 : forward(16w1);
             16w1 : forward(16w0);
+            16w2 : broadcast_drop();
+            16w3 : unicast_drop();
         }
     }
 

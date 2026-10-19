@@ -26,7 +26,7 @@ control resolver(
     }
     table arp {
         key = { x: exact; }
-        actions = { resolve; }
+        actions = { resolve; NoAction; }
         default_action = NoAction;
     }
     apply { arp.apply(); }

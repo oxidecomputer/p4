@@ -48,6 +48,7 @@ control ingress(
         }
         actions = {
             forward;
+            NoAction;
         }
         default_action = NoAction;
     }

@@ -6,7 +6,11 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::spawn;
+use std::time::{Duration, Instant};
 use xfr::{ring, FrameBuffer, RingConsumer, RingProducer};
+
+/// Upper bound on waiting for expected frames before failing a test.
+pub const EXPECT_FRAMES_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub fn do_expect_frames(
     name: &str,
@@ -16,15 +20,25 @@ pub fn do_expect_frames(
 ) {
     let n = expected.len();
     let mut frames = Vec::new();
-    loop {
-        let fs = phy.recv();
-        frames.extend_from_slice(&fs);
-        // TODO this is not a great interface, if frames.len() > n, we should do
-        // something besides hang forever.
-        if frames.len() == n {
-            break;
+    // `OuterPhy::recv` blocks until at least one frame arrives; we enforce
+    // the deadline by polling `recv_buffer_len` instead. A frame sent
+    // to the wrong port then fails the test vs just hanging.
+    let deadline = Instant::now() + EXPECT_FRAMES_TIMEOUT;
+    while frames.len() < n {
+        if phy.recv_buffer_len() > 0 {
+            frames.extend_from_slice(&phy.recv());
+        } else if Instant::now() >= deadline {
+            panic!(
+                "[{name}] expected {n} frames, received {} within {:?}",
+                frames.len(),
+                EXPECT_FRAMES_TIMEOUT,
+            );
+        } else {
+            std::thread::sleep(Duration::from_millis(1));
         }
     }
+    // A single `recv` can return more frames than expected.
+    assert_eq!(frames.len(), n, "[{name}] frame count");
     for i in 0..n {
         let payload = match frames[i].ethertype {
             0x0901 => {
@@ -50,6 +64,7 @@ pub fn do_expect_frames(
             assert_eq!(frames[i].dst, d, "dst");
         }
         assert_eq!(frames[i].ethertype, expected[i].ethertype, "ethertype");
+        assert_eq!(frames[i].vid, expected[i].vid, "vid");
         assert_eq!(payload, expected[i].payload, "payload");
     }
 }

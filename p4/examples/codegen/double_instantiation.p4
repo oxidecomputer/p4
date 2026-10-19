@@ -1,9 +1,10 @@
-#include <p4/examples/codegen/core.p4>
-#include <p4/examples/codegen/softnpu.p4>
+#include <core.p4>
+#include <softnpu.p4>
 
 SoftNPU(
     parse(),
-    ingress()
+    ingress(),
+    egress(),
 ) main;
 
 struct headers_t { }
@@ -25,7 +26,7 @@ control resolver(
     }
     table arp {
         key = { x: exact; }
-        actions = { resolve; }
+        actions = { resolve; NoAction; }
         default_action = NoAction;
     }
     apply { arp.apply(); }
@@ -33,14 +34,18 @@ control resolver(
 
 control foo() {
     resolver() resolver;
-    apply { 
-        resolver.apply(23w47);
+    apply {
+        bool resolved;
+        resolver.apply(32w47, resolved);
     }
 }
 
 control bar() {
     resolver() resolver;
-    apply { resolver.apply(23w1701); }
+    apply {
+        bool resolved;
+        resolver.apply(32w1701, resolved);
+    }
 }
 
 control ingress(
@@ -55,4 +60,13 @@ control ingress(
         bar.apply();
         foo.apply();
     }
+}
+
+control egress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+
+    apply { }
 }
