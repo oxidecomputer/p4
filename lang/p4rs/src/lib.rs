@@ -178,9 +178,14 @@ pub trait Pipeline: Send {
     fn remove_table_entry(&mut self, table_id: &str, keyset_data: &[u8]);
 
     /// Remove all entries from a table identified by table_id.
+    ///
+    /// Returns `true` if the table was cleared, or `false` if `table_id` maps
+    /// to no table in this pipeline. This return type distinguishes an unknown
+    /// table from an already-empty one, like [`Pipeline::get_table_entries`]
+    /// does with `None`.
     // NOTE: This maps to dendrite's SoftNPU `TableOps::clear` implementation,
     // which is the analogue of `bf_rt_table_clear` on Tofino, for example.
-    fn clear_table_entries(&mut self, table_id: &str);
+    fn clear_table_entries(&mut self, table_id: &str) -> bool;
 
     /// Get all the entries in a table.
     fn get_table_entries(&self, table_id: &str) -> Option<Vec<TableEntry>>;

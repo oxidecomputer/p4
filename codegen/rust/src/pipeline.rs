@@ -668,17 +668,23 @@ impl<'a> PipelineGenerator<'a> {
                     qualified_table_function_name(Some(control), cs, table);
                 let call = format_ident!("clear_{qtfn}_entries");
                 body.extend(quote! {
-                    #qtn => self.#call(),
+                    #qtn => {
+                        self.#call();
+                        true
+                    }
                 });
             }
         }
 
         body.extend(quote! {
-            x => println!("clear table entries: unknown table id {x}, ignoring"),
+            x => {
+                println!("clear table entries: unknown table id {x}, ignoring");
+                false
+            }
         });
 
         quote! {
-            fn clear_table_entries(&mut self, table_id: &str) {
+            fn clear_table_entries(&mut self, table_id: &str) -> bool {
                 match table_id {
                     #body
                 }

@@ -35,20 +35,20 @@ fn clear_table_entries() {
     assert_eq!(entry_count(&pipeline, INGRESS_TBL), 3);
     assert_eq!(entry_count(&pipeline, EGRESS_TBL), 3);
 
-    pipeline.clear_table_entries(INGRESS_TBL);
+    assert!(pipeline.clear_table_entries(INGRESS_TBL));
     assert_eq!(entry_count(&pipeline, INGRESS_TBL), 0);
     assert_eq!(entry_count(&pipeline, EGRESS_TBL), 3);
 
-    pipeline.clear_table_entries(INGRESS_TBL);
+    assert!(pipeline.clear_table_entries(INGRESS_TBL));
     assert_eq!(entry_count(&pipeline, INGRESS_TBL), 0);
 
-    pipeline.clear_table_entries("ingress.bakery.scones");
+    assert!(!pipeline.clear_table_entries("egress.bakery.scones"));
     assert_eq!(entry_count(&pipeline, EGRESS_TBL), 3);
 
     add_forward(&mut pipeline, INGRESS_TBL, 7);
     assert_eq!(entry_count(&pipeline, INGRESS_TBL), 1);
 
-    pipeline.clear_table_entries(EGRESS_TBL);
+    assert!(pipeline.clear_table_entries(EGRESS_TBL));
     assert_eq!(entry_count(&pipeline, EGRESS_TBL), 0);
     assert_eq!(entry_count(&pipeline, INGRESS_TBL), 1);
 }
