@@ -977,6 +977,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitvec",
+ "clap",
  "colored",
  "libloading",
  "num",
@@ -984,6 +985,8 @@ dependencies = [
  "p4rs",
  "pnet",
  "rand",
+ "serde",
+ "serde_json",
  "usdt",
  "xfr",
 ]

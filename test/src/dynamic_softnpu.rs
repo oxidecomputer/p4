@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::spawn;
 use std::collections::HashMap;
+use std::sync::Mutex;
 use xfr::{ring, FrameBuffer, RingConsumer, RingProducer};
 use pnet::packet::ip::IpNextHeaderProtocols;
 
@@ -116,7 +117,7 @@ pub struct SoftNpu<P: p4rs::Pipeline> {
     inner_phys: Option<Vec<InnerPhy<RING, FBUF, MTU>>>,
     outer_phys: Vec<Arc<OuterPhy<RING, FBUF, MTU>>>,
     _fb: Arc<FrameBuffer<FBUF, MTU>>,
-    user_program: Option<HashMap<u16, Box<dyn p4rs::Pipeline>>>,
+    user_program: Arc<Mutex<HashMap<u16, Box<dyn p4rs::Pipeline>>>>,
 }
 
 impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
@@ -146,19 +147,29 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
             outer_phys,
             _fb: fb,
             pipeline: Some(pipeline),
-            user_program: Some(HashMap::new()),
+            user_program: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     pub fn load_user_program(
-        &mut self,
+        &self,
         program_id: u16,
         pipeline: impl p4rs::Pipeline + 'static,
     ) {
         self.user_program
-            .as_mut()
-            .expect("cannot load a user program after run() has started")
+            .lock()
+            .unwrap()
             .insert(program_id, Box::new(pipeline));
+    }
+
+    pub fn remove_user_program(
+        &self,
+        program_id: u16
+    ) -> Option<Box<dyn p4rs::Pipeline>> {
+        self.user_program
+            .lock()
+            .unwrap()
+            .remove(&program_id)
     }
 
     pub fn run(&mut self) {
@@ -170,7 +181,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
             Some(pipe) => pipe,
             None => panic!("pipe already in use"),
         };
-        let user_program = self.user_program.take().unwrap_or_default();
+        let user_program = self.user_program.clone();
         spawn(move || {
             Self::do_run(inner_phys, pipe, user_program);
         });
@@ -179,7 +190,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
     fn do_run(
         inner_phys: Vec<InnerPhy<RING, FBUF, MTU>>, 
         mut pipeline: P,
-        mut user_program: HashMap<u16, Box<dyn p4rs::Pipeline>>,
+        user_program: Arc<Mutex<HashMap<u16, Box<dyn p4rs::Pipeline>>>>,
     ) {
         loop {
             // TODO: yes this is a highly suboptimal linear gather-scatter across
@@ -193,7 +204,7 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                     let content = ig.rx_c.read_mut(fp);
 
                     let mut pkt = packet_in::new(content);
-
+                    
                     let port = i as u16;
                     let mut output = pipeline.process_packet(port, &mut pkt);
 
@@ -207,7 +218,8 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                             eprintln!("dropping packet: exceeded max resubmit hops (target {program_id})");
                             continue;
                         }
-                        match user_program.get_mut(&program_id) {
+                        let mut up = user_program.lock().unwrap();
+                        match up.get_mut(&program_id) {
                             Some(user_pipeline) => {
                                 softnpu_runtime_provider::resubmit!(|| program_id);
                                 let mut resubmit_pkt = packet_in::new(content);

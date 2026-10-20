@@ -25,7 +25,7 @@ mod mac_rewrite;
 #[cfg(test)]
 mod range;
 #[cfg(test)]
-mod switch;     // updated
+mod switch;
 #[cfg(test)]
 mod table_in_egress_and_ingress;
 #[cfg(test)]
@@ -36,6 +36,7 @@ mod vlan_trunk;
 mod vrf_router;
 
 pub mod data;
-pub mod dynamic_softnpu;    // updated
+pub mod dynamic_softnpu;
 pub mod packet;
 pub mod softnpu;
+pub mod management;
