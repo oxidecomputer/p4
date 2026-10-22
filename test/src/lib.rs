@@ -45,6 +45,8 @@ mod slice_assign_empty;
 #[cfg(test)]
 mod slice_read;
 #[cfg(test)]
+mod table_clear;
+#[cfg(test)]
 mod table_in_egress_and_ingress;
 #[cfg(test)]
 mod vlan;
