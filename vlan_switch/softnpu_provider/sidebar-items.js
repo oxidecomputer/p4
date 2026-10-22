@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["action","control_apply","control_table_hit","control_table_miss","egress_accepted","egress_dropped","egress_table_hit","egress_table_miss","ingress_accepted","ingress_dropped","parser_accepted","parser_dropped","parser_transition"]};
