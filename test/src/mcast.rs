@@ -282,6 +282,34 @@ fn bitmap_ports_beyond_radix_ignored() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+#[test]
+fn upserting_key_replaces_action_and_params() {
+    let mut pipeline = main_pipeline::new(4);
+    let key = 0u16.to_le_bytes();
+
+    pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap",
+        &key,
+        &port_bitmap(16, &[1, 2]),
+        0,
+    );
+    pipeline.add_ingress_bitmap_table_entry(
+        "set_bitmap",
+        &key,
+        &port_bitmap(16, &[3]),
+        0,
+    );
+    assert_egress_ports(&mut pipeline, 0, &[3]);
+
+    pipeline.add_ingress_bitmap_table_entry(
+        "forward",
+        &key,
+        &1u16.to_le_bytes(),
+        0,
+    );
+    assert_egress_ports(&mut pipeline, 0, &[1]);
+}
+
 fn unicast_mac(port: u16) -> [u8; 6] {
     let id = 0x20 + port as u8;
     [0x02, 0x00, id, id, 0x00, 0x02]

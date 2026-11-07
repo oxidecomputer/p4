@@ -1000,9 +1000,11 @@ impl<'a> PipelineGenerator<'a> {
                             #(#parameter_refs),*
                         )
                     });
+                    // Upserting an entry replaces any previous entry with a
+                    // matching key
                     self.#tname
                         .entries
-                        .insert(p4rs::table::TableEntry::<
+                        .replace(p4rs::table::TableEntry::<
                             #n,
                             std::sync::Arc<dyn Fn(
                                 #(#control_param_types),*
