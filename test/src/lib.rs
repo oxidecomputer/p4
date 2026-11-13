@@ -39,4 +39,3 @@ pub mod data;
 pub mod dynamic_softnpu;
 pub mod packet;
 pub mod softnpu;
-pub mod management;

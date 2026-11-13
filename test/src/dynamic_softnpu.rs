@@ -112,11 +112,11 @@ const RESUBMIT_STACK: u16 = 0x8000;
 const MAX_RESUBMIT_HOPS: u8 = 8;
 
 pub struct SoftNpu<P: p4rs::Pipeline> {
-    pub pipeline: Option<P>,
+    pub pipeline: Arc<Mutex<Option<P>>>,
     inner_phys: Option<Vec<InnerPhy<RING, FBUF, MTU>>>,
     outer_phys: Vec<Arc<OuterPhy<RING, FBUF, MTU>>>,
     _fb: Arc<FrameBuffer<FBUF, MTU>>,
-    user_program: Option<HashMap<u16, Box<dyn p4rs::Pipeline>>>,
+    user_program: Arc<Mutex<HashMap<u16, Box<dyn p4rs::Pipeline>>>>,
 }
 
 impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
@@ -145,20 +145,30 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
             inner_phys,
             outer_phys,
             _fb: fb,
-            pipeline: Some(pipeline),
-            user_program: Some(HashMap::new()),
+            pipeline: Arc::new(Mutex::new(Some(pipeline))),
+            user_program: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     pub fn load_user_program(
-        &mut self,
+        &self,
         program_id: u16,
         pipeline: impl p4rs::Pipeline + 'static,
     ) {
         self.user_program
-            .as_mut()
-            .expect("cannot load a user program after run() has started")
+            .lock()
+            .unwrap()
             .insert(program_id, Box::new(pipeline));
+    }
+
+    pub fn remove_user_program(
+        &self, 
+        program_id: u16
+    ) {
+        self.user_program
+            .lock()
+            .unwrap()
+            .remove(&program_id);
     }
 
     pub fn run(&mut self) {
@@ -166,11 +176,8 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
             Some(phys) => phys,
             None => panic!("phys already in use"),
         };
-        let pipe = match self.pipeline.take() {
-            Some(pipe) => pipe,
-            None => panic!("pipe already in use"),
-        };
-        let user_program = self.user_program.take().unwrap_or_default();
+        let pipe = self.pipeline.clone();
+        let user_program = self.user_program.clone();
         spawn(move || {
             Self::do_run(inner_phys, pipe, user_program);
         });
@@ -178,8 +185,8 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
 
     fn do_run(
         inner_phys: Vec<InnerPhy<RING, FBUF, MTU>>, 
-        mut pipeline: P,
-        mut user_program: HashMap<u16, Box<dyn p4rs::Pipeline>>,
+        pipeline: Arc<Mutex<Option<P>>>,
+        user_program: Arc<Mutex<HashMap<u16, Box<dyn p4rs::Pipeline>>>>,
     ) {
         loop {
             // TODO: yes this is a highly suboptimal linear gather-scatter across
@@ -195,7 +202,15 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                     let mut pkt = packet_in::new(content);
                     
                     let port = i as u16;
-                    let mut output = pipeline.process_packet(port, &mut pkt);
+
+                    eprintln!("DEBUG: raw src bytes: {:?}", &content[26..30]);
+
+                    let mut output = {
+                        let mut guard = pipeline.lock().unwrap();
+                        guard.as_mut().expect("pipeline not initialized").process_packet(port, &mut pkt)
+                    };
+
+                    eprintln!("DEBUG: output ports: {:?}", output.iter().map(|(_, p)| *p).collect::<Vec<_>>());
 
                     let mut hops = 0u8;
                     while let Some(idx) = output.iter().position(|(_, p)| *p >= RESUBMIT_STACK) {
@@ -207,8 +222,10 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                             eprintln!("dropping packet: exceeded max resubmit hops (target {program_id})");
                             continue;
                         }
-                        match user_program.get_mut(&program_id) {
+                        let mut guard = user_program.lock().unwrap();
+                        match guard.get_mut(&program_id) {
                             Some(user_pipeline) => {
+                                eprintln!("DEBUG: resubmitting to program {program_id}");
                                 softnpu_runtime_provider::resubmit!(|| program_id);
                                 let mut resubmit_pkt = packet_in::new(content);
                                 let mut resubmitted = user_pipeline.process_packet(port, &mut resubmit_pkt);
@@ -265,6 +282,52 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
 
     pub fn phy(&self, i: usize) -> Arc<OuterPhy<RING, FBUF, MTU>> {
         self.outer_phys[i].clone()
+    }
+
+    pub fn add_table_entry(
+        &self,
+        table: &str,
+        action: &str,
+        keyset_data: &[u8],
+        parameter_data: &[u8],
+    ) {
+        let mut guard = self.pipeline.lock().unwrap();
+        if let Some(p) = guard.as_mut() {
+            p.add_table_entry(table, action, keyset_data, parameter_data, 0);
+        }
+    }
+
+    pub fn remove_table_entry(&self, table: &str, keyset_data: &[u8]) {
+        let mut guard = self.pipeline.lock().unwrap();
+        if let Some(p) = guard.as_mut() {
+            p.remove_table_entry(table, keyset_data);
+        }
+    }
+
+    pub fn add_user_program_table_entry(
+        &self,
+        program_id: u16,
+        table: &str,
+        action: &str,
+        keyset_data: &[u8],
+        parameter_data: &[u8],
+    ) {
+        let mut up = self.user_program.lock().unwrap();
+        if let Some(p) = up.get_mut(&program_id) {
+            p.add_table_entry(table, action, keyset_data, parameter_data, 0);
+        }
+    }
+
+    pub fn remove_user_program_table_entry(
+        &self,
+        program_id: u16,
+        table: &str,
+        keyset_data: &[u8],
+    ) {
+        let mut up = self.user_program.lock().unwrap();
+        if let Some(p) = up.get_mut(&program_id) {
+            p.remove_table_entry(table, keyset_data);
+        }
     }
 }
 
@@ -343,49 +406,19 @@ impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
     }
 
     pub fn send_ipv4(
-        &self, 
-        mac: [u8; 6], 
-        ip: Ipv4Addr, 
+        &self,
+        mac: [u8; 6],
+        ip: Ipv4Addr,
         payload: &[u8],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Vec<u8>, anyhow::Error> {
         let n = 20 + payload.len();
         let mut buf = [0u8; F];
-        //packet::v4(self.addr, ip, payload, &mut buf);
         packet::v4(self.addr, ip, IpNextHeaderProtocols::Test1, payload, &mut buf);
-        let mut txf = TxFrame::new(mac, 0x0800, &buf[..n]);
+        let out = buf[..n].to_vec();
+        let mut txf = TxFrame::new(mac, 0x0800, &out);
         txf.sc_egress = self.sc_egress;
         self.phy.send(&[txf])?;
-        Ok(())
-    }
-
-    pub fn send_udp(
-        &self,
-        mac: [u8; 6],
-        ip: Ipv4Addr,
-        dst_port: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, anyhow::Error> {
-        let buf = packet::v4_udp(self.addr, ip, dst_port, payload);
-        let mut txf = TxFrame::new(mac, 0x0800, &buf);
-        txf.sc_egress = self.sc_egress;
-        self.phy.send(&[txf])?;
-        Ok(buf)
-    }
-
-    pub fn send_geneve(
-        &self,
-        mac: [u8; 6],
-        ip: Ipv4Addr,
-        inner_dst_mac: [u8; 6],
-        inner_src_mac: [u8; 6],
-        inner_ether_type: u16,
-        payload: &[u8],
-    ) -> Result<Vec<u8>, anyhow::Error> {
-        let buf = packet::v4_udp_geneve_eth(self.addr, ip, inner_dst_mac, inner_src_mac, inner_ether_type, payload);
-        let mut txf = TxFrame::new(mac, 0x0800, &buf);
-        txf.sc_egress = self.sc_egress;
-        self.phy.send(&[txf])?;
-        Ok(buf)
+        Ok(out)
     }
 }
 
@@ -485,8 +518,6 @@ impl<const R: usize, const N: usize, const F: usize> OuterPhy<R, N, F> {
             sidecar_encap: false,
         }
     }
-
-
 
     pub fn send(&self, frames: &[TxFrame<'_>]) -> Result<(), xfr::Error> {
         let n = frames.len();

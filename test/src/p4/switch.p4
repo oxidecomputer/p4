@@ -10,7 +10,6 @@ SoftNPU(
 struct headers_t {
     ethernet_t ethernet;
     ipv4_t ipv4;
-    udp_t udp;
 }
 
 header ethernet_t {
@@ -34,13 +33,6 @@ header ipv4_t {
     bit<32> dst_addr;
 }
 
-header udp_t {
-    bit<16> src_port;
-    bit<16> dst_port;
-    bit<16> length;
-    bit<16> checksum;
-}
-
 parser parse(
     packet_in pkt,
     out headers_t hdr,
@@ -48,70 +40,58 @@ parser parse(
 ){
     state start {
         pkt.extract(hdr.ethernet);
-        if (hdr.ethernet.ether_type == 16w0x0800) {
-            transition parse_ipv4;
-        } else {
-            transition finish;
-        }
+        transition parse_ipv4;
     }
 
     state parse_ipv4 {
         pkt.extract(hdr.ipv4);
-        if (hdr.ipv4.protocol == 8w17) {
-            transition parse_udp;
-        } else {
-            transition finish;
-        }
-    }
-
-
-    state parse_udp {
-        pkt.extract(hdr.udp);
-        transition finish;
-    }
-
-    state finish {
         transition accept;
     }
 }
 
-control ingress(
+control configure_programs(
     inout headers_t hdr,
     inout ingress_metadata_t ingress,
     inout egress_metadata_t egress,
 ) {
-    // Declare extern instance
     ResubmitExec() rex;
 
-    // Set the user program in the ingress metadata to the program id in table
-    // action entry.
     action set_user_program_id(bit<16> program_id) {
         ingress.user_program = program_id;
     }
 
-    action drop() { }
-
-    action forward(bit<16> port) {
-        egress.port = port;
-        egress.broadcast = false;
-    }
-
-    // This table associates geneve packets with a user program id.
-    table geneve_pkt {
+    table src_ipv4_pkt {
         key = {
-            hdr.udp.dst_port: exact;
+            hdr.ipv4.src_addr: lpm;
         }
         actions = {
             set_user_program_id;
         }
         default_action = NoAction;
-
-        const entries = {
-            16w6081 : set_user_program_id(16w10);
-        }
     }
 
-    table tbl {
+    apply {
+        ingress.user_program = 16w0;
+        src_ipv4_pkt.apply();
+
+        if (ingress.user_program != 16w0) {
+            rex.jump(egress, ingress.user_program);
+        }
+    }
+}
+
+control default_traffic_flow(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    action drop() { }
+
+    action forward(bit<16> port) {
+        egress.port = port;
+    }
+
+    table program {
         key = {
             ingress.port: exact;
         }
@@ -127,13 +107,23 @@ control ingress(
     }
 
     apply {
-        ingress.user_program = 16w0;
-        geneve_pkt.apply();
+        program.apply();
+    }
+}
 
-        if (ingress.user_program != 16w0) {
-            rex.jump(egress, ingress.user_program);
-        } else {
-            tbl.apply();
+control ingress(
+    inout headers_t hdr,
+    inout ingress_metadata_t ingress,
+    inout egress_metadata_t egress,
+) {
+    configure_programs() configure_programs;
+    default_traffic_flow() default_traffic_flow;
+
+    apply {
+        configure_programs.apply(hdr, ingress, egress);
+
+        if (ingress.user_program == 16w0) {
+            default_traffic_flow.apply(hdr, ingress, egress);
         }
     }
 }

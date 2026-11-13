@@ -156,9 +156,7 @@ pub struct TableEntry {
 }
 
 pub trait Pipeline: Send {
-    /// Process an input packet and produce a set of output packets. Normally
-    /// there will be a single output packet. However, if the pipeline sets
-    /// `egress_metadata_t.broadcast` there may be multiple output packets.
+    /// Process an input packet and produce a set of output packets.
     fn process_packet<'a>(
         &mut self,
         port: u16,

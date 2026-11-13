@@ -3,6 +3,7 @@ struct ingress_metadata_t {
     bool nat; // XXX this should be a program specific thing
     bit<16> nat_id; // XXX this should be a program specific thing
     bool drop;
+    bit<16> user_program;
 }
 
 struct egress_metadata_t {
