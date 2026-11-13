@@ -10,6 +10,7 @@ SoftNPU(
 struct headers_t {
     ethernet_t ethernet;
     ipv4_t ipv4;
+    udp_t udp;
 }
 
 header ethernet_t {
@@ -33,6 +34,13 @@ header ipv4_t {
     bit<32> dst_addr;
 }
 
+header udp_t {
+    bit<16> src_port;
+    bit<16> dst_port;
+    bit<16> len;
+    bit<16> checksum;
+}
+
 parser parse(
     packet_in pkt,
     out headers_t hdr,
@@ -40,11 +48,20 @@ parser parse(
 ){
     state start {
         pkt.extract(hdr.ethernet);
-        transition parse_ipv4;
+        transition ipv4;
     }
 
-    state parse_ipv4 {
+    state ipv4 {
         pkt.extract(hdr.ipv4);
+        if (hdr.ipv4.protocol == 8w17) {
+            transition udp;
+        } else {
+            transition accept;
+        }
+    }
+
+    state udp {
+        pkt.extract(hdr.udp);
         transition accept;
     }
 }
@@ -70,9 +87,24 @@ control configure_programs(
         default_action = NoAction;
     }
 
+    table src_ipv4_port_pkt {
+        key = {
+            hdr.ipv4.src_addr: lpm;
+            hdr.udp.src_port: exact;
+        }
+        actions = { 
+            set_user_program_id; 
+        }
+        default_action = NoAction;
+    }
+
     apply {
         ingress.user_program = 16w0;
         src_ipv4_pkt.apply();
+
+        if (ingress.user_program == 16w0) {
+            src_ipv4_port_pkt.apply();
+        }
 
         if (ingress.user_program != 16w0) {
             rex.jump(egress, ingress.user_program);

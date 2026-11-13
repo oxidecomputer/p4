@@ -25,7 +25,9 @@ mod mac_rewrite;
 #[cfg(test)]
 mod range;
 #[cfg(test)]
-mod switch;
+mod user_program_10;
+#[cfg(test)]
+mod user_program_20;
 #[cfg(test)]
 mod table_in_egress_and_ingress;
 #[cfg(test)]
@@ -39,3 +41,6 @@ pub mod data;
 pub mod dynamic_softnpu;
 pub mod packet;
 pub mod softnpu;
+pub mod switch_program {
+    p4_macro::use_p4!(p4 = "test/src/p4/switch.p4", pipeline_name = "main_pipeline");
+}

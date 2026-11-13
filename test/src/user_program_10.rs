@@ -2,12 +2,8 @@ use crate::dynamic_softnpu::{Interface4, RxFrame, SoftNpu};
 use crate::{dynamic_expect_frames as expect_frames, muffins};
 use std::net::Ipv4Addr;
 
-mod switch_program {
-    p4_macro::use_p4!(p4 = "test/src/p4/switch.p4", pipeline_name = "main_pipeline");
-}
-
 mod user_program_10 {
-    p4_macro::use_p4!(p4 = "test/src/p4/user_program_10.p4", pipeline_name = "user_program");
+    p4_macro::use_p4!(p4 = "test/src/p4/user_program_10.p4", pipeline_name = "user_program_10");
 }
 
 const ET: u16 = 0x0800;
@@ -36,8 +32,8 @@ const ET: u16 = 0x0800;
 
 
 #[test]
-fn dynamic_prog() -> Result<(), anyhow::Error> {
-    let mut npu = SoftNpu::new(11, switch_program::main_pipeline::new(11), false);
+fn user_prog_10() -> Result<(), anyhow::Error> {
+    let mut npu = SoftNpu::new(11, crate::switch_program::main_pipeline::new(11), false);
     npu.load_user_program(10, user_program_10::main_pipeline::new(11));
 
     let phy0 = npu.phy(0);

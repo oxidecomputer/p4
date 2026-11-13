@@ -420,6 +420,21 @@ impl<const R: usize, const N: usize, const F: usize> Interface4<R, N, F> {
         self.phy.send(&[txf])?;
         Ok(out)
     }
+
+    pub fn send_udp(
+        &self,
+        mac: [u8; 6],
+        ip: Ipv4Addr,
+        src_port: u16,
+        dst_port: u16,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, anyhow::Error> {
+        let buf = packet::v4_udp(self.addr, ip, src_port, dst_port, payload);
+        let mut txf = TxFrame::new(mac, 0x0800, &buf);
+        txf.sc_egress = self.sc_egress;
+        self.phy.send(&[txf])?;
+        Ok(buf)
+    }
 }
 
 pub struct TxFrame<'a> {
