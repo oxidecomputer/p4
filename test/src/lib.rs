@@ -29,6 +29,8 @@ mod user_program_10;
 #[cfg(test)]
 mod user_program_20;
 #[cfg(test)]
+mod user_program_30;
+#[cfg(test)]
 mod table_in_egress_and_ingress;
 #[cfg(test)]
 mod vlan;

@@ -203,14 +203,10 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                     
                     let port = i as u16;
 
-                    eprintln!("DEBUG: raw src bytes: {:?}", &content[26..30]);
-
                     let mut output = {
                         let mut guard = pipeline.lock().unwrap();
                         guard.as_mut().expect("pipeline not initialized").process_packet(port, &mut pkt)
                     };
-
-                    eprintln!("DEBUG: output ports: {:?}", output.iter().map(|(_, p)| *p).collect::<Vec<_>>());
 
                     let mut hops = 0u8;
                     while let Some(idx) = output.iter().position(|(_, p)| *p >= RESUBMIT_STACK) {
@@ -225,7 +221,6 @@ impl<P: p4rs::Pipeline + 'static> SoftNpu<P> {
                         let mut guard = user_program.lock().unwrap();
                         match guard.get_mut(&program_id) {
                             Some(user_pipeline) => {
-                                eprintln!("DEBUG: resubmitting to program {program_id}");
                                 softnpu_runtime_provider::resubmit!(|| program_id);
                                 let mut resubmit_pkt = packet_in::new(content);
                                 let mut resubmitted = user_pipeline.process_packet(port, &mut resubmit_pkt);
