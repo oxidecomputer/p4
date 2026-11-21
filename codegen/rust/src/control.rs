@@ -227,10 +227,7 @@ impl<'a> ControlGenerator<'a> {
             .collect();
 
         let dump = quote! {
-            // TODO find a way to only allocate the string when probe is active.
-            // Cannot simply return reference to string created within probe.
-            let dump = format!(#dump_fmt, #(#dump_args,)*);
-            softnpu_provider::action!(|| (&dump));
+            softnpu_provider::action!(|| format!(#dump_fmt, #(#dump_args,)*));
         };
 
         for arg in &action.parameters {
