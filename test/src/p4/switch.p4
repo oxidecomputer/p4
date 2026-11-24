@@ -97,6 +97,16 @@ control configure_programs(
         default_action = NoAction;
     }
 
+    table dst_ipv4_pkt {
+        key = {
+            hdr.ipv4.dst_addr: lpm;
+        }
+        actions = {
+            set_user_program_id;
+        }
+        default_action = NoAction;
+    }
+
     table src_ipv4_port_pkt {
         key = {
             hdr.ipv4.src_addr: lpm;
@@ -151,6 +161,10 @@ control configure_programs(
     apply {
         ingress.user_program = 16w0;
         src_ipv4_pkt.apply();
+
+        if (ingress.user_program == 16w0) {
+            dst_ipv4_pkt.apply();
+        }
 
         if (ingress.user_program == 16w0) {
             src_ipv4_port_pkt.apply();
