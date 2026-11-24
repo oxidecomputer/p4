@@ -33,6 +33,8 @@ mod user_program_30;
 #[cfg(test)]
 mod user_program_40;
 #[cfg(test)]
+mod user_program_50;
+#[cfg(test)]
 mod user_program_60;
 #[cfg(test)]
 mod table_in_egress_and_ingress;
