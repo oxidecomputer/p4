@@ -77,6 +77,16 @@ control configure_programs(
         ingress.user_program = program_id;
     }
 
+    action check_ip_match(bit<16> program_id) {
+        ingress.ip_match = true;
+        ingress.user_program = program_id;
+    }
+
+    action check_port_match(bit<16> program_id) {
+        ingress.port_match = true;
+        ingress.user_program = program_id;
+    }
+
     table src_ipv4_pkt {
         key = {
             hdr.ipv4.src_addr: lpm;
@@ -98,12 +108,75 @@ control configure_programs(
         default_action = NoAction;
     }
 
+    table src_ipv4_match {
+        key = {
+            hdr.ipv4.src_addr: lpm;
+        }
+        actions = { 
+            check_ip_match; 
+        }
+        default_action = NoAction;
+    }
+
+    table dst_ipv4_match {
+        key = {
+            hdr.ipv4.dst_addr: lpm;
+        }
+        actions = { 
+            check_ip_match; 
+        }
+        default_action = NoAction;
+    }
+
+    table src_port_match {
+        key = {
+            hdr.udp.src_port: exact;
+        }
+        actions = { 
+            check_port_match; 
+        }
+        default_action = NoAction;
+    }
+
+    table dst_port_match {
+        key = {
+            hdr.udp.dst_port: exact;
+        }
+        actions = { 
+            check_port_match; 
+        }
+        default_action = NoAction;
+    }
+
     apply {
         ingress.user_program = 16w0;
         src_ipv4_pkt.apply();
 
         if (ingress.user_program == 16w0) {
             src_ipv4_port_pkt.apply();
+        }
+
+        if (ingress.user_program == 16w0) {
+            ingress.ip_match = false;
+            ingress.port_match = false;
+
+            src_ipv4_match.apply();
+            if (ingress.ip_match == false) {
+                dst_ipv4_match.apply();
+            }
+
+            src_port_match.apply();
+            if (ingress.port_match == false) {
+                dst_port_match.apply();
+            }
+
+            if (ingress.ip_match == true) {
+                if (ingress.port_match == false) {
+                    ingress.user_program = 16w0;
+                }
+            } else {
+                ingress.user_program = 16w0;
+            }
         }
 
         if (ingress.user_program != 16w0) {
